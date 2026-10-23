@@ -177,7 +177,7 @@ function chime() {
 }
 async function notifyReady(j) {
   chime(); try { navigator.vibrate?.([90, 60, 90]); } catch { /* */ }
-  const auto = j.output?.autopilot_hold ? " Autopilot held it back: it posts only when you approve." : autoOn() ? ` It posts to Instagram by itself in ${S.settings?.post_schedule?.review_minutes ?? 5} min unless you act.` : "";
+  const auto = j.output?.autopilot_hold ? " Autopilot held it back: it posts only when you approve." : autoOn(j) ? ` It posts to Instagram by itself in ${S.settings?.post_schedule?.review_minutes ?? 5} min unless you act.` : "";
   toast(`Ready for review: ${titleOf(j)}.${auto}`, { ms: 12000, action: { label: "Review", fn: () => go("production", j.id) } });
   if ("Notification" in window && Notification.permission === "granted") {
     const opts = { body: `${titleOf(j)} is ready.${auto}`, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: j.id, data: { url: "/#/production" } };
@@ -684,14 +684,16 @@ async function strip(j) {
     h("div", { cls: "stage-detail" }, h("div", {}, h("p", { cls: "small muted", style: "margin:0 0 8px" }, STAGE_HELP[sel]), graph(j, sel)), await liveLog(j)));
   body.append(actions(j)); el.append(body); return el;
 }
-const autoOn = () => S.settings?.post_schedule?.auto !== false;
+const ownPosting = (j) => ((j && j.brand) || S.brand) === "weone";          // only We One has its own connected platforms today
+const autoOn = (j) => ownPosting(j) && S.settings?.post_schedule?.auto !== false;
 const nightIST = () => { const d = new Date(Date.now() + 330 * 60e3); const m = d.getUTCHours() * 60 + d.getUTCMinutes(); return m < 450 || m > 1380; };   // 23:00-07:30 India time
 const nightWait = (j) => j.input?.autopilot && nightIST();
 function autoPostLine(j) {
   const d = j.output?.review_deadline;
   if (j.output?.autopilot_hold) return "Ready. Autopilot held it back: approve it to post.";
-  if (autoOn() && nightWait(j)) return "Ready. Autopilot posts it at 7:30 AM (never at night) unless you act.";
-  if (!autoOn() || !d) return "Ready for your review";
+  if (autoOn(j) && nightWait(j)) return "Ready. Autopilot posts it at 7:30 AM (never at night) unless you act.";
+  if (!ownPosting(j)) return `Ready for your review. It goes to the Library only: ${brandOf(j.brand).name} has no Instagram connected yet.`;
+  if (!autoOn(j) || !d) return "Ready for your review";
   if (j.output?.hold) return "Ready for review. Auto-post paused while you check.";
   const left = (Date.parse(d) - Date.now()) / 1000;
   return left > 0 ? `Ready. Posts to Instagram automatically at ${clock(d)} unless you act.` : "Ready. Posting to Instagram now…";
@@ -741,8 +743,8 @@ async function reviewView(j) {
     oninput: (e) => { S.drafts[j.id] = e.target.value; } });
   notes.value = S.drafts[j.id] || "";
   const changeBox = h("div", { style: openBox ? "" : "display:none" }, notes);
-  const approve = h("button", { cls: "btn go", disabled: !!busy, onclick: () => act(j, "approve", () => rpc("set_review_decision", { p_job: j.id, p_decision: "approve", p_notes: null }), (row) => row?.output?.ig?.state ? "Approved. Posting to Instagram now; the link appears in Library." : "Approved. It's in the Library.") },
-    icon("check"), busy === "approve" ? "Approving…" : autoOn() ? "Approve & post now" : "Approve");
+  const approve = h("button", { cls: "btn go", disabled: !!busy, onclick: () => act(j, "approve", () => rpc("set_review_decision", { p_job: j.id, p_decision: "approve", p_notes: null }), (row) => row?.output?.ig?.state ? "Approved. Posting to Instagram now; the link appears in Library." : ownPosting(j) ? "Approved. It's in the Library." : `Approved. It's in ${brandOf(j.brand).name}'s Library (nothing was posted).`) },
+    icon("check"), busy === "approve" ? "Approving…" : autoOn(j) ? "Approve & post now" : "Approve");
   const change = h("button", { cls: "btn", disabled: !!busy, onclick: () => {
     if (!S.changeOpen[j.id]) { S.changeOpen[j.id] = true; if (deadline && !o.hold) rpc("hold_auto_post", { p_job: j.id, p_hold: true }).then(patchLocal).catch(() => {});   // writing changes pauses auto-post
       refreshProduction(); setTimeout(() => document.querySelector(`[data-notes="${j.id}"]`)?.focus(), 60); return; }
@@ -751,7 +753,7 @@ async function reviewView(j) {
       patchLocal({ id: j.id, status: "cancelled", output: { ...j.output, decision: "reject" } }); return c; }, "Sent back. The new version is queued; unchanged voice parts and clips are reused.");
   } }, busy === "changes" ? "Sending…" : openBox ? "Send changes" : "Request changes");
   notes.setAttribute("data-notes", j.id);
-  const deadline = o.review_deadline && autoOn() && !o.autopilot_hold ? Date.parse(o.review_deadline) : 0;
+  const deadline = o.review_deadline && autoOn(j) && !o.autopilot_hold ? Date.parse(o.review_deadline) : 0;
   const timer = h("span", { cls: "num" });
   const tickT = () => { const s = Math.max(0, Math.round((deadline - Date.now()) / 1000)); timer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
   if (deadline && !o.hold) { tickT(); const iv = setInterval(() => { if (!timer.isConnected) return clearInterval(iv); tickT(); }, 1000); }
@@ -850,6 +852,7 @@ function postBadge(j, p) {
 function postActions(j, p, refresh) {
   const st = j.output?.[p]?.state || "off";
   if (["posted", "posting", "uploading", "processing"].includes(st)) return null;
+  if (!ownPosting(j)) return h("p", { cls: "ig-note" }, `Connect ${brandOf(j.brand).name}'s own ${PLAT[p]} to post. Reels never go to another account.`);
   const go_ = (action, label, cls = "btn quiet") => h("button", { cls, onclick: async (e) => {
     e.currentTarget.disabled = true;
     try { const row = await rpc("set_post", { p_job: j.id, p_platform: p, p_action: action }); j.output = row.output;
@@ -1064,7 +1067,8 @@ async function viewLibrary() {
     const now = JSON.stringify([(data || []).map((j) => [j.id, j.output?.ig, j.output?.li, j.output?.fb]), S.settings, S.editSlots]);
     if (!force && now === sig) return; sig = now;
     if (panel.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;    // never wipe a half-edited time
-    panel.replaceChildren(isLive() ? platformBar(() => refresh(true)) : setupCard());
+    panel.replaceChildren(!isLive() ? setupCard() : ownPosting() ? platformBar(() => refresh(true))
+      : h("div", { cls: "banner info" }, h("span", {}, `${brandOf().name} has no Instagram, Facebook or LinkedIn connected yet. Approved reels are kept here to download; nothing is posted to another account.`)));
     if (!data?.length) { grid.replaceChildren(h("div", { cls: "panel empty", style: "grid-column:1/-1" }, h("h3", {}, "Nothing here yet"), h("p", {}, "Approved reels appear here, ready to download and post."), h("button", { cls: "btn primary", onclick: () => go("create") }, "Create a reel"))); return; }
     const cards = await Promise.all(data.map(async (j) => {
       const o = j.output || {}; if (!(j.id in thumbs)) thumbs[j.id] = o.pruned ? null : await signed(o.thumb);
