@@ -171,6 +171,9 @@ DRAW = {"chip": g_chip, "big_text": g_big_text, "counter": g_counter, "list_card
 
 
 # ------------------------------------------------------------------ captions, branding
+SAFE_W = 900
+
+
 def draw_captions(c, t, TL):
     if t >= TL["vo_end"] - 0.1: return
     caps = TL["captions"]; starts = sorted(x["t0"] for x in caps)
@@ -182,7 +185,8 @@ def draw_captions(c, t, TL):
         for m_ in re.finditer(r"\*([^*]+)\*([.,?!]*)|(\S+)", s_):
             parts.append((m_.group(1) + m_.group(2), True) if m_.group(1) else (m_.group(3), False))
         if not parts: continue
-        widths = [tw(f, p[0]) + (36 if p[1] else 0) for p in parts]; sp = tw(f, " "); total = sum(widths) + sp * (len(parts) - 1)
+        PADH = 56                                               # room for the highlight box (box is 32 wider than the word), so it never covers a neighbour
+        widths = [tw(f, p[0]) + (PADH if p[1] else 0) for p in parts]; sp = tw(f, " ") + 12; total = sum(widths) + sp * (len(parts) - 1)
         if total > 1000 and len(parts) > 3:
             acc = 0; k = 1
             for i, w_ in enumerate(widths):
@@ -193,14 +197,14 @@ def draw_captions(c, t, TL):
             lines = [(0, len(parts), 1400)]
         seg = max(0.05, (b - a) * 0.6 / max(1, len(parts)))
         for i0, i1, y in lines:
-            lw = sum(widths[i0:i1]) + sp * (i1 - i0 - 1); sc = min(1.0, 990 / max(lw, 1))
+            lw = sum(widths[i0:i1]) + sp * (i1 - i0 - 1); sc = min(1.0, SAFE_W / max(lw, 1))     # side margins clear of Instagram's buttons
             c.save(); c.translate(W / 2, y); c.scale(sc, sc); c.translate(-W / 2, -y); x = W / 2 - lw / 2
             for i in range(i0, i1):
                 (wd, k_), w_ = parts[i], widths[i]; ws = a + i * seg
                 if t < ws: x += w_ + sp; continue
-                p = ease_out_back(prog(t, ws, 0.16), 2.2); cxw = x + w_ / 2
+                p = ease_out_back(prog(t, ws, 0.16), 1.2); cxw = x + w_ / 2      # small pop (max ~4 % bigger) so words never touch while they land
                 if k_:
-                    w_in = w_ - 36; pr = skia.Rect.MakeXYWH(cxw - w_in / 2 - 14, y - 62, w_in + 28, 84)
+                    w_in = w_ - PADH; pr = skia.Rect.MakeXYWH(cxw - w_in / 2 - 16, y - 62, w_in + 32, 84)
                     c.save(); c.translate(cxw, y - 20); c.scale(p, p); c.translate(-cxw, -(y - 20))
                     c.drawRoundRect(pr, 16, 16, skia.Paint(Color4f=col(AMBER, 0.96), AntiAlias=True)); c.restore()
                     text(c, wd, cxw, y, f, (14, 14, 14), shadow=False, scale=p)
