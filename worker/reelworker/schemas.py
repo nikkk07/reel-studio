@@ -47,7 +47,7 @@ FOOTAGE = {"type": "object", "required": ["picks"],
            "properties": {"picks": {"type": "array", "items": {
                "type": "object", "required": ["shot_id", "candidate"],
                "properties": {"shot_id": S, "candidate": S, "alternates": {"type": "array", "items": S},
-                              "focus_x": N, "in_point": N, "reason": S}}}}}
+                              "focus_x": N, "in_point": N, "reason": S, "new_query": S}}}}}
 
 QC = {"type": "object", "required": ["pass", "score", "issues", "summary"],
       "properties": {"pass": B, "score": I, "summary": S, "issues": {"type": "array", "items": {

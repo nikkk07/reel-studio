@@ -279,6 +279,18 @@ def stage_footage(ctx, prog):
         look = "" if brandmod.legacy(prof) else "\n".join(["This account's look and rules (follow them strictly; a clip that breaks one is never the pick):",
             f"- Look: {vs.get('look', '')}", *[f"- {r}" for r in vs.get("footage_rules", [])], *[f"- Never: {r}" for r in vs.get("avoid", [])]])
         picks = brain.ask("footage", brain.prompt("footage", shots=desc, niche=prof.get("niche", "aviation"), look=look), schemas.FOOTAGE, ["Read"], work, timeout=900, on_event=_say(ctx))["picks"]
+        # no clip fits: search once more with Claude's better query and pick again (never fill the slot with a clip that contradicts the line)
+        retry = {p["shot_id"]: p["new_query"].strip() for p in picks if str(p.get("candidate")).lower() == "none" and str(p.get("new_query") or "").strip()}
+        retry = {sid: q for sid, q in retry.items() if sid in {s["id"] for s in shots}}
+        if retry:
+            ctx.log(f"no fitting clip for {', '.join(retry)}; searching again")
+            again = [{**s, "query": retry[s["id"]]} for s in shots if s["id"] in retry]
+            for s in again:
+                cands[s["id"]] = footage.search(s["query"], per_source=6)[:12] or cands[s["id"]]
+            footage.contact_sheets(again, {s["id"]: cands[s["id"]] for s in again if cands[s["id"]]}, work, _font_file())
+            desc2 = "\n".join(f"- {s['id']}: \"{s['query']}\" – {s.get('note', '')} – needs {need[s['id']]:.1f}s" for s in again if cands[s["id"]])
+            more = brain.ask("footage", brain.prompt("footage", shots=desc2, niche=prof.get("niche", "aviation"), look=look), schemas.FOOTAGE, ["Read"], work, timeout=900, on_event=_say(ctx))["picks"]
+            picks = [p for p in picks if p["shot_id"] not in retry] + more
         ctx.trace("footage", "pick", "Claude chooses clips", "done")
     prog(0.35)
     chosen, shot_files = {}, {}
@@ -292,7 +304,10 @@ def stage_footage(ctx, prog):
     for k, s in enumerate(shots):
         sid = s["id"]; lst = cands.get(sid) or []
         p = pick_map.get(sid, {})
-        order = [p.get("candidate")] + list(p.get("alternates") or []) + [f"{sid}-{i}" for i in range(len(lst))]
+        refused = str(p.get("candidate")).lower() == "none"
+        order = [p.get("candidate")] + list(p.get("alternates") or [])
+        if not refused or k == 0 and sid == shots_all[0]["id"]:     # Claude said no clip fits: leave the slot out (merged into the previous shot), except the opening shot
+            order += [f"{sid}-{i}" for i in range(len(lst))]
         ok = False
         for label in order:
             try:
