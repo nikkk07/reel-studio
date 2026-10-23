@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json, re, shutil, subprocess, sys, time
 from pathlib import Path
 from .. import brain, config, schemas
+from .. import brand as brandmod
 from ..runner import run_stages, TransientError
 from ..media import footage, lexicon, mix, render, timeline
 
@@ -10,10 +11,25 @@ CTA_SAY = "follow करें We One Aviation।"
 CTA_CAPTION = "follow karein *We One Aviation*"
 
 
-def _is_cta(p):
-    """Any spelling of the brand line: English, Devanagari respelling, or in the caption."""
+def _is_cta(p, name="We One Aviation"):
+    """Any spelling of the account's call-to-action line: English, Devanagari respelling (We One), or in the caption."""
     say, cap = p.get("say", ""), p.get("caption", "").replace("*", "")
-    return "we one aviation" in say.lower() or "वी वन एविएशन" in say or "we one aviation" in cap.lower()
+    n = name.lower()
+    return n in say.lower() or n in cap.lower() or (n == "we one aviation" and "वी वन एविएशन" in say)
+
+
+ACCOUNTS = ("we one aviation", "वी वन एविएशन", "book my charter", "flying star", "legal group")
+
+
+def _other_account(p, name):
+    """A line that names one of the studio's other accounts (each account's reels only ever talk about itself)."""
+    t = (p.get("say", "") + " " + p.get("caption", "").replace("*", "")).lower()
+    own = name.lower()
+    return any(a in t for a in ACCOUNTS if a != own and not (own == "we one aviation" and a == "वी वन एविएशन"))
+
+
+def _brand(ctx):
+    return brandmod.load(ctx.db, ctx.job.get("brand") or "weone")
 
 
 def _parent_dir(ctx):
@@ -61,7 +77,12 @@ def leaks(spec: dict) -> list:
     return out
 
 
-def validate_spec(spec: dict) -> dict:
+def validate_spec(spec: dict, prof: dict = None) -> dict:
+    prof = prof or brandmod.LEGACY
+    if brandmod.legacy(prof):
+        cta_say, cta_cap, name = CTA_SAY, CTA_CAPTION, "We One Aviation"
+    else:
+        (cta_say, cta_cap), name = brandmod.cta(prof), prof["name"]
     bad = leaks(spec)
     if bad:
         raise TransientError(f"the script contained {bad[0]!r} (web address, phone, e-mail or another account); writing it again")
@@ -73,9 +94,9 @@ def validate_spec(spec: dict) -> dict:
         g["phrases"] = [p for p in g["phrases"] if p.get("say", "").strip()] or g["phrases"][:1]
     # exactly one call to action, always the standard one, always last
     for g in spec["groups"]:
-        g["phrases"] = [p for p in g["phrases"] if not _is_cta(p)]
+        g["phrases"] = [p for p in g["phrases"] if not _is_cta(p, name) and not _other_account(p, name)]
     spec["groups"] = [g for g in spec["groups"] if g["phrases"]] or spec["groups"][:1]
-    spec["groups"][-1]["phrases"].append({"say": CTA_SAY, "caption": CTA_CAPTION})
+    spec["groups"][-1]["phrases"].append({"say": cta_say, "caption": cta_cap})
     # no line said twice in a row
     for g in spec["groups"]:
         out = []
@@ -103,7 +124,16 @@ def stage_script(ctx, prog):
         concept = {**concept, "revision_notes": inp["notes"]}
     lex = "\n".join(f"- {e['term']} → {e['say']}" for e in _lexicon_entries())
     parent = _parent_dir(ctx) if inp.get("notes") else None
-    if parent:
+    prof = _brand(ctx)
+    if not brandmod.legacy(prof):            # every other account: its own knowledge, language, tone and call to action
+        cs, cc = brandmod.cta(prof)
+        common = dict(brand_name=prof["name"], brand_brief=brandmod.brief(prof), language=prof.get("language", "english").title(), cta_say=cs, cta_caption=cc)
+        if parent:
+            ctx.log("revising the previous version with your notes (unchanged narration and footage are reused)")
+            p = brain.prompt("revise_brand", spec=(parent / "spec.json").read_text(encoding="utf-8"), notes=str(inp["notes"])[:2000], **common)
+        else:
+            p = brain.prompt("script_brand", concept=json.dumps(concept, ensure_ascii=False, indent=1), **common)
+    elif parent:
         ctx.log("revising the previous version with your notes (unchanged narration and footage are reused)")
         p = brain.prompt("revise", spec=(parent / "spec.json").read_text(encoding="utf-8"), notes=str(inp["notes"])[:2000], lexicon=lex or "(empty)")
     else:
@@ -112,7 +142,7 @@ def stage_script(ctx, prog):
     ctx.trace("script", "research", "Research sources", "run")
     ctx.trace("script", "write", "Write narration", "wait")
     ctx.trace("script", "facts", "Fact list", "wait", flush=True)
-    spec = validate_spec(brain.ask("script", p, schemas.SPEC, ["WebSearch", "WebFetch"], ctx.dir / "brain", timeout=1500, on_event=_say(ctx)))
+    spec = validate_spec(brain.ask("script", p, schemas.SPEC, ["WebSearch", "WebFetch"], ctx.dir / "brain", timeout=1500, on_event=_say(ctx)), prof)
     ctx.trace("script", "research", "Research sources", "done", f"{len({c['source_url'] for c in spec['claims']})} sources")
     ctx.trace("script", "write", "Write narration", "done", f"{sum(len(g['phrases']) for g in spec['groups'])} lines")
     ctx.trace("script", "facts", "Fact list", "done", f"{len(spec['claims'])} claims", flush=True)
@@ -132,17 +162,19 @@ def stage_script(ctx, prog):
 
 
 def stage_voice(ctx, prog):
-    spec = _spec(ctx); E = _lexicon_entries(); groups = []; unknown = set()
+    prof = _brand(ctx); hinglish = brandmod.legacy(prof)
+    spec = _spec(ctx); E = _lexicon_entries() if hinglish else []; groups = []; unknown = set()
     for g in spec["groups"]:
-        says = [lexicon.apply(p["say"], E) for p in g["phrases"]]
+        says = [lexicon.apply(p["say"], E) if hinglish else p["say"] for p in g["phrases"]]
         for p in g["phrases"]:
-            unknown.update(lexicon.unknown_english(p["say"], E))
+            if hinglish: unknown.update(lexicon.unknown_english(p["say"], E))
         groups.append({"id": g["id"], "text": " ".join(says), "phrases_say": says})
     seeds = [11, 23, 37, 51, 63][:max(1, config.TAKES_PER_GROUP)]
     ref = config.VOICE_DIR / "refs" / f"{spec.get('voice', 'female')}.wav"
     if not ref.exists():
         ref = config.VOICE_DIR / "refs" / "female.wav"
     cfg = {"groups": groups, "seeds": seeds, "ref": str(ref), "device": config.DEVICE, "utmos_ckpt": str(config.UTMOS_CKPT),
+           "tts_lang": "hi" if hinglish else prof.get("tts_lang", "en"), "asr_lang": "hi" if hinglish else prof.get("asr_lang", "en"),
            "whisper": config.get("REELSTUDIO_WHISPER", "medium"), "threads": 4}
     ctx.path("voice_in.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
     total = len(groups) * len(seeds)
@@ -209,7 +241,7 @@ def _vo_map(ctx):
 
 
 def stage_footage(ctx, prog):
-    spec = _spec(ctx); TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(config.LOGO))
+    spec = _spec(ctx); TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx))))
     need = {s["id"]: s["need"] for s in TL["shots"]}
     shots = [s for s in spec["shots"] if s["id"] in need]
     cands = {}; reuse = {}
@@ -243,7 +275,7 @@ def stage_footage(ctx, prog):
         footage.contact_sheets(shots, {k: v for k, v in cands.items() if v}, work, _font_file())
         desc = "\n".join(f"- {s['id']}: \"{s['query']}\" – {s.get('note', '')} – needs {need[s['id']]:.1f}s" for s in shots if cands[s["id"]])
         ctx.trace("footage", "pick", "Claude chooses clips", "run", flush=True)
-        picks = brain.ask("footage", brain.prompt("footage", shots=desc), schemas.FOOTAGE, ["Read"], work, timeout=900, on_event=_say(ctx))["picks"]
+        picks = brain.ask("footage", brain.prompt("footage", shots=desc, niche=_brand(ctx).get("niche", "aviation")), schemas.FOOTAGE, ["Read"], work, timeout=900, on_event=_say(ctx))["picks"]
         ctx.trace("footage", "pick", "Claude chooses clips", "done")
     prog(0.35)
     chosen, shot_files = {}, {}
@@ -287,9 +319,13 @@ def stage_footage(ctx, prog):
 def build_timeline(ctx):
     spec = _spec(ctx); fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8"))
     spec["shots"] = [s for s in spec["shots"] if s["id"] in fj["files"]]
-    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(config.LOGO))
+    prof = _brand(ctx)
+    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(prof)))
     for s in TL["shots"]:
         s["file"] = fj["files"][s["id"]]
+    if not brandmod.legacy(prof):             # the account's own look: gold/champagne accents, end card text
+        TL["palette"] = prof.get("palette") or {}
+        TL["end_title"] = prof.get("end_title", "FOLLOW FOR MORE"); TL["end_sub"] = prof.get("end_sub", "")
     p = ctx.path("render", "timeline.json"); p.write_text(json.dumps(TL, ensure_ascii=False, indent=1), encoding="utf-8")
     return TL, p
 
@@ -330,7 +366,7 @@ def stage_qc(ctx, prog):
     prog(0.2)
     ctx.trace("qc", "auto", "Loudness, size, length", "done" if all(auto.values()) else "fail")
     ctx.trace("qc", "watch", "Claude watches the reel", "run", flush=True)
-    qc = brain.ask("qc", brain.prompt("qc"), schemas.QC, ["Read"], qdir, timeout=600, on_event=_say(ctx))
+    qc = brain.ask("qc", brain.prompt("qc", brand_name=_brand(ctx)["name"]), schemas.QC, ["Read"], qdir, timeout=600, on_event=_say(ctx))
     ctx.trace("qc", "watch", "Claude watches the reel", "done", f"score {qc['score']}/10", flush=True)
     repick = [i for i in qc["issues"] if i.get("fix") == "repick_shot" and i.get("shot_id")]
     if repick and not ctx.data.get("qc_repaired"):
@@ -391,7 +427,7 @@ def stage_publish(ctx, prog):
     try:     # Instagram caption + Instagram-spec file now, so the cloud can post even if the Mac is off later
         from .. import instagram
         ctx.trace("publish", "insta", "Instagram caption & file", "run", flush=True)
-        job = {"id": ctx.id, "output": dict(ctx.job.get("output") or {})}
+        job = {"id": ctx.id, "brand": ctx.job.get("brand") or "weone", "output": dict(ctx.job.get("output") or {})}
         added = instagram.prepare(ctx.db, job); ctx.job["output"] = job["output"]
         ctx.trace("publish", "insta", "Instagram caption & file", "done", "ready" if added else "", flush=True)
     except Exception as e:  # noqa: BLE001  (the Mac retries this in the background)

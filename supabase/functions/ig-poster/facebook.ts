@@ -100,7 +100,7 @@ async function fail(job: Json, e: FBError) {
 }
 
 export async function fbTick(): Promise<Json> {
-  const reels: Json[] = await rest("GET", "jobs?select=id,output&kind=eq.reel&status=eq.done&output->fb->>state=in.(scheduled,uploading,processing)&order=updated_at.asc&limit=20");
+  const reels: Json[] = await rest("GET", "jobs?select=id,output&kind=eq.reel&brand=eq.weone&status=eq.done&output->fb->>state=in.(scheduled,uploading,processing)&order=updated_at.asc&limit=20");
   const due = reels.filter((r) => r.output.fb.state !== "scheduled" || Date.parse(r.output.fb.at ?? 0) <= Date.now());
   if (!due.length) return { due: 0 };
   const st = await setting("facebook_status"); const [tok] = await secret("facebook_page_token");

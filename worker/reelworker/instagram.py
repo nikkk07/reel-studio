@@ -23,7 +23,7 @@ def handle(db):
     return f"@{u}" if u else "We One Aviation"
 
 
-def make_caption(db, job_id, output):
+def make_caption(db, job_id, output, brand_id="weone"):
     """Hinglish caption + hashtags from the reel's own verified facts (Claude, one short call)."""
     spec_p = config.JOBS_DIR / job_id / "spec.json"
     if spec_p.exists():
@@ -33,10 +33,18 @@ def make_caption(db, job_id, output):
     else:
         reel = {"title": output.get("title"), "narration": [l.get("text", "").replace("*", "") for l in output.get("script", [])],
                 "facts": [{"claim": c.get("claim"), "source": c.get("source_url")} for c in output.get("claims", [])]}
-    h = handle(db)
-    res = brain.ask("caption", brain.prompt("caption", reel=json.dumps(reel, ensure_ascii=False, indent=1), handle=h),
-                    schemas.CAPTION, [], config.JOBS_DIR / job_id / "brain", timeout=300)
-    return compose(res["caption"], res["hashtags"])
+    from . import brand as brandmod
+    prof = brandmod.load(db, brand_id)
+    if brandmod.legacy(prof):
+        h = handle(db)
+        text = brain.prompt("caption", reel=json.dumps(reel, ensure_ascii=False, indent=1), handle=h); own = OUR
+    else:                                    # this account's own voice, handle and tag; never We One's
+        own = (prof.get("instagram") or "").lstrip("@"); h = f"@{own}" if own else prof["name"]
+        tag = re.sub(r"[^a-z0-9]", "", prof["name"].lower())
+        text = brain.prompt("caption_brand", brand_name=prof["name"], brand_brief=brandmod.brief(prof, full=False), reel=json.dumps(reel, ensure_ascii=False, indent=1),
+                            handle=h, language=prof.get("language", "english").title(), brand_tag=tag)
+    res = brain.ask("caption", text, schemas.CAPTION, [], config.JOBS_DIR / job_id / "brain", timeout=300)
+    return compose(res["caption"], res["hashtags"], own=own or "-")
 
 
 OUR = "we_one_aviation"
@@ -45,17 +53,17 @@ _MAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]+\b")
 _PHONE = re.compile(r"(?<![\d+])(?:\+\d{1,3}[\s-]?\d[\d\s-]{7,}\d|(?:0|91[\s-]?)?[6-9]\d{4}[\s-]?\d{5})(?!\d)")
 
 
-def clean_caption(text):
+def clean_caption(text, own=OUR):
     """No links (they don't work in captions and are a spam signal), no e-mails/phones, no other accounts' handles."""
     text = _URL.sub("", _MAIL.sub("", str(text)))
     text = _PHONE.sub("", text)
-    text = re.sub(r"@(\w[\w.]*)", lambda m: m.group(0) if m.group(1).lower().rstrip(".") == OUR else m.group(1), text)
+    text = re.sub(r"@(\w[\w.]*)", lambda m: m.group(0) if m.group(1).lower().rstrip(".") == own.lower() else m.group(1), text)
     return re.sub(r"[ \t]{2,}", " ", text)
 
 
-def compose(caption, hashtags):
+def compose(caption, hashtags, own=OUR):
     tags, seen = [], set()
-    caption = clean_caption(caption)
+    caption = clean_caption(caption, own)
     inline = re.findall(r"#\w+", caption)
     for t in inline:                      # hashtags written inside the text count toward Instagram's limit of 5
         seen.add(t.lower())
@@ -116,7 +124,7 @@ def prepare(db, job):
             errors.append(e)
     if not out.get("ig_caption"):
         try:
-            add["ig_caption"] = make_caption(db, job["id"], out)
+            add["ig_caption"] = make_caption(db, job["id"], out, job.get("brand") or "weone")
         except Exception as e:  # noqa: BLE001
             errors.append(e)
     if add:
@@ -135,7 +143,7 @@ def loop(db, stop):
     while not stop.is_set():
         try:
             since = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
-            rows = db.select("jobs", "select=id,output,status&kind=eq.reel&status=in.(review,done)"
+            rows = db.select("jobs", "select=id,brand,output,status&kind=eq.reel&status=in.(review,done)"
                                      f"&updated_at=gt.{since}&or=(output->>ig_caption.is.null,output->>ig_video.is.null)&limit=5")
             for job in rows:
                 o = job["output"] or {}

@@ -148,7 +148,7 @@ async function fail(job: Json, e: LIError) {
 }
 
 export async function liTick(): Promise<Json> {
-  const reels: Json[] = await rest("GET", "jobs?select=id,output&kind=eq.reel&status=eq.done&output->li->>state=in.(scheduled,uploading,processing,posting)&order=updated_at.asc&limit=20");
+  const reels: Json[] = await rest("GET", "jobs?select=id,output&kind=eq.reel&brand=eq.weone&status=eq.done&output->li->>state=in.(scheduled,uploading,processing,posting)&order=updated_at.asc&limit=20");
   const due = reels.filter((r) => r.output.li.state !== "scheduled" || Date.parse(r.output.li.at ?? 0) <= Date.now());
   if (!due.length) return { due: 0 };
   const [tok, st] = await connection();

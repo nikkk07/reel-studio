@@ -145,7 +145,7 @@ async function fail(job: Json, e: IGError) {
 
 // ---------------------------------------------------------------- one tick
 export async function tick(): Promise<Json> {
-  const reels: Json[] = await rest("GET", "jobs?select=id,output&kind=eq.reel&status=eq.done&output->ig->>state=in.(queued,scheduled,posting)&order=updated_at.asc&limit=50");
+  const reels: Json[] = await rest("GET", "jobs?select=id,output&kind=eq.reel&brand=eq.weone&status=eq.done&output->ig->>state=in.(queued,scheduled,posting)&order=updated_at.asc&limit=50");
   const due = reels.filter((r) => r.output.ig.state === "posting" || r.output.ig.state === "queued" || Date.parse(r.output.ig.at ?? 0) <= Date.now());
   const st = await setting("instagram_status");
   const [tok, uid] = await connection(st.state === "checking" || due.length > 0);
@@ -170,7 +170,7 @@ function statsDue(o: Json): boolean {
 }
 export async function statsTick(): Promise<Json> {
   const since = iso(new Date(Date.now() - 30 * 86400e3));
-  const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&status=eq.done&output->ig->>state=eq.posted&output->ig->>posted_at=gte.${since}&order=updated_at.asc&limit=60`);
+  const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&brand=eq.weone&status=eq.done&output->ig->>state=eq.posted&output->ig->>posted_at=gte.${since}&order=updated_at.asc&limit=60`);
   const due = reels.filter((r) => r.output?.ig?.media_id && statsDue(r.output)).slice(0, 4);
   if (!due.length) return { due: 0 };
   const [tok] = await connection(false);

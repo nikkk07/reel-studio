@@ -9,7 +9,7 @@ from .gfx_base import (TF, load_fonts, FPS, W, H, RED, AMBER, CYAN, WHITE, GREEN
                        ease_io, prog, col, font, tw, text, glass, chip)
 
 COLORS = {"red": RED, "amber": AMBER, "cyan": CYAN, "green": GREEN, "white": WHITE, "violet": (170, 150, 255)}
-def C(name, default=AMBER): return COLORS.get(str(name or "").lower(), default)
+def C(name, default=None): return COLORS.get(str(name or "").lower(), AMBER if default is None else default)
 
 
 # ------------------------------------------------------------------ helpers
@@ -216,7 +216,7 @@ def draw_end(c, t, TL, logo):
     c.drawRect(skia.Rect(0, 0, W, H), skia.Paint(Color4f=col((4, 8, 14), 0.55 * p)))
     lw = 420; lh = lw * logo.height() / logo.width(); y = 640 + (1 - p) * 60
     c.drawImageRect(logo, skia.Rect.MakeXYWH(W / 2 - lw / 2, y, lw, lh), skia.SamplingOptions(skia.FilterMode.kLinear), skia.Paint(Alphaf=p))
-    text(c, "FOLLOW FOR MORE", W / 2, y + lh + 110, font("black", 96), WHITE, alpha=ease_out_expo(prog(t, ta + 0.25, 0.5)))
+    text(c, TL.get("end_title", "FOLLOW FOR MORE"), W / 2, y + lh + 110, font("black", 96), WHITE, alpha=ease_out_expo(prog(t, ta + 0.25, 0.5)))
     text(c, TL.get("end_sub", "aviation facts, explained"), W / 2, y + lh + 175, font("pm", 44), CYAN, alpha=ease_out_expo(prog(t, ta + 0.45, 0.5)))
 
 
@@ -262,8 +262,16 @@ def encoder_args(final=False):
         return ["-c:v", "h264_videotoolbox", "-b:v", "40M", "-allow_sw", "1"]
     return ["-c:v", "libx264", "-preset", "veryfast" if not final else "medium", "-crf", "15"]
 
+def apply_palette(pal):
+    """The account's own accent colours (e.g. gold and champagne); We One keeps the original amber/cyan."""
+    global AMBER, CYAN
+    if pal.get("accent"): AMBER = tuple(pal["accent"]); COLORS["amber"] = AMBER
+    if pal.get("secondary"): CYAN = tuple(pal["secondary"]); COLORS["cyan"] = CYAN
+
+
 def render(TL, f0, f1, out):
     load_fonts(TL["fonts_dir"])
+    apply_palette(TL.get("palette") or {})
     shots = {s["id"]: Shot(s["file"]) for s in TL["shots"]}
     logo = skia.Image.open(TL["logo"])
     grain = [np.random.default_rng(i).normal(0, 4.5, (H // 2, W // 2)).astype(np.float32) for i in range(6)]

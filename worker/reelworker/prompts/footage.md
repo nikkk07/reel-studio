@@ -1,4 +1,4 @@
-You are picking stock footage for a vertical (9:16) aviation Reel. The video will be cropped to a 9:16 window from each landscape clip.
+You are picking stock footage for a vertical (9:16) {{niche}} Reel. The video will be cropped to a 9:16 window from each landscape clip.
 
 Shots needed (id, search query, what it should show, seconds needed):
 {{shots}}

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "name": "We One Aviation",
+  "language": "hinglish",
+  "voice": "female",
+  "legacy_prompts": true,
+  "instagram": "we_one_aviation",
+  "note": "Uses the original Hinglish aviation prompts, lexicon, CTA and logo (unchanged)."
+}

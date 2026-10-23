@@ -25,6 +25,31 @@ select pg_temp.ok((public.request_changes((select id from jobs where input->'con
 reset role;
 insert into jobs(kind,input,parent_id) values ('reel','{"notes":"x"}',(select id from jobs where input->'concept'->>'title'='T2' limit 1));
 select pg_temp.ok((select brand from jobs where input->>'notes'='x') = 'weone', 'worker-made revisions inherit the account');
+
+-- no cross-posting: an account without its own connections never posts to We One's (or anyone's) Instagram
+reset role;
+update settings set value = value || '{"auto": true}'::jsonb where key = 'post_schedule';
+update brands set status='live' where id='bookmycharter';
+insert into jobs(kind,input,status,output) values
+  ('reel','{"concept":{"title":"BMC1"},"brand":"bookmycharter"}','review','{"title":"BMC1","video":"x/reel.mp4","review_deadline":"2000-01-01T00:00:00Z"}'),
+  ('reel','{"concept":{"title":"BMC2"},"brand":"bookmycharter"}','review','{"title":"BMC2","video":"x/reel.mp4"}');
+select pg_temp.ok((select count(*) from jobs where input->'concept'->>'title' in ('BMC1','BMC2') and brand='bookmycharter') = 2, 'Book My Charter reels are filed under Book My Charter');
+select public.auto_approve_due();
+select pg_temp.ok((select status from jobs where input->'concept'->>'title'='BMC1') = 'review', 'the 5-minute auto-approve never touches another account''s reel');
+select pg_temp.ok(public.post_targets(true, 'bookmycharter') = '{}'::jsonb and public.post_targets(false, 'flystar') = '{}'::jsonb, 'accounts without their own connections have no posting targets');
+select set_config('request.jwt.claims','{"email":"weoneaviation8@gmail.com"}',false);
+set role authenticated;
+select pg_temp.ok(pg_temp.err($$select public.post_targets(true, 'weone')$$) like 'permission denied%', 'the site cannot call the posting-target helper');
+select public.set_review_decision((select id from jobs where input->'concept'->>'title'='BMC2'), 'approve');
+select pg_temp.ok((select status from jobs where input->'concept'->>'title'='BMC2') = 'done', 'approving a Book My Charter reel works');
+select pg_temp.ok((select not (output ? 'ig' or output ? 'fb' or output ? 'li') from jobs where input->'concept'->>'title'='BMC2'), 'approved Book My Charter reel is not queued for We One''s Instagram, Facebook or LinkedIn');
+select pg_temp.ok(pg_temp.err($$select public.set_post((select id from jobs where input->'concept'->>'title'='BMC2'), 'ig', 'now')$$) like 'Connect this account''s own Instagram first%', 'Post now on a Book My Charter reel is refused (no cross-posting)');
+select pg_temp.ok(pg_temp.err($$select public.set_post((select id from jobs where input->'concept'->>'title'='BMC2'), 'ig', 'off')$$) is null, 'cancelling is still allowed');
+select pg_temp.ok((public.create_job('suggest', '{"brand":"bookmycharter"}')).brand = 'bookmycharter', 'ideas are requested per account');
+select pg_temp.ok((select count(*) from brands where profile ? 'pillars' and id <> 'bookmycharter') = 0, 'Book My Charter''s knowledge lives only in its own profile');
+reset role;
+update brands set status='setup' where id='bookmycharter';
+delete from jobs where brand='bookmycharter';
 select set_config('request.jwt.claims','{"email":"stranger@x.com"}',false); set role authenticated;
 select pg_temp.ok((select count(*) from brands) = 0, 'non-members see no accounts');
 reset role;

@@ -31,7 +31,7 @@ def generate(job: Path, cfg: dict, log):
             f = job / "vo" / f"{g['id']}_s{s}.wav"
             if not f.exists():
                 torch.manual_seed(s); t0 = time.time()
-                kw = dict(language_id="hi", audio_prompt_path=cfg["ref"], exaggeration=0.5, cfg_weight=0.5, temperature=0.8)
+                kw = dict(language_id=cfg.get("tts_lang", "hi"), audio_prompt_path=cfg["ref"], exaggeration=0.5, cfg_weight=0.5, temperature=0.8)
                 try:
                     w = m.generate(g["text"], **kw)
                 except Exception as e:  # noqa: BLE001  (an op unsupported on Apple GPU) -> finish on CPU
@@ -82,7 +82,7 @@ def score_and_align(job: Path, cfg: dict, takes: dict, log):
         for f in takes[g["id"]]:
             a, sr = sf.read(f, dtype="float32"); a = a if a.ndim == 1 else a.mean(1)
             a16 = librosa.resample(a, orig_sr=sr, target_sr=16000)
-            segs, _ = asr.transcribe(a16, beam_size=5, language="hi", word_timestamps=True)
+            segs, _ = asr.transcribe(a16, beam_size=5, language=cfg.get("asr_lang", "hi"), word_timestamps=True)
             words = [(w.start, w.end, w.word.strip(), w.probability) for s in segs for w in s.words]
             wprob = float(np.mean([w[3] for w in words])) if words else 0.0
             cover = len(words) / max(1, expected_words)
