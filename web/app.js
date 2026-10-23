@@ -66,7 +66,7 @@ const dateShort = (d) => new Date(d).toLocaleDateString([], { day: "numeric", mo
 const mins = (sec) => { sec = Math.max(0, sec); if (sec < 90) return "about 1 min"; const m = Math.round(sec / 60); return m < 90 ? `about ${m} min` : `about ${Math.floor(m / 60)} h ${m % 60} min`; };
 const shortMins = (sec) => `${Math.max(1, Math.round(sec / 60))} min`;
 const ago = (iso) => { const s = (Date.now() - new Date(iso)) / 1000; return s < 60 ? "just now" : s < 3600 ? `${s / 60 | 0} min ago` : s < 86400 ? `${s / 3600 | 0} h ago` : `${s / 86400 | 0} d ago`; };
-const callsign = (id) => `WOA ${id.slice(0, 4).toUpperCase()}`;
+const callsign = (id) => `RS ${id.slice(0, 4).toUpperCase()}`;
 const errText = (e) => { const m = (e && (e.message || e.error_description)) || String(e); return /row-level security|not a member/i.test(m) ? "Your account isn't on the members list yet." : m; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const titleOf = (j) => j.output?.title || j.input?.concept?.title || "Untitled reel";
@@ -207,7 +207,7 @@ function shell(content, { nav = true } = {}) {
   const initials = (S.session?.user?.email || "?").slice(0, 2).toUpperCase();
   const top = h("header", { cls: "top" }, h("div", { cls: "top-in" },
     S.route === "home" || !S.session
-      ? h("a", { cls: "brand", href: "#/home", "aria-label": "Reel Studio dashboard" }, h("img", { src: "icons/icon-192.png", alt: "" }), h("div", {}, h("b", {}, "Reel Studio"), h("span", {}, "All accounts")))
+      ? h("a", { cls: "brand plain", href: "#/home", "aria-label": "Reel Studio dashboard" }, h("div", {}, h("b", {}, "Reel Studio"), h("span", {}, "All accounts")))
       : h("button", { cls: "brand acct", onclick: () => go("home"), title: "Switch account", "aria-label": `${brandOf().name}. Switch account` }, brandLogo(brandOf(), 36),
           h("div", {}, h("b", {}, brandOf().name), h("span", {}, "Switch account ▾"))),
     nav && S.session ? h("nav", { cls: "nav", "aria-label": "Main" }, items.map((it) => navBtn(it, false))) : null,
@@ -267,8 +267,8 @@ function viewLogin() {
     h("label", { cls: "field", for: "em" }, "Email"), email, h("label", { cls: "field", for: "pw" }, "Password"), pass,
     h("div", { style: "height:20px" }), btn, msg);
   shell(h("section", { cls: "login" },
-    h("div", { cls: "login-art" }, h("h1", {}, "Aviation reels, researched and ready to post"),
-      h("p", {}, "Pick a topic or bring your own. The studio Mac writes the script from real sources, records the voice, edits the reel and sends it back for your approval."),
+    h("div", { cls: "login-art" }, h("h1", {}, "Scroll-stopping reels. Fact-checked. Ready to post."),
+      h("p", {}, "Pick a topic or bring your own. The studio researches real sources, writes the script, records the voice and edits the reel for every brand you run, then waits for your yes."),
       routeArt()), form), { nav: false });
   email.focus();
 }

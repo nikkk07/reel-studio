@@ -453,3 +453,4 @@ main, .panel, .topic, .strip, dialog { overflow-wrap: anywhere; }
 .brand.acct b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 17px; }
 .mini svg { width: 15px; height: 15px; }
 @media (max-width: 420px) { .brand.acct > div { max-width: 130px; } }
+.brand.plain { gap: 0; }
