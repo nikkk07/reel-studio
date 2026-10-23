@@ -12,7 +12,11 @@ WEB, FIX, MP4 = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
 PORT = int(sys.argv[4]) if len(sys.argv) > 4 else 8765
 NOW = lambda: time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + ".000Z"
 DB = {"jobs": {}, "job_events": [], "pings": {}, "workers": {"mac-mini": {"id": "mac-mini", "last_seen": NOW(), "status": "idle", "version": "1.0.0",
-                                                                              "claude_ok": True, "claude_note": "2.1.300", "claude_checked_at": NOW(), "info": {"reels_today": 0, "daily_cap": 3}}}}
+                                                                              "claude_ok": True, "claude_note": "2.1.300", "claude_checked_at": NOW(), "info": {"reels_today": 0, "daily_cap": 3}}},
+      "brands": {b["id"]: b for b in [
+          {"id": "weone", "name": "We One Aviation", "tagline": "DGCA ground classes", "website": "https://weoneaviation.in", "logo": "brands/weone.png", "color": "#0A2342", "instagram": "we_one_aviation", "status": "live", "sort": 1, "logo_asset": None, "logo_updated_at": None},
+          {"id": "bookmycharter", "name": "Book My Charter", "tagline": "Private jet & helicopter charter", "website": "https://bookmycharter.in", "logo": "brands/bookmycharter.png", "color": "#13213D", "instagram": None, "status": "live", "sort": 2, "logo_asset": None, "logo_updated_at": None}]},
+      "settings": {}}
 USER = {"id": "11111111-1111-1111-1111-111111111111", "email": os.environ.get("USER_EMAIL", "owner@example.com"), "aud": "authenticated", "role": "authenticated",
         "app_metadata": {"provider": "email"}, "user_metadata": {}, "created_at": NOW()}
 LOG = []
@@ -132,6 +136,10 @@ class H(SimpleHTTPRequestHandler):
                 self.send_response(206); self.cors(); self.send_header("Content-Range", f"bytes {a}-{b}/{len(data)}")
                 self.send_header("Content-Length", str(len(part))); self.end_headers(); return self.wfile.write(part)
             self.send_response(200 if data else 404); self.cors(); self.send_header("Content-Length", str(len(data))); self.end_headers(); return self.wfile.write(data)
+        if p.startswith("/storage/v1/object/sign/brand-assets/"):
+            real = STORE / "brand-assets" / p[len("/storage/v1/object/sign/brand-assets/"):]
+            data = real.read_bytes() if real.exists() else b""
+            self.send_response(200 if data else 404); self.cors(); self.send_header("Content-Type", "image/png"); self.send_header("Content-Length", str(len(data))); self.end_headers(); return self.wfile.write(data)
         if p.startswith("/storage/v1/object/sign/reels/"):
             real = STORE / p[len("/storage/v1/object/sign/reels/"):]
             f = real if real.exists() else MP4 if p.endswith(".mp4") else WEB / "tests" / "thumb.jpg"
@@ -143,9 +151,15 @@ class H(SimpleHTTPRequestHandler):
     def do_POST(self):
         if PGRST and self.path.startswith("/rest/v1/"): return self.proxy("POST")
         u = urlparse(self.path); p = u.path
-        if p.startswith("/storage/v1/object/reels/"):            # worker upload
-            n = int(self.headers.get("Content-Length") or 0); dest = STORE / p[len("/storage/v1/object/reels/"):]
-            dest.parent.mkdir(parents=True, exist_ok=True); dest.write_bytes(self.rfile.read(n)); return self.js({"Key": p})
+        mb = re.match(r"/storage/v1/object/(reels|brand-assets)/(.+)$", p)
+        if mb:                                                     # upload (worker, or a logo from the site)
+            n = int(self.headers.get("Content-Length") or 0); dest = STORE / mb.group(1) / mb.group(2)
+            data = self.rfile.read(n); ct = self.headers.get("Content-Type") or ""
+            if ct.startswith("multipart/form-data"):                  # supabase-js sends files as a form: keep only the file part
+                import email.parser, email.policy
+                msg = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(b"Content-Type: " + ct.encode() + b"\r\n\r\n" + data)
+                data = next((part.get_payload(decode=True) for part in msg.iter_parts() if part.get_filename() or part.get_content_type().startswith("image/")), data)
+            dest.parent.mkdir(parents=True, exist_ok=True); dest.write_bytes(data); LOG.append(("UPLOAD", p, len(data))); return self.js({"Key": p})
         if p.startswith("/storage/v1/object/list/reels"):
             return self.js([])
         b = self.body(); LOG.append(("POST", p, b))
@@ -165,8 +179,12 @@ class H(SimpleHTTPRequestHandler):
             j["output"] = {**j["output"], "decision": b["p_decision"], "notes": b.get("p_notes")}; return self.js(j)
         if p == "/rest/v1/rpc/cancel_job":
             DB["jobs"][b["p_job"]]["status"] = "cancelled"; return self.js(None)
-        if p.startswith("/storage/v1/object/sign/reels/"):
+        if p.startswith("/storage/v1/object/sign/"):
             return self.js({"signedURL": p.replace("/storage/v1", "") + "?token=t"})
+        if p == "/rest/v1/rpc/set_brand_logo":
+            br = DB["brands"][b["p_brand"]]
+            if not str(b["p_path"]).startswith(b["p_brand"] + "/"): return self.js({"message": "That file does not belong to this account."}, 400)
+            br.update(logo_asset=b["p_path"], logo_updated_at=NOW()); return self.js({"brand": b["p_brand"], "logo_asset": b["p_path"]})
         return self.js({"message": "not mocked " + p}, 404)
 
 

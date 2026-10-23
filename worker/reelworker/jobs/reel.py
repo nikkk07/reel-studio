@@ -241,7 +241,7 @@ def _vo_map(ctx):
 
 
 def stage_footage(ctx, prog):
-    spec = _spec(ctx); TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx))))
+    spec = _spec(ctx); TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx), ctx.db)))
     need = {s["id"]: s["need"] for s in TL["shots"]}
     shots = [s for s in spec["shots"] if s["id"] in need]
     cands = {}; reuse = {}
@@ -338,7 +338,7 @@ def build_timeline(ctx):
     spec = _spec(ctx); fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8"))
     spec["shots"] = [s for s in spec["shots"] if s["id"] in fj["files"]]
     prof = _brand(ctx)
-    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(prof)))
+    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(prof, ctx.db)))
     for s in TL["shots"]:
         s["file"] = fj["files"][s["id"]]
     if not brandmod.legacy(prof):             # the account's own look: gold/champagne accents, end card text

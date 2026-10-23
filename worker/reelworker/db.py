@@ -66,8 +66,8 @@ class Supabase:
         u = r.get("signedURL") or r.get("signedUrl") or ""
         return u if u.startswith("http") else f"{self.url}/storage/v1{u}"
 
-    def download(self, path_in_bucket: str, dest) -> None:
-        r = self._req("GET", f"/storage/v1/object/{config.BUCKET}/{path_in_bucket}")
+    def download(self, path_in_bucket: str, dest, bucket: str = None) -> None:
+        r = self._req("GET", f"/storage/v1/object/{bucket or config.BUCKET}/{path_in_bucket}")
         open(dest, "wb").write(r.content)
 
     def delete_objects(self, paths):

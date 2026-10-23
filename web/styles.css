@@ -399,9 +399,6 @@ main, .panel, .topic, .strip, dialog { overflow-wrap: anywhere; }
 .plat:hover { border-color: #b9c6d4; box-shadow: var(--lift); transform: translateY(-1px); }
 .plat:focus-visible { outline: 2px solid var(--route); outline-offset: 2px; }
 .plat-tile { position: relative; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; color: #fff; }
-.plat.ig .plat-tile { background: linear-gradient(45deg, #F58529, #DD2A7B 55%, #8134AF); }
-.plat.fb .plat-tile { background: #1877F2; }
-.plat.li .plat-tile { background: #0A66C2; }
 .plat-badge { position: absolute; right: -5px; bottom: -5px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; color: #fff; border: 2.5px solid var(--surface); line-height: 1; }
 .plat-badge.ok { background: #12A150; } .plat-badge.no { background: #D93644; } .plat-badge.warn { background: #E8A100; } .plat-badge.wait { background: #7A8899; }
 .plat-name { font-weight: 700; font-size: 14px; margin-top: 4px; }
@@ -443,7 +440,8 @@ main, .panel, .topic, .strip, dialog { overflow-wrap: anywhere; }
 .acct-web:hover { color: var(--ink); text-decoration: underline; }
 .minis { display: inline-flex; gap: 4px; }
 .mini { position: relative; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 800; }
-.mini.ig { background: linear-gradient(45deg, #F58529, #DD2A7B 55%, #8134AF); } .mini.fb { background: #1877F2; } .mini.li { background: #0A66C2; }
+.mini img, .plat-tile img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.mini.no img { opacity: .55; }
 .mini::after { content: ""; position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--surface); }
 .mini.ok::after { background: #12A150; } .mini.no::after { background: #D93644; } .mini.warn::after { background: #E8A100; }
 .setupcard { max-width: 640px; }
@@ -454,3 +452,10 @@ main, .panel, .topic, .strip, dialog { overflow-wrap: anywhere; }
 .mini svg { width: 15px; height: 15px; }
 @media (max-width: 420px) { .brand.acct > div { max-width: 130px; } }
 .brand.plain { gap: 0; }
+
+/* Assets */
+.acct-web img { flex: none; }
+.asset-row { display: flex; gap: 16px; align-items: flex-start; }
+.asset-row p { margin: 4px 0 10px; }
+.blogo.asset-prev { width: 112px; height: 112px; border-radius: 18px; }
+@media (max-width: 480px) { .asset-row { flex-direction: column; } }

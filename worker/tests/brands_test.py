@@ -54,6 +54,22 @@ except RuntimeError: ok(True, "an account without a profile never falls back to 
 try: brandmod.logo(p); ok(False, "logo")
 except RuntimeError as e: ok("missing" in str(e), "a missing account logo stops the reel instead of using We One's logo")
 
+# logo uploaded in Assets: downloaded from the account's own folder, prepared for the reel, cached
+import shutil
+from PIL import Image
+class AssetDB(DB):
+    def __init__(self): super().__init__(); self.got = []
+    def download(self, path, dest, bucket=None):
+        self.got.append((bucket, path)); shutil.copy(str(Path(__file__).resolve().parents[2] / "web/brands/bookmycharter.png"), dest)
+adb = AssetDB(); pa = {**p, "logo_asset": "bookmycharter/logo-1761200000000.png"}
+f1 = brandmod.logo(pa, adb); f2 = brandmod.logo(pa, adb); im = Image.open(f1)
+ok(adb.got == [("brand-assets", "bookmycharter/logo-1761200000000.png")] and f1 == f2, "the uploaded logo is fetched once from the account's own assets and reused")
+ok(max(im.size) >= 600 and im.mode == "RGBA" and im.getpixel((0, 0))[3] == 0, "a small, solid logo is enlarged and gets rounded corners for the reel")
+class BadDB(DB):
+    def download(self, *a, **k): raise RuntimeError("offline")
+try: brandmod.logo({**pa, "logo_asset": "bookmycharter/logo-1761200000009.png"}, BadDB()); ok(False, "fallback")
+except RuntimeError as e: ok("missing" in str(e), "if the upload can't be fetched, the reel stops instead of using another account's logo")
+
 # script + call to action
 spec = json.loads((Path(__file__).parent / "fixtures/script.json").read_text())
 s2 = reel.validate_spec(json.loads(json.dumps(spec)), p)

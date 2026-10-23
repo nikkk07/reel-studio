@@ -50,6 +50,23 @@ select pg_temp.ok((select count(*) from brands where profile ? 'pillars' and id 
 reset role;
 update brands set status='setup' where id='bookmycharter';
 delete from jobs where brand='bookmycharter';
+
+-- account assets: a logo is uploaded to the account's own folder and only that account can point at it
+reset role;
+insert into storage.objects(bucket_id, name) values ('brand-assets', 'bookmycharter/logo-1761200000000.png'), ('brand-assets', 'weone/logo-1761200000001.png');
+select set_config('request.jwt.claims','{"email":"weoneaviation8@gmail.com"}',false);
+set role authenticated;
+select pg_temp.ok((public.set_brand_logo('bookmycharter', 'bookmycharter/logo-1761200000000.png')) ->> 'logo_asset' = 'bookmycharter/logo-1761200000000.png', 'a member sets an account logo from its own folder');
+select pg_temp.ok((select logo_asset from brands where id = 'bookmycharter') = 'bookmycharter/logo-1761200000000.png' and (select logo_asset from brands where id = 'weone') is null, 'changing one account''s logo leaves the others alone');
+select pg_temp.ok(pg_temp.err($$select public.set_brand_logo('bookmycharter', 'weone/logo-1761200000001.png')$$) like 'That file does not belong%', 'one account cannot use another account''s logo file');
+select pg_temp.ok(pg_temp.err($$select public.set_brand_logo('bookmycharter', 'bookmycharter/logo-1761200009999.png')$$) like 'Upload the logo first%', 'a file that was never uploaded is refused');
+select pg_temp.ok(pg_temp.err($$select public.set_brand_logo('bookmycharter', 'bookmycharter/../weone/logo-1761200000001.png')$$) like 'That file does not belong%', 'path tricks are refused');
+select pg_temp.ok(pg_temp.err($$update brands set logo_asset = 'x' where id = 'weone'$$) like 'permission denied%', 'the site cannot write logos directly');
+select set_config('request.jwt.claims','{"email":"stranger@x.com"}',false);
+select pg_temp.ok(pg_temp.err($$select public.set_brand_logo('weone', 'weone/logo-1761200000001.png')$$) like 'Your account is not on the members list%', 'non-members cannot change logos');
+reset role;
+update brands set logo_asset = null, logo_updated_at = null; delete from storage.objects where bucket_id = 'brand-assets';
+select set_config('request.jwt.claims','{"email":"weoneaviation8@gmail.com"}',false);
 select set_config('request.jwt.claims','{"email":"stranger@x.com"}',false); set role authenticated;
 select pg_temp.ok((select count(*) from brands) = 0, 'non-members see no accounts');
 reset role;

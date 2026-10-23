@@ -92,11 +92,23 @@ const mine = (j) => (j.brand || "weone") === S.brand;
 const isLive = (id = S.brand) => brandOf(id).status === "live";
 function setBrand(id) { S.brand = id; S.lastSuggest = null; S.picked = null; S.concept = null; try { localStorage.setItem("rs_brand", id); } catch { /* */ } }
 async function loadBrands() {
-  const { data, error } = await sb.from("brands").select("*").order("sort");
+  const { data, error } = await sb.from("brands").select("id,name,tagline,website,logo,color,instagram,status,sort,logo_asset,logo_updated_at").order("sort");
   if (!error && data?.length) { S.brands = data; if (!data.some((b) => b.id === S.brand)) setBrand("weone"); }
   return S.brands;
 }
-const brandLogo = (b, size = 40) => h("span", { cls: "blogo", style: `width:${size}px;height:${size}px` }, h("img", { src: b.logo || "icons/icon-192.png", alt: "", loading: "lazy" }));
+// account logos: the one uploaded in Assets (private storage, signed link), else the built-in file
+S.logoUrls = {};
+function logoSrc(b) { const c = S.logoUrls[b.id]; return (b.logo_asset && c?.path === b.logo_asset && c.url) || b.logo || "icons/icon-192.png"; }
+async function ensureLogo(b) {
+  if (!b?.logo_asset) return; const c = S.logoUrls[b.id];
+  if (c?.path === b.logo_asset && (c.url || c.busy) && Date.now() - c.at < 50 * 60e3) return;
+  S.logoUrls[b.id] = { path: b.logo_asset, busy: true, at: Date.now() };
+  const { data } = await sb.storage.from("brand-assets").createSignedUrl(b.logo_asset, 3600).catch(() => ({}));
+  S.logoUrls[b.id] = { path: b.logo_asset, url: data?.signedUrl || "", at: Date.now() };
+  if (data?.signedUrl) document.querySelectorAll(`img[data-logo="${b.id}"]`).forEach((im) => { im.src = data.signedUrl; });
+}
+const brandLogo = (b, size = 40) => { ensureLogo(b); return h("span", { cls: "blogo", style: `width:${size}px;height:${size}px` }, h("img", { src: logoSrc(b), alt: "", loading: "lazy", "data-logo": b.id })); };
+const PLAT_IMG = { ig: "icons/platforms/instagram.png", fb: "icons/platforms/facebook.png", li: "icons/platforms/linkedin.png", web: "icons/platforms/website.png" };
 async function getJob(id) { const { data, error } = await sb.from("jobs").select("*").eq("id", id).single(); if (error) throw error; return data; }
 async function events(id, n = 10) { const { data } = await sb.from("job_events").select("id,ts,level,message").eq("job_id", id).order("id", { ascending: false }).limit(n); return data || []; }
 async function loadWorker() { const { data } = await sb.from("workers").select("*").order("last_seen", { ascending: false }).limit(1); S.worker = (data || [])[0] || null; return S.worker; }
@@ -384,7 +396,7 @@ async function viewDashboard() {
       const fb = b.id === "weone" ? (S.settings?.facebook_status?.state || "not_connected") : "not_connected";
       const li = b.id === "weone" ? (S.settings?.linkedin_status?.state || "not_connected") : "not_connected";
       const dot = (k, state, label) => h("span", { cls: `mini ${k} ${state === "connected" ? "ok" : state === "not_connected" ? "no" : "warn"}`, title: `${label}: ${state.replace("_", " ")}`, role: "img", "aria-label": `${label}: ${state.replace("_", " ")}` },
-        s("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2.2, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" }, PLAT_ICON[k].map(([tag, at]) => s(tag, at))));
+        h("img", { src: PLAT_IMG[k], alt: "", width: 24, height: 24 }));
       return h("span", { cls: "minis" }, dot("ig", ig, "Instagram"), dot("fb", fb, "Facebook"), dot("li", li, "LinkedIn"));
     };
     grid.replaceChildren(...(S.brands || BRANDS_FALLBACK).map((b) => {
@@ -399,12 +411,54 @@ async function viewDashboard() {
         live ? h("div", { cls: "acct-nums" }, nums.map(([k, v]) => h("div", {}, h("b", { cls: "num" }, v), h("span", {}, k))))
              : h("p", { cls: "acct-next small" }, "Next: content plan, voice and watermark, then its Instagram."),
         h("div", { cls: "acct-foot" }, plat(b),
-          safeUrl(b.website) ? h("a", { cls: "acct-web", href: b.website, target: "_blank", rel: "noopener noreferrer" }, host(b.website), icon("ext", 13)) : null,
+          safeUrl(b.website) ? h("a", { cls: "acct-web", href: b.website, target: "_blank", rel: "noopener noreferrer" }, h("img", { src: PLAT_IMG.web, alt: "", width: 16, height: 16 }), host(b.website)) : null,
+          h("button", { cls: "btn quiet", onclick: () => assetsDialog(b, paint), "aria-label": `Assets of ${b.name}` }, "Assets"),
           h("button", { cls: "btn " + (live ? "primary" : "quiet"), onclick: open }, "Open")));
     }));
   };
   await paint().catch(() => {});
   S.timers.push(setInterval(() => paint().catch(() => {}), 15000));
+}
+// ---------------------------------------------------------------- Assets: each account's own logo (used on its reels)
+const LOGO_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+function imgSize(file) {
+  return new Promise((res, rej) => { const u = URL.createObjectURL(file); const im = new Image();
+    im.onload = () => { res([im.naturalWidth, im.naturalHeight]); URL.revokeObjectURL(u); }; im.onerror = () => { rej(new Error("That file is not an image.")); URL.revokeObjectURL(u); }; im.src = u; });
+}
+function assetsDialog(b, after) {
+  const prev = h("span", { cls: "blogo asset-prev" }, h("img", { src: logoSrc(b), alt: `${b.name} logo`, "data-logo": b.id })); ensureLogo(b);
+  const note = h("p", { cls: "small muted" }, b.logo_updated_at ? `Updated ${tzClock(b.logo_updated_at)}` : "Built-in logo");
+  const msg = h("p", { cls: "small", role: "status" });
+  const input = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", style: "display:none", onchange: async (e) => {
+    const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
+    const ext = LOGO_TYPES[f.type];
+    if (!ext) { msg.textContent = "Use a PNG, JPG or WebP image."; return; }
+    if (f.size > 5 * 1024 * 1024) { msg.textContent = "Keep the logo under 5 MB."; return; }
+    let wh; try { wh = await imgSize(f); } catch (err) { msg.textContent = err.message; return; }
+    if (Math.min(...wh) < 200) { msg.textContent = `That image is only ${wh[0]}×${wh[1]} px. Use one at least 200 px (1000 px or more looks best).`; return; }
+    btn.disabled = true; btn.textContent = "Uploading…"; msg.textContent = "";
+    try {
+      const path = `${b.id}/logo-${Date.now()}.${ext}`;
+      const { error } = await sb.storage.from("brand-assets").upload(path, f, { contentType: f.type, upsert: false }); if (error) throw error;
+      await rpc("set_brand_logo", { p_brand: b.id, p_path: path });
+      b.logo_asset = path; b.logo_updated_at = new Date().toISOString(); delete S.logoUrls[b.id];
+      await loadBrands().catch(() => {}); await ensureLogo(brandOf(b.id));
+      note.textContent = `Updated ${tzClock(b.logo_updated_at)}`;
+      msg.textContent = Math.max(...wh) < 600 ? "Saved. It's small, so it may look soft on reels; a 1000 px version looks sharper." : "Saved. New reels of this account use it.";
+      toast(`${b.name} logo updated.`); after?.();
+    } catch (err) { msg.textContent = errText(err); }
+    btn.disabled = false; btn.textContent = "Change logo";
+  } });
+  const btn = h("button", { cls: "btn primary", onclick: () => input.click() }, "Change logo");
+  const d = h("dialog", { "aria-label": `${b.name} assets`, cls: "connect plat-dlg" },
+    h("div", { style: "padding:18px 18px 4px" },
+      h("h3", { style: "margin:0 0 4px" }, `${b.name} · Assets`),
+      h("p", { cls: "small muted", style: "margin:0 0 14px" }, "The logo goes on every reel of this account: the corner watermark and the end card. Only this account uses it."),
+      h("div", { cls: "asset-row" }, prev, h("div", {}, h("b", {}, "Logo"), note,
+        h("p", { cls: "small muted" }, "PNG with a transparent background, square, 1000 px or more looks best. JPG and WebP also work (max 5 MB)."),
+        btn, input)), msg),
+    h("div", { cls: "dlg-foot" }, h("span"), h("button", { cls: "btn quiet", onclick: () => d.close() }, "Close")));
+  d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal();
 }
 function setupCard() {
   const b = brandOf();
@@ -968,11 +1022,6 @@ async function finishLinkedIn() {     // back from LinkedIn's sign-in page: ?cod
   await loadSettings().catch(() => {}); go("library");
 }
 // ---------------------------------------------------------------- Library: one small tile per platform (tap = the same pop-up as before)
-const PLAT_ICON = {
-  ig: [["rect", { x: 3, y: 7, width: 18, height: 13, rx: 3 }], ["path", { d: "M8 7l1.5-3h5L16 7" }], ["circle", { cx: 12, cy: 13.5, r: 3.6 }]],              // camera
-  fb: [["path", { d: "M7 21H4.5A1.5 1.5 0 0 1 3 19.5v-7A1.5 1.5 0 0 1 4.5 11H7zM7 11l4-8a2.5 2.5 0 0 1 2.5 2.5V9h5.2a2 2 0 0 1 2 2.3l-1.2 7.5a2 2 0 0 1-2 1.7H7" }]],  // thumbs up
-  li: [["rect", { x: 3, y: 7.5, width: 18, height: 12.5, rx: 2.2 }], ["path", { d: "M9 7.5V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5v2M3 13h18" }]],    // briefcase
-};
 function platformBar(refresh) {
   const items = [["ig", "Instagram", S.settings?.instagram_status, igPanel, connectDialog],
                  ["fb", "Facebook", S.settings?.facebook_status, fbPanel, fbDialog],
@@ -984,8 +1033,7 @@ function platformBar(refresh) {
     const who = state === "connected" ? (k === "ig" ? `@${st.username}` : k === "fb" ? st.page_name : st.org_name) : "";
     return h("button", { cls: `plat ${k}`, "aria-label": `${name}: ${word}${who ? ", " + who : ""}. Tap for options.`, title: who || word,
         onclick: () => (state === "not_connected" ? connectFn(refresh) : platformDialog(name, panelFn, refresh)) },
-      h("span", { cls: "plat-tile" }, s("svg", { viewBox: "0 0 24 24", width: 30, height: 30, fill: "none", stroke: "currentColor", "stroke-width": 1.8, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" },
-        PLAT_ICON[k].map(([tag, at]) => s(tag, at))),
+      h("span", { cls: "plat-tile" }, h("img", { src: PLAT_IMG[k], alt: "", width: 56, height: 56 }),
         h("span", { cls: `plat-badge ${kind}`, "aria-hidden": "true" }, kind === "ok" ? "✓" : kind === "no" ? "✕" : kind === "wait" ? "…" : "!")),
       h("span", { cls: "plat-name" }, name), h("span", { cls: `plat-state ${kind}` }, word));
   }));

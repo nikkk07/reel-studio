@@ -1,7 +1,7 @@
 """Account (brand) profiles: each business has its own knowledge, voice, look, call to action, logo and rules.
 Nothing is shared between accounts. We One Aviation keeps its original Hinglish prompts (legacy path, unchanged).
 """
-import json, time
+import hashlib, json, logging, time
 from pathlib import Path
 from . import config
 
@@ -15,7 +15,7 @@ def load(db, brand_id):
     if hit and time.time() - hit[0] < 300:
         return hit[1]
     try:
-        row = (db.select("brands", f"select=id,name,website,instagram,profile&id=eq.{brand_id}") or [None])[0]
+        row = (db.select("brands", f"select=id,name,website,instagram,logo_asset,profile&id=eq.{brand_id}") or [None])[0]
     except Exception:  # noqa: BLE001  (offline DB: legacy only for We One; never guess another account)
         row = None
     if not row:
@@ -25,6 +25,7 @@ def load(db, brand_id):
     else:
         p = {**(row.get("profile") or {}), "id": row["id"], "name": row["name"], "website": row.get("website")}
         p.setdefault("instagram", row.get("instagram"))
+        p["logo_asset"] = row.get("logo_asset")
         if row["id"] == "weone":
             p = {**LEGACY, **p, "legacy_prompts": True}
     _CACHE[brand_id] = (time.time(), p)
@@ -35,7 +36,37 @@ def legacy(p):
     return bool(p.get("legacy_prompts")) or p.get("language") == "hinglish"
 
 
-def logo(p):
+ASSETS_BUCKET = "brand-assets"
+
+
+def prepare_logo(src, dst):
+    """Any uploaded logo -> a clean PNG for the reel: at least 600 px, and a solid (non-transparent) logo gets rounded corners."""
+    from PIL import Image, ImageDraw
+    im = Image.open(src); im.load(); im = im.convert("RGBA")
+    if max(im.size) < 600:
+        k = 600 / max(im.size); im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+    if im.getextrema()[3][0] == 255:                       # no transparency: round the corners so it sits like an app tile
+        m = Image.new("L", im.size, 0); ImageDraw.Draw(m).rounded_rectangle((0, 0, im.width - 1, im.height - 1), radius=int(min(im.size) * 0.16), fill=255)
+        im.putalpha(m)
+    dst.parent.mkdir(parents=True, exist_ok=True); tmp = dst.with_suffix(".tmp.png"); im.save(tmp); tmp.replace(dst)
+    return dst
+
+
+def logo(p, db=None):
+    """The account's own logo: the one uploaded on the site (Assets), else its file in the library. Never another account's."""
+    a = p.get("logo_asset")
+    if a and db is not None:
+        dst = config.LIBRARY / "brands" / p.get("id", "x") / "uploaded" / (hashlib.sha1(a.encode()).hexdigest()[:16] + ".png")
+        if dst.exists():
+            return dst
+        try:
+            raw = dst.with_suffix(".src")
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            db.download(a, raw, bucket=ASSETS_BUCKET)
+            prepare_logo(raw, dst); raw.unlink(missing_ok=True)
+            return dst
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger("reelworker").warning("uploaded logo for %s could not be used (%s); using the stored one", p.get("name"), str(e)[:120])
     f = p.get("logo_file")
     if f and (config.LIBRARY / f).exists():
         return config.LIBRARY / f

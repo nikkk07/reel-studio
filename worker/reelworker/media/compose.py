@@ -314,9 +314,6 @@ def render(TL, f0, f1, out):
             fn = DRAW.get(g["type"])
             if fn and g["t0"] - 0.05 <= t < g["t1"] + 0.6:
                 fn(c, t, g)
-        if TL["note_range"][0] < t < TL["note_range"][1]:
-            a = prog(t, TL["note_range"][0], 0.5) * (1 - prog(t, TL["note_range"][1] - 0.4, 0.4))
-            text(c, "Representative visuals", W / 2, 1530, font("psb", 26), (235, 238, 242), alpha=0.8 * a)
         if t < TL["vo_end"] - 0.25:
             lw = 104; lh = lw * logo.height() / logo.width()
             c.drawImageRect(logo, skia.Rect.MakeXYWH(70, 220, lw, lh), skia.SamplingOptions(skia.FilterMode.kLinear), skia.Paint(Alphaf=0.92 * prog(t, 0.3, 0.4)))

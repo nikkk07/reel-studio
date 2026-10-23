@@ -17,7 +17,7 @@ footage.prep_shot = lambda src, dst, a, b, c: (Path(dst).write_text(Path(src).re
 footage.credits = lambda chosen: []
 timeline.build = lambda spec, vo, fonts, logo: {"shots": [{"id": s["id"], "need": 3.0} for s in spec["shots"]]}
 reel._vo_map = lambda ctx: {}
-reel.brandmod.logo = lambda p: "logo.png"
+reel.brandmod.logo = lambda p, db=None: "logo.png"
 reel._brand = lambda ctx: {"name": "Book My Charter", "niche": "private jet charter", "visual_style": {"look": "premium", "footage_rules": ["no airline rows"]}}
 reel.brandmod.legacy = lambda p: False
 ROUNDS = []
