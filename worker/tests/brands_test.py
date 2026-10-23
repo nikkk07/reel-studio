@@ -58,7 +58,7 @@ except RuntimeError as e: ok("missing" in str(e), "a missing account logo stops 
 spec = json.loads((Path(__file__).parent / "fixtures/script.json").read_text())
 s2 = reel.validate_spec(json.loads(json.dumps(spec)), p)
 last = s2["groups"][-1]["phrases"][-1]
-ok(last["say"] == "Follow Book My Charter." and not any("we one" in (x["say"] + x["caption"]).lower() for g in s2["groups"] for x in g["phrases"]),
+ok(last["say"] == PROFILE["cta"]["say"] and not any("we one" in (x["say"] + x["caption"]).lower() for g in s2["groups"] for x in g["phrases"]),
    "Book My Charter reel ends with its own call to action, never We One's")
 s3 = reel.validate_spec(json.loads(json.dumps(spec)), w)
 ok(s3["groups"][-1]["phrases"][-1]["caption"] == reel.CTA_CAPTION, "We One reel keeps 'follow karein We One Aviation'")
@@ -67,7 +67,7 @@ B = Brain(); reel.brain = B
 c, _ = ctx_for("reel", "bookmycharter", {"concept": {"title": "The line missing from your private jet quote"}})
 reel.stage_script(c, lambda f: None)
 name, v = B.calls[-1]
-ok(name == "script_brand" and v["brand_name"] == "Book My Charter" and "Follow Book My Charter." in B.last_text and "Devanagari" not in B.last_text,
+ok(name == "script_brand" and v["brand_name"] == "Book My Charter" and PROFILE["cta"]["say"] in B.last_text and "Devanagari" not in B.last_text,
    "Book My Charter script prompt: English, its own brief and call to action")
 c, _ = ctx_for("reel", "weone", {"concept": {"title": "Squawk 7700"}})
 reel.stage_script(c, lambda f: None); ok(B.calls[-1][0] == "script", "We One script prompt unchanged")

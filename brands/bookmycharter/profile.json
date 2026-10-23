@@ -1,5 +1,5 @@
 {
- "version": 2,
+ "version": 3,
  "updated": "2026-10-23",
  "name": "Book My Charter",
  "website": "https://bookmycharter.in",
@@ -10,7 +10,7 @@
  "voice": "female",
  "tone": "Premium, calm and confident. Plain English, no hype words (no 'luxury lifestyle', 'elite', 'exclusive deal'). Explains how private flying really works, like a trusted insider. Short sentences. Every claim checkable.",
  "cta": {
-  "say": "Follow Book My Charter.",
+  "say": "Follow, Book My Charter.",
   "caption": "Follow *Book My Charter*"
  },
  "end_title": "FOLLOW FOR MORE",

@@ -94,7 +94,7 @@ def g_list_card(c, t, g):
         a = ease_out_expo(prog(t, ts - 0.12, 0.45)) * (1 - out); y = y0 + i * 150
         if a <= 0.01: continue
         ok = it.get("ok"); colr = GREEN if ok is True else RED if ok is False else CYAN
-        r = skia.Rect.MakeXYWH(120 + (1 - a) * 300, y - 58, 840, 116)
+        r = skia.Rect.MakeXYWH(120 + (1 - a) * 90, y - 58, 840, 116)
         glass(c, r, alpha=a, border=colr, border_a=0.75)
         label = words(it.get("text", ""), 44).upper()
         text(c, label, r.left() + 40, y + 20, fit_font("black", label, 60, 700 if ok is not None else 760), WHITE, alpha=a, align="l", shadow=False)
@@ -117,7 +117,7 @@ def g_compare(c, t, g):
     for i, key in enumerate(("left", "right")):
         side = p.get(key) or {}; colr = C(side.get("color"), RED if i == 0 else AMBER)
         pa = ease_out_expo(prog(t, g["t0"] + i * 0.25, 0.5)); al = pa * (1 - out)
-        x = W / 2 + (1 - pa) * (-700 if i == 0 else 700); y = 580 + i * 300
+        x = W / 2 + (1 - pa) * (-160 if i == 0 else 160); y = 580 + i * 300          # short slide + fade: never runs off the frame
         on = (focus == key) or (focus is None)
         r = skia.Rect.MakeXYWH(x - 430, y - 125, 860, 250)
         glass(c, r, alpha=al * (1 if on else 0.65), border=colr, border_a=0.85 if on else 0.3)
