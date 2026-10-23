@@ -1,0 +1,2 @@
+{"pass": true, "score": 8, "summary": "Clean hook, captions readable, footage matches narration.",
+ "issues": [{"t": 9.0, "problem": "wing shot slightly soft", "fix": "repick_shot", "shot_id": "S3"}]}

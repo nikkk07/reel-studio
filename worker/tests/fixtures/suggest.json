@@ -1,0 +1,89 @@
+{
+ "topics": [
+  {
+   "title": "Plane par bijli giri… aur kuch nahi hua",
+   "hook": "Udte plane par bijli girti hai… aur kuch nahi hota.",
+   "angle": "Faraday cage",
+   "why_viral": "fear + surprise",
+   "key_facts": [
+    "~1 strike per airliner per year"
+   ],
+   "sources": [
+    {
+     "title": "skybrary.aero",
+     "url": "https://skybrary.aero/articles/lightning"
+    }
+   ],
+   "risk_note": "frequency is an estimate",
+   "est_seconds": 40
+  },
+  {
+   "title": "Landing se pehle lights dim kyun?",
+   "hook": "Landing se pehle lights kyun dim hoti hain?",
+   "angle": "eyes adapt for evacuation",
+   "why_viral": "everyone noticed it",
+   "key_facts": [
+    "90-second evacuation rule"
+   ],
+   "sources": [
+    {
+     "title": "www.ecfr.gov",
+     "url": "https://www.ecfr.gov/current/title-14/section-25.803"
+    }
+   ],
+   "risk_note": "",
+   "est_seconds": 40
+  },
+  {
+   "title": "Dono engines band… phir bhi landing",
+   "hook": "Dono engines band ho gaye…",
+   "angle": "Hudson",
+   "why_viral": "survival story",
+   "key_facts": [
+    "155 survived"
+   ],
+   "sources": [
+    {
+     "title": "www.ntsb.gov",
+     "url": "https://www.ntsb.gov/investigations/AccidentReports/Reports/AAR1003.pdf"
+    }
+   ],
+   "risk_note": "",
+   "est_seconds": 40
+  },
+  {
+   "title": "Pilot aur co-pilot same khana nahi khaate",
+   "hook": "Cockpit mein do log, do alag khane.",
+   "angle": "food poisoning risk",
+   "why_viral": "curiosity",
+   "key_facts": [
+    "airline policy, not a law"
+   ],
+   "sources": [
+    {
+     "title": "www.faa.gov",
+     "url": "https://www.faa.gov"
+    }
+   ],
+   "risk_note": "policy varies",
+   "est_seconds": 40
+  },
+  {
+   "title": "Window shades kyun kholte hain?",
+   "hook": "Takeoff par window kholne ko kyun kehte hain?",
+   "angle": "situational awareness",
+   "why_viral": "relatable",
+   "key_facts": [
+    "crew can see outside hazards"
+   ],
+   "sources": [
+    {
+     "title": "www.easa.europa.eu",
+     "url": "https://www.easa.europa.eu"
+    }
+   ],
+   "risk_note": "",
+   "est_seconds": 35
+  }
+ ]
+}

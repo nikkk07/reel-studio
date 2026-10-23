@@ -1,0 +1,21 @@
+{
+ "title": "Plane par bijli giri… aur kuch nahi hua",
+ "hook": "Udte plane par bijli girti hai… aur kuch nahi hota.",
+ "concept": "Explain why lightning strikes are routine and harmless for airliners.",
+ "outline": [
+  "hook",
+  "frequency",
+  "skin as Faraday cage",
+  "CTA"
+ ],
+ "key_facts": [
+  "~1 strike per airliner per year"
+ ],
+ "sources": [
+  {
+   "title": "skybrary.aero",
+   "url": "https://skybrary.aero/articles/lightning"
+  }
+ ],
+ "notes_for_user": "Frequency is an estimate; worded as 'about'."
+}

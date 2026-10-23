@@ -1,0 +1,14 @@
+# Reel Studio worker – macOS (Apple silicon), Python 3.11. Versions match the tested cloud build.
+torch==2.6.0
+torchaudio==2.6.0
+chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox@5de7a54aa4e5e2baadb0182dde554908b48b85c2
+speechmos @ git+https://github.com/tarepan/SpeechMOS@ed25eacbfa42b99156c36ebec67a733b5dbb9b79
+faster-whisper==1.2.1
+librosa==0.11.0
+soundfile==0.14.0
+numpy==1.26.4
+setuptools<81
+skia-python==144.0.post2
+opencv-python-headless==4.11.0.86
+pillow==12.3.0
+httpx==0.28.1

@@ -1,0 +1,6 @@
+{"picks": [
+ {"shot_id": "S1", "candidate": "S1-0", "alternates": ["S1-1"], "focus_x": 0.5, "in_point": 0, "reason": "bolt"},
+ {"shot_id": "S2", "candidate": "S2-0", "alternates": ["S2-1"], "focus_x": 0.5, "in_point": 0, "reason": "jet in rain"},
+ {"shot_id": "S3", "candidate": "S3-0", "alternates": ["S3-1"], "focus_x": 0.5, "in_point": 0, "reason": "wing"},
+ {"shot_id": "S4", "candidate": "S4-0", "alternates": ["S4-1"], "focus_x": 0.5, "in_point": 0, "reason": "storm wing"},
+ {"shot_id": "S5", "candidate": "S5-0", "alternates": ["S5-1"], "focus_x": 0.5, "in_point": 0, "reason": "outro"}]}

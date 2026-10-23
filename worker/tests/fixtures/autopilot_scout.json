@@ -1,0 +1,130 @@
+{
+ "topics": [
+  {
+   "title": "Winter schedule se flight time kyun badalta hai",
+   "hook": "Sunday se aapki flight ka time badal sakta hai",
+   "angle": "a",
+   "why_viral": "w",
+   "key_facts": [
+    "f1",
+    "f2"
+   ],
+   "sources": [
+    {
+     "title": "s",
+     "url": "https://www.dgca.gov.in"
+    }
+   ],
+   "risk_note": "",
+   "est_seconds": 35,
+   "category": "news",
+   "trend_signal": "news this week",
+   "viral_score": 60
+  },
+  {
+   "title": "Pilot aur co-pilot alag khana kyun khaate hain",
+   "hook": "Pilot aur co-pilot kabhi same khana nahi khaate",
+   "angle": "a",
+   "why_viral": "w",
+   "key_facts": [
+    "f1",
+    "f2"
+   ],
+   "sources": [
+    {
+     "title": "s",
+     "url": "https://www.dgca.gov.in"
+    }
+   ],
+   "risk_note": "",
+   "est_seconds": 35,
+   "category": "cabin",
+   "trend_signal": "news this week",
+   "viral_score": 55
+  },
+  {
+   "title": "CPL ke liye DGCA ke 6 exams",
+   "hook": "Pilot banna hai? Ye 6 exam pass karne padenge",
+   "angle": "a",
+   "why_viral": "w",
+   "key_facts": [
+    "f1",
+    "f2"
+   ],
+   "sources": [
+    {
+     "title": "s",
+     "url": "https://www.dgca.gov.in"
+    }
+   ],
+   "risk_note": "",
+   "est_seconds": 35,
+   "category": "career",
+   "trend_signal": "news this week",
+   "viral_score": 50
+  },
+  {
+   "title": "Plane par bijli giri to kya hota hai",
+   "hook": "Plane par bijli giri aur kuch nahi hua",
+   "angle": "a",
+   "why_viral": "w",
+   "key_facts": [
+    "f1",
+    "f2"
+   ],
+   "sources": [
+    {
+     "title": "s",
+     "url": "https://www.dgca.gov.in"
+    }
+   ],
+   "risk_note": "",
+   "est_seconds": 35,
+   "category": "myth",
+   "trend_signal": "news this week",
+   "viral_score": 45
+  },
+  {
+   "title": "Squawk 7700 ka matlab",
+   "hook": "Ye 4 numbers dabate hi ATC alert",
+   "angle": "a",
+   "why_viral": "w",
+   "key_facts": [
+    "f1",
+    "f2"
+   ],
+   "sources": [
+    {
+     "title": "s",
+     "url": "https://www.dgca.gov.in"
+    }
+   ],
+   "risk_note": "",
+   "est_seconds": 35,
+   "category": "emergency",
+   "trend_signal": "news this week",
+   "viral_score": 40
+  },
+  {
+   "title": "Airplane mode na lagaya to kya hoga",
+   "hook": "Phone airplane mode pe nahi kiya to?",
+   "angle": "a",
+   "why_viral": "w",
+   "key_facts": [
+    "f1",
+    "f2"
+   ],
+   "sources": [
+    {
+     "title": "s",
+     "url": "https://www.dgca.gov.in"
+    }
+   ],
+   "risk_note": "",
+   "est_seconds": 35,
+   "category": "myth",
+   "trend_signal": "news this week",
+   "viral_score": 35
+  }
+ ]
+}

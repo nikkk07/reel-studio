@@ -1,0 +1,33 @@
+{
+ "title": "Plane par bijli giri… aur kuch nahi hua",
+ "voice": "female",
+ "mood": "dramatic",
+ "groups": [
+  {"id": "G1", "gap_after": 0.45, "phrases": [
+   {"say": "उड़ते हुए plane पर बिजली गिरती है…", "caption": "Udte *plane* par bijli girti hai…"},
+   {"say": "और फिर भी कुछ नहीं होता।", "caption": "aur phir bhi *kuch nahi* hota"}]},
+  {"id": "G2", "gap_after": 0.5, "phrases": [
+   {"say": "हर commercial plane पर, साल में करीब एक बार बिजली गिरती है।", "caption": "Har plane par *saal mein ~1 baar*"},
+   {"say": "बिजली बाहरी metal skin पर बहती है, और tail से बाहर निकल जाती है।", "caption": "Bijli *metal skin* par behti hai"}]},
+  {"id": "G3", "gap_after": 0.4, "phrases": [
+   {"say": "ऐसी ही aviation stories के लिए,", "caption": "Aisi hi *aviation stories* ke liye"},
+   {"say": "follow करें We One Aviation।", "caption": "follow karein *We One Aviation*"}]}
+ ],
+ "shots": [
+  {"id": "S1", "query": "lightning storm night", "at_group": "G1", "at_phrase": 0, "note": "hook: bolt in dark sky"},
+  {"id": "S2", "query": "airplane flying rain", "at_group": "G1", "at_phrase": 1, "note": "calm jet"},
+  {"id": "S3", "query": "airliner wing clouds", "at_group": "G2", "at_phrase": 0, "note": "wing in clouds"},
+  {"id": "S4", "query": "airplane wing storm", "at_group": "G2", "at_phrase": 1, "note": "skin / tail"},
+  {"id": "S5", "query": "jet front view", "at_group": "G3", "at_phrase": 0, "note": "outro"}
+ ],
+ "graphics": [
+  {"type": "flash", "at_group": "G1", "at_phrase": 0, "params": {"bolt": true}},
+  {"type": "chip", "at_group": "G1", "at_phrase": 1, "params": {"text": "NOTHING HAPPENS", "color": "cyan"}},
+  {"type": "counter", "at_group": "G2", "at_phrase": 0, "params": {"to": 1, "suffix": "x / YEAR", "label": "every airliner, approx."}},
+  {"type": "plane_path", "at_group": "G2", "at_phrase": 1, "params": {"entry_label": "NOSE", "exit_label": "TAIL"}}
+ ],
+ "claims": [
+  {"claim": "Each commercial aircraft is struck about once a year", "value_used": "~1/year", "source_title": "SKYbrary – Lightning", "source_url": "https://skybrary.aero/articles/lightning", "status": "estimate"},
+  {"claim": "Current flows along the conductive skin and exits at an extremity", "value_used": "skin / tail", "source_title": "SKYbrary – Lightning", "source_url": "https://skybrary.aero/articles/lightning", "status": "verified"}
+ ]
+}
