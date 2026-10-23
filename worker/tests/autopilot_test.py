@@ -20,6 +20,7 @@ class DB:
             k, v = part.split("=", 1); op, val = v.split(".", 1)
             if k.startswith("input->>"): got = str((r.get("input") or {}).get(k[8:]))
             elif k == "created_at": continue
+            elif k == "brand": got = str(r.get("brand") or "weone")      # the real table defaults every job to We One Aviation
             else: got = str(r.get(k))
             if op == "eq" and got != val: return False
         return True

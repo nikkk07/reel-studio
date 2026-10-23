@@ -48,6 +48,7 @@ function s(tag, attrs = {}, ...kids) {
   return el;
 }
 const ICON = {
+  home: "M4 11.5 12 4l8 7.5M6.5 9.5V20h11V9.5M10 20v-5h4v5", ext: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
   plane: "M21 11.2 13.6 10 9.8 3H8.2l1.6 7.1-4.7.4-1.7-2.3H2.2l1 3.8-1 3.8h1.2l1.7-2.3 4.7.4L8.2 21h1.6l3.8-7 7.4-1.2c.6-.1 1-.4 1-.8s-.4-.7-1-.8Z",
   create: "M12 4v16M4 12h16", route: "M5 18c3-9 11-3 14-12M5 18a2 2 0 1 0 0 .1M19 6a2 2 0 1 0 0 .1",
   library: "M4 4h6v7H4zM14 4h6v4h-6zM14 12h6v8h-6zM4 15h6v5H4z", check: "M5 12.5l4.5 4.5L19 7.5", x: "M6 6l12 12M18 6 6 18",
@@ -82,11 +83,24 @@ function clearTimers() { S.timers.forEach(clearInterval); S.timers = []; }
 
 // ---------------------------------------------------------------- data
 async function rpc(fn, args) { const { data, error } = await sb.rpc(fn, args); if (error) throw error; return data; }
-const createJob = (kind, input, parent = null) => rpc("create_job", { p_kind: kind, p_input: input, p_parent: parent });
+const createJob = (kind, input, parent = null) => rpc("create_job", { p_kind: kind, p_input: { ...input, brand: S.brand }, p_parent: parent });
+// ---------------------------------------------------------------- accounts (brands): same studio, each account keeps its own reels
+const BRANDS_FALLBACK = [{ id: "weone", name: "We One Aviation", tagline: "DGCA ground classes, Dwarka · Delhi", website: "https://weoneaviation.in", logo: "brands/weone.png", status: "live", instagram: "we_one_aviation" }];
+try { S.brand = localStorage.getItem("rs_brand") || "weone"; } catch { S.brand = "weone"; }
+const brandOf = (id = S.brand) => (S.brands || BRANDS_FALLBACK).find((b) => b.id === id) || BRANDS_FALLBACK[0];
+const mine = (j) => (j.brand || "weone") === S.brand;
+const isLive = (id = S.brand) => brandOf(id).status === "live";
+function setBrand(id) { S.brand = id; S.lastSuggest = null; S.picked = null; S.concept = null; try { localStorage.setItem("rs_brand", id); } catch { /* */ } }
+async function loadBrands() {
+  const { data, error } = await sb.from("brands").select("*").order("sort");
+  if (!error && data?.length) { S.brands = data; if (!data.some((b) => b.id === S.brand)) setBrand("weone"); }
+  return S.brands;
+}
+const brandLogo = (b, size = 40) => h("span", { cls: "blogo", style: `width:${size}px;height:${size}px` }, h("img", { src: b.logo || "icons/icon-192.png", alt: "", loading: "lazy" }));
 async function getJob(id) { const { data, error } = await sb.from("jobs").select("*").eq("id", id).single(); if (error) throw error; return data; }
 async function events(id, n = 10) { const { data } = await sb.from("job_events").select("id,ts,level,message").eq("job_id", id).order("id", { ascending: false }).limit(n); return data || []; }
 async function loadWorker() { const { data } = await sb.from("workers").select("*").order("last_seen", { ascending: false }).limit(1); S.worker = (data || [])[0] || null; return S.worker; }
-const COLS = "id,kind,status,stage,progress,input,output,error,not_before,created_at,updated_at,attempts,parent_id,lease_owner,lease_expires_at";
+const COLS = "id,brand,kind,status,stage,progress,input,output,error,not_before,created_at,updated_at,attempts,parent_id,lease_owner,lease_expires_at";
 const normTitle = (j) => String(j.input?.concept?.title || j.output?.title || "").trim().toLowerCase();
 async function loadReels() {
   // live reels and recent stopped ones are fetched separately, so old history can never push a running reel off the list;
@@ -181,10 +195,10 @@ function updateTitle() {
 
 // ---------------------------------------------------------------- shell
 function shell(content, { nav = true } = {}) {
-  const reviewN = S.reels.filter((j) => j.status === "review").length;
-  const activeN = S.reels.filter((j) => ACTIVE.includes(j.status)).length;
+  const reviewN = S.reels.filter((j) => j.status === "review" && mine(j)).length;
+  const activeN = S.reels.filter((j) => ACTIVE.includes(j.status) && mine(j)).length;
   const badgeN = reviewN || activeN;
-  const items = [["create", "Create", "create"], ["production", "Production", "route"], ["library", "Library", "library"]];
+  const items = [["home", "Dashboard", "home"], ["create", "Create", "create"], ["production", "Production", "route"], ["library", "Library", "library"]];
   const navBtn = ([k, label, ic], mobile) => h("button", { "aria-current": S.route === k ? "page" : null, onclick: () => go(k) },
     mobile ? icon(ic, 22) : null, label, k === "production" && badgeN ? h("span", { cls: "badge", "aria-label": `${badgeN} reels` }, badgeN) : null);
   const lamps = S.session ? h("button", { cls: "status", onclick: () => go("check"), title: "Run the pre-flight check" },
@@ -192,8 +206,10 @@ function shell(content, { nav = true } = {}) {
     h("span", {}, h("i", { cls: "lamp " + (!macAlive() ? "" : S.worker?.claude_ok ? "ok" : "bad") }), h("span", { cls: "label" }, "Claude"))) : null;
   const initials = (S.session?.user?.email || "?").slice(0, 2).toUpperCase();
   const top = h("header", { cls: "top" }, h("div", { cls: "top-in" },
-    h("a", { cls: "brand", href: "#/create", "aria-label": "Reel Studio home" }, h("img", { src: "icons/icon-192.png", alt: "" }),
-      h("div", {}, h("b", {}, "Reel Studio"), h("span", {}, "We One Aviation"))),
+    S.route === "home" || !S.session
+      ? h("a", { cls: "brand", href: "#/home", "aria-label": "Reel Studio dashboard" }, h("img", { src: "icons/icon-192.png", alt: "" }), h("div", {}, h("b", {}, "Reel Studio"), h("span", {}, "All accounts")))
+      : h("button", { cls: "brand acct", onclick: () => go("home"), title: "Switch account", "aria-label": `${brandOf().name}. Switch account` }, brandLogo(brandOf(), 36),
+          h("div", {}, h("b", {}, brandOf().name), h("span", {}, "Switch account ▾"))),
     nav && S.session ? h("nav", { cls: "nav", "aria-label": "Main" }, items.map((it) => navBtn(it, false))) : null,
     h("div", { cls: "spacer" }), lamps,
     S.session ? h("button", { cls: "who", "aria-label": "Account menu", onclick: toggleMenu }, initials) : null));
@@ -222,12 +238,12 @@ window.addEventListener("hashchange", () => render());
 function render() {
   clearTimers(); document.querySelector(".menu")?.remove();
   if (!S.session) return viewLogin();
-  const r = (location.hash.replace(/^#\/?/, "") || "create").split("/")[0];
+  const r = (location.hash.replace(/^#\/?/, "") || "home").split("/")[0];
   // the pre-flight page shows once per session; later it only returns if the Mac or Claude actually reports a problem
   const fresh = Date.now() - S.checkedAt < 30 * 60e3 || (S.checkedAt > 0 && macAlive() && S.worker?.claude_ok !== false);
-  if (r === "check" || !fresh) return viewPreflight(r === "check" ? "create" : (r || "create"));
-  S.route = ["create", "production", "library"].includes(r) ? r : "create";
-  ({ create: viewCreate, production: viewProduction, library: viewLibrary })[S.route]();
+  if (r === "check" || !fresh) return viewPreflight(r === "check" ? "home" : (r || "home"));
+  S.route = ["home", "create", "production", "library"].includes(r) ? r : "home";
+  ({ home: viewDashboard, create: viewCreate, production: viewProduction, library: viewLibrary })[S.route]();
 }
 
 // ---------------------------------------------------------------- login
@@ -299,7 +315,7 @@ function viewPreflight(next) {
       if (ok) { S.checkedAt = Date.now(); try { localStorage.setItem("rs_checked", String(S.checkedAt)); } catch { /* */ }
         btn.textContent = "All systems ready"; await sleep(900); location.hash = `#/${next}`; render(); return; }
       btn.disabled = false; btn.textContent = "Retry";
-      extra.replaceChildren(h("button", { cls: "btn quiet block", style: "margin-top:8px", onclick: () => { S.checkedAt = Date.now(); go("production"); } }, "Continue to Production and Library"));
+      extra.replaceChildren(h("button", { cls: "btn quiet block", style: "margin-top:8px", onclick: () => { S.checkedAt = Date.now(); go("home"); } }, "Continue to the Dashboard"));
     } catch (e) { st.mac = ["bad", errText(e)]; paint(); btn.disabled = false; btn.textContent = "Retry"; }
   }
 }
@@ -343,6 +359,63 @@ async function stopRequest(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = "Stopping…"; }
   try { await rpc("stop_job", { p_job: id }); } catch (e) { toast(errText(e), { err: true }); if (btn) { btn.disabled = false; btn.textContent = "Stop"; } }
 }
+// ---------------------------------------------------------------- Dashboard: every account at a glance (first page after sign-in)
+async function viewDashboard() {
+  const grid = h("div", { cls: "accts" }, [1, 2, 3, 4].map(() => h("div", { cls: "skeleton acct-skel" })));
+  const strip = h("div", { cls: "dash-strip" });
+  shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Dashboard"), h("p", {}, "Every account in one studio. Same process, each with its own reels, posting and autopilot."))), strip, grid));
+  const paint = async () => {
+    if (!grid.isConnected) return;
+    const since = new Date(Date.now() - 30 * 86400e3).toISOString(); const week = Date.now() - 7 * 86400e3;
+    const [, { data: rows }, , { data: ap }] = await Promise.all([loadBrands(),
+      sb.from("jobs").select("id,brand,status,created_at,updated_at,ig:output->ig->>state,posted:output->ig->>posted_at").eq("kind", "reel").gte("created_at", since).limit(500),
+      loadSettings().catch(() => {}),
+      sb.from("jobs").select("status,brand,output->autopilot").eq("kind", "suggest").eq("input->>autopilot", "true").order("created_at", { ascending: false }).limit(1)]);
+    const all = rows || []; const st = (b) => all.filter((j) => (j.brand || "weone") === b);
+    const postedWeek = (list) => list.filter((j) => j.ig === "posted" && j.posted && Date.parse(j.posted) > week).length;
+    const apSet = S.settings?.autopilot || {};
+    strip.replaceChildren(...[
+      h("span", { cls: "pill" }, h("i", { cls: "lamp " + (macAlive() ? "ok" : "bad") }), macAlive() ? "Studio Mac online" : "Studio Mac offline"),
+      macAlive() ? h("span", { cls: "pill" }, h("i", { cls: "lamp " + (S.worker?.claude_ok ? "ok" : "bad") }), S.worker?.claude_ok ? "Claude ready" : "Claude not ready") : null,
+      h("span", { cls: "pill" }, `${postedWeek(all)} posted this week`),
+      apSet.on ? h("span", { cls: "pill" }, `Autopilot daily ${slotLabel(apSet.time || "13:30")}`) : null].filter(Boolean));
+    const plat = (b) => {
+      const ig = b.id === "weone" ? (S.settings?.instagram_status?.state || "not_connected") : "not_connected";
+      const fb = b.id === "weone" ? (S.settings?.facebook_status?.state || "not_connected") : "not_connected";
+      const li = b.id === "weone" ? (S.settings?.linkedin_status?.state || "not_connected") : "not_connected";
+      const dot = (k, state, label) => h("span", { cls: `mini ${k} ${state === "connected" ? "ok" : state === "not_connected" ? "no" : "warn"}`, title: `${label}: ${state.replace("_", " ")}`, role: "img", "aria-label": `${label}: ${state.replace("_", " ")}` },
+        s("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2.2, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" }, PLAT_ICON[k].map(([tag, at]) => s(tag, at))));
+      return h("span", { cls: "minis" }, dot("ig", ig, "Instagram"), dot("fb", fb, "Facebook"), dot("li", li, "LinkedIn"));
+    };
+    grid.replaceChildren(...(S.brands || BRANDS_FALLBACK).map((b) => {
+      const list = st(b.id); const live = b.status === "live";
+      const nums = [["In production", list.filter((j) => ACTIVE.includes(j.status)).length], ["To review", list.filter((j) => j.status === "review").length], ["Posted · 7 days", postedWeek(list)]];
+      const open = () => { setBrand(b.id); go(live && list.some((j) => j.status === "review" || ACTIVE.includes(j.status)) ? "production" : "create"); };
+      return h("article", { cls: "acct" + (live ? "" : " setup"), style: `--accent:${b.color || "#0A2342"}` },
+        h("button", { cls: "acct-main", onclick: open, "aria-label": `Open ${b.name}` },
+          brandLogo(b, 64),
+          h("div", { cls: "acct-id" }, h("h3", {}, b.name), h("p", {}, b.tagline || ""),
+            h("span", { cls: "acct-state " + (live ? "live" : "setup") }, live ? "Live" : "Setting up"))),
+        live ? h("div", { cls: "acct-nums" }, nums.map(([k, v]) => h("div", {}, h("b", { cls: "num" }, v), h("span", {}, k))))
+             : h("p", { cls: "acct-next small" }, "Next: content plan, voice and watermark, then its Instagram."),
+        h("div", { cls: "acct-foot" }, plat(b),
+          safeUrl(b.website) ? h("a", { cls: "acct-web", href: b.website, target: "_blank", rel: "noopener noreferrer" }, host(b.website), icon("ext", 13)) : null,
+          h("button", { cls: "btn " + (live ? "primary" : "quiet"), onclick: open }, "Open")));
+    }));
+  };
+  await paint().catch(() => {});
+  S.timers.push(setInterval(() => paint().catch(() => {}), 15000));
+}
+function setupCard() {
+  const b = brandOf();
+  const steps = [["Content plan", "Topics, audience and what a viral reel looks like for " + b.name + "."], ["Voice & style", "Narrator voice, Hinglish mix, captions and the call to action."],
+    ["Watermark", "Logo placement on every reel."], ["Instagram", b.instagram ? `Connect @${b.instagram} for automatic posting.` : "Connect its Instagram account for automatic posting."]];
+  return h("section", { cls: "panel setupcard" }, h("div", { style: "display:flex;gap:14px;align-items:center" }, brandLogo(b, 56),
+      h("div", {}, h("h3", {}, `${b.name} is being set up`), h("p", { cls: "small muted" }, "Same studio and process; reels open here once these are decided."))),
+    h("ol", { cls: "steps", style: "margin-top:14px" }, steps.map(([t, x]) => h("li", {}, h("b", {}, t), h("span", {}, x)))),
+    h("button", { cls: "btn quiet", style: "margin-top:6px", onclick: () => go("home") }, "Back to Dashboard"));
+}
+
 // ---------------------------------------------------------------- Autopilot: one viral-ready reel a day, no taps
 function nextRun(ap) {
   const [hh, mm] = String(ap.time || "13:30").split(":").map(Number);
@@ -396,8 +469,9 @@ function viewCreate() {
   const left = h("div"); const plan = h("aside", { cls: "panel plan", "aria-label": "Flight plan" });
   shell(h("div", { cls: "with-plan" },
     h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Create a reel"), h("p", {}, "Choose a topic. You'll see when the reel will be ready before anything starts.")), seg),
-    autopilotPanel(),
+    S.brand === "weone" ? autopilotPanel() : null,
     h("div", { cls: "create" }, left, plan)));
+  if (!isLive()) { $app.querySelector(".create").replaceChildren(setupCard()); $app.querySelector(".page-head .seg")?.remove(); return; }
   const paintPlan = () => {
     const t = S.picked; const e = etaNew(); const w = S.worker; const capHit = w?.info && w.info.reels_today >= w.info.daily_cap;
     const go_ = h("button", { cls: "btn go block", disabled: !t, onclick: async (ev) => {
@@ -474,7 +548,7 @@ function viewCreate() {
     }
     (async () => {
       if (S.pending.suggest) return follow(S.pending.suggest);
-      if (!S.lastSuggest) { const { data } = await sb.from("jobs").select("*").eq("kind", "suggest").eq("status", "done").is("input->autopilot", null).order("created_at", { ascending: false }).limit(1); S.lastSuggest = data?.[0]; }
+      if (!S.lastSuggest) { const { data } = await sb.from("jobs").select("*").eq("kind", "suggest").eq("status", "done").eq("brand", S.brand).is("input->autopilot", null).order("created_at", { ascending: false }).limit(1); S.lastSuggest = data?.[0]; }
       if (!list.isConnected) return;
       if (S.lastSuggest && Date.now() - new Date(S.lastSuggest.updated_at) < 86400e3) show(S.lastSuggest, S.lastSuggest.updated_at);
       else list.replaceChildren(h("div", { cls: "panel empty" }, routeArt("chart"), h("h3", {}, "No suggestions yet"), h("p", {}, "Generate five ideas; it usually takes one to three minutes.")));
@@ -715,7 +789,7 @@ async function refreshProduction() {
   prodBusy = true;
   try {
     const rank = { review: 0, running: 1, waiting_quota: 2, queued: 3, failed: 4, cancelled: 5 };
-    const list = S.reels.slice().sort((a, b) => rank[a.status] - rank[b.status] || new Date(a.created_at) - new Date(b.created_at));
+    const list = S.reels.filter(mine).sort((a, b) => rank[a.status] - rank[b.status] || new Date(a.created_at) - new Date(b.created_at));
     if (!list.length) {
       stripCache.clear();
       if (!prodBox.querySelector(".empty")) prodBox.replaceChildren(h("div", { cls: "panel empty" }, routeArt("chart"), h("h3", {}, "No reels in the air"), h("p", {}, "Start one from Create; it shows up here with a live route and ETA."), h("button", { cls: "btn primary", onclick: () => go("create") }, "Create a reel")));
@@ -986,11 +1060,11 @@ async function viewLibrary() {
   const thumbs = {}; let sig = "";
   const refresh = async (force = true) => {
     if (!grid.isConnected) return;
-    const [{ data }] = await Promise.all([sb.from("jobs").select("id,input,output,updated_at").eq("kind", "reel").eq("status", "done").order("updated_at", { ascending: false }).limit(60), loadSettings().catch(() => {})]);
+    const [{ data }] = await Promise.all([sb.from("jobs").select("id,input,output,updated_at").eq("kind", "reel").eq("status", "done").eq("brand", S.brand).order("updated_at", { ascending: false }).limit(60), loadSettings().catch(() => {})]);
     const now = JSON.stringify([(data || []).map((j) => [j.id, j.output?.ig, j.output?.li, j.output?.fb]), S.settings, S.editSlots]);
     if (!force && now === sig) return; sig = now;
     if (panel.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;    // never wipe a half-edited time
-    panel.replaceChildren(platformBar(() => refresh(true)));
+    panel.replaceChildren(isLive() ? platformBar(() => refresh(true)) : setupCard());
     if (!data?.length) { grid.replaceChildren(h("div", { cls: "panel empty", style: "grid-column:1/-1" }, h("h3", {}, "Nothing here yet"), h("p", {}, "Approved reels appear here, ready to download and post."), h("button", { cls: "btn primary", onclick: () => go("create") }, "Create a reel"))); return; }
     const cards = await Promise.all(data.map(async (j) => {
       const o = j.output || {}; if (!(j.id in thumbs)) thumbs[j.id] = o.pruned ? null : await signed(o.thumb);
@@ -1059,7 +1133,7 @@ sb.auth.onAuthStateChange(async (evt, session) => {
   if (!booted) return;
   if (!session) { S.checkedAt = 0; try { sessionStorage.removeItem("rs_checked"); localStorage.removeItem("rs_checked"); } catch { /* */ } render(); return; }
   if (evt === "TOKEN_REFRESHED") S.authFails = 0;
-  if (!was) { await Promise.all([loadEstimates(), poll(), findPending().catch(() => {}), loadSettings().catch(() => {})]); render(); }
+  if (!was) { await Promise.all([loadEstimates(), poll(), findPending().catch(() => {}), loadSettings().catch(() => {}), loadBrands().catch(() => {})]); if (location.hash !== "#/home") { history.replaceState(null, "", "#/home"); } render(); }     // a fresh sign-in always lands on the Dashboard
 });
 const { data: { session } } = await sb.auth.getSession();
 S.session = session;
@@ -1072,7 +1146,7 @@ async function findPending() {     // a reload or a second device re-attaches to
   }
   savePending();
 }
-if (session) { await loadEstimates(); await Promise.all([poll(), findPending().catch(() => {}), loadSettings().catch(() => {})]); }
+if (session) { await loadEstimates(); await Promise.all([poll(), findPending().catch(() => {}), loadSettings().catch(() => {}), loadBrands().catch(() => {})]); }
 booted = true; render();
 if (session) finishLinkedIn().catch((e) => toast(errText(e), { err: true }));
 setInterval(poll, 6000);

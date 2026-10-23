@@ -10,7 +10,7 @@ with sync_playwright() as pw:
     for vw in ({"width": 1280, "height": 900}, {"width": 390, "height": 860}):
         cx = b.new_context(viewport=vw, service_workers="block"); cx.add_init_script("sessionStorage.setItem('rs_checked', String(Date.now()))")
         pg = cx.new_page(); pg.on("pageerror", lambda e: errors.append(str(e)))
-        pg.goto(URL); pg.fill("input[type=email]", "weoneaviation8@gmail.com"); pg.fill("input[type=password]", "secret"); pg.click("button[type=submit]")
+        pg.goto(URL); pg.fill("input[type=email]", "weoneaviation8@gmail.com"); pg.fill("input[type=password]", "secret"); pg.click("button[type=submit]"); pg.wait_for_selector(".acct h3", timeout=60000); pg.goto(URL + "#/create")
         try: pg.click("button:has-text('Connect to Server')", timeout=5000)
         except Exception: pass
         pg.wait_for_selector("text=Create a reel", timeout=60000)

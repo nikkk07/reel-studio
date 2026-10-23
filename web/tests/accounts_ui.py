@@ -1,0 +1,36 @@
+"""Dashboard + accounts: first page after sign-in, 4 real logos, account switching, no data leaking between accounts."""
+import subprocess, sys
+from playwright.sync_api import sync_playwright
+def sql(q): return subprocess.run(["psql","-h","/tmp","-p","5433","-U","postgres","-d","rs_it","-tAc",q],capture_output=True,text=True).stdout.strip()
+sql("insert into jobs(id,kind,status,input,output) values ('b2222222-0000-0000-0000-000000000001','reel','running','{\"concept\":{\"title\":\"WeOne live reel\"}}','{}')")
+sql("""update settings set value='{"state":"connected","username":"we_one_aviation","user_id":"1","checked_at":"2026-10-23T05:00:00Z"}' where key='instagram_status'; update settings set value='{"on":true,"time":"13:30","tz":"Asia/Kolkata"}' where key='autopilot'""")
+errs=[]; R=[]
+def ok(c,n): R.append((bool(c), n)); print(("PASS " if c else "FAIL ")+n, flush=True)
+with sync_playwright() as pw:
+    b = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
+    for vw, nm in (({"width":1280,"height":900},"d"), ({"width":390,"height":860},"m")):
+        cx = b.new_context(viewport=vw, service_workers="block"); cx.add_init_script("sessionStorage.setItem('rs_checked', String(Date.now())); localStorage.setItem('rs_checked', String(Date.now()))")
+        pg = cx.new_page(); pg.on("pageerror", lambda e: errs.append(str(e)))
+        pg.goto("http://127.0.0.1:8765/index.html#/library"); pg.fill("input[type=email]", "weoneaviation8@gmail.com"); pg.fill("input[type=password]", "secret"); pg.click("button[type=submit]")
+        pg.wait_for_selector(".acct h3", timeout=60000); pg.wait_for_timeout(1500)
+        ok("#/home" in pg.url, f"{nm}: fresh sign-in lands on the Dashboard (even from a Library link)")
+        names = pg.locator(".acct h3").all_inner_texts(); ok(names == ["We One Aviation", "Book My Charter", "Flying Star Aviator", "Legal Group"], f"{nm}: 4 accounts in order {names}")
+        ok(pg.evaluate("[...document.querySelectorAll('.acct .blogo img')].every(i => i.complete && i.naturalWidth > 50)"), f"{nm}: all 4 real logos load")
+        pg.screenshot(path=f"/tmp/rs_stack/dash_{nm}.png", full_page=True)
+        pg.locator(".acct").nth(1).locator("button:has-text('Open')").click(); pg.wait_for_timeout(1500)
+        t = pg.inner_text("main"); ok("Book My Charter is being set up" in t and "Autopilot" not in t and "Generate suggestions" not in t, f"{nm}: Book My Charter -> setup card, no WeOne autopilot/ideas")
+        ok("Book My Charter" in pg.inner_text("header"), f"{nm}: header shows the current account")
+        pg.screenshot(path=f"/tmp/rs_stack/bmc_{nm}.png")
+        pg.goto("http://127.0.0.1:8765/index.html#/production"); pg.wait_for_timeout(2500)
+        ok("WeOne live reel" not in pg.inner_text("main"), f"{nm}: WeOne's reels don't show inside Book My Charter")
+        pg.goto("http://127.0.0.1:8765/index.html#/library"); pg.wait_for_timeout(2000)
+        ok("being set up" in pg.inner_text("main") and pg.locator(".plat").count() == 0, f"{nm}: BMC library: no WeOne connections shown")
+        pg.locator("header .brand").click(); pg.wait_for_timeout(1200); ok("#/home" in pg.url, f"{nm}: tapping the account in the header opens the Dashboard")
+        pg.locator(".acct").nth(0).locator("button:has-text('Open')").click(); pg.wait_for_timeout(2000)
+        ok("WeOne live reel" in pg.inner_text("main") or "Autopilot" in pg.inner_text("main"), f"{nm}: We One Aviation opens with its reels/autopilot")
+        pg.reload(); pg.wait_for_timeout(2500); ok("We One Aviation" in pg.inner_text("header") and "#/home" not in pg.url, f"{nm}: refresh keeps the account and page")
+        ok(pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), f"{nm}: no sideways scroll")
+    b.close()
+ok(not errs, f"no page errors {errs[:2]}")
+sql("delete from jobs where id::text like 'b2222222%'")
+bad = [n for k, n in R if not k]; print(f"{len(R) - len(bad)}/{len(R)} account UI checks passed" + (" | FAILED: " + "; ".join(bad) if bad else "")); sys.exit(1 if bad else 0)

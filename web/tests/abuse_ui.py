@@ -21,7 +21,7 @@ with sync_playwright() as pw:
     for vw in ({"width": 1280, "height": 900}, {"width": 360, "height": 800}):
         cx = b.new_context(viewport=vw, service_workers="block"); cx.add_init_script("sessionStorage.setItem('rs_checked', String(Date.now()))")
         pg = cx.new_page(); pg.on("pageerror", lambda e: errors.append(str(e))); pg.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
-        pg.goto(URL); pg.fill("input[type=email]", "weoneaviation8@gmail.com"); pg.fill("input[type=password]", "secret"); pg.click("button[type=submit]")
+        pg.goto(URL); pg.fill("input[type=email]", "weoneaviation8@gmail.com"); pg.fill("input[type=password]", "secret"); pg.click("button[type=submit]"); pg.wait_for_selector(".acct h3", timeout=60000); pg.goto(URL + "#/create")
         pg.wait_for_selector(".ap h3", timeout=60000); pg.wait_for_timeout(2500)
         for sel in [".topic"]: 
             try: pg.click(sel, timeout=3000)

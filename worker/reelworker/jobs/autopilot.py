@@ -38,9 +38,9 @@ def engagement(s):
     return round(100 * (4 * (s.get("shares") or 0) + 3 * (s.get("saved") or 0) + 2 * (s.get("comments") or 0) + (s.get("likes") or 0)) / reach, 2)
 
 
-def history(db, days=60):
+def history(db, days=60, brand="weone"):
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = db.select("jobs", f"select=id,status,input,output,created_at&kind=eq.reel&created_at=gte.{since}&order=created_at.desc&limit=120")
+    rows = db.select("jobs", f"select=id,status,input,output,created_at&kind=eq.reel&brand=eq.{brand}&created_at=gte.{since}&order=created_at.desc&limit=120")
     out = []
     for r in rows:
         o, i = r.get("output") or {}, r.get("input") or {}
@@ -112,7 +112,7 @@ def run(ctx):
         return ctx.finish("done", autopilot={**(ctx.job.get("output") or {}).get("autopilot", {}), "reel_id": made[0]["id"]})
 
     ctx.progress("research", 0.05); ctx.log("Autopilot: learning from our posted reels")
-    hist = history(ctx.db)
+    hist = history(ctx.db, brand=ctx.job.get("brand") or "weone")
     perf = performance_text(hist)
     recent = "\n".join(f"- {h['created']} [{h['category'] or '?'}] {h['title']}" for h in hist[:40]) or "none"
     cats = [h["category"] for h in hist if h["autopilot"] and h["category"]][:7]
