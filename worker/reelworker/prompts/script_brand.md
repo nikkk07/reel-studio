@@ -21,7 +21,8 @@ Use WebSearch/WebFetch. Every number or factual statement in the narration or gr
 5–12 `shots`, each starting at a phrase (`at_group`, `at_phrase`). `query` = a short English stock-footage search (Pexels/Pixabay), concrete and cinematic, in the account's visual style (see footage ideas above). The first shot must be the most striking image for the hook. Change shot every 2–4 s. Stock footage is representative; never claim it is a real aircraft of the business.
 
 ## 4. Graphics (rendered from this library only)
-Each graphic: `type`, `at_group`/`at_phrase` (starts with that phrase), optional `until_group`/`until_phrase`, `params`:
+Each graphic: `type`, `at_group`/`at_phrase` (starts with that phrase: always the exact phrase whose words it shows, never earlier, so it never gives the line away), optional `until_group`/`until_phrase`, `params`:
+Text on graphics is short and complete: whole words only, list items ≤ 34 characters, compare titles ≤ 20 characters.
 * `chip` {text, color: amber|cyan|green|white, y?: 300–1300, dot?: bool} – small label pill (amber renders as the account's gold).
 * `big_text` {text, sub?, color?, size?: 120–240, y?} – headline word(s), max 2 lines of ≤ 12 chars.
 * `counter` {to, from?, prefix?, suffix?, label?, color?} – animated number (e.g. 541 KM, 26%).

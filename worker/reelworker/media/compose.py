@@ -44,6 +44,14 @@ def draw_bolt(c, t, t0, x0, y0, x1, y1, seed, life=0.4):
         bx, by = pts[k]; q, _ = bolt_path(bx, by, bx + (90 if k % 2 else -110), by + 160, seed + k, 25)
         c.drawPath(q, skia.Paint(Color4f=col(WHITE, 0.7 * a), Style=skia.Paint.kStroke_Style, StrokeWidth=3, AntiAlias=True))
 
+def words(s, n):
+    """At most n characters, cut at a word boundary (never shows half a word)."""
+    s = " ".join(str(s).split())
+    if len(s) <= n: return s
+    cut = s[:n + 1].rsplit(" ", 1)[0]
+    return cut.rstrip(" ,;:-") if len(cut) >= n * 0.5 else s[:n]
+
+
 def fit_font(key, s, size, maxw):
     f = font(key, size)
     while tw(f, s) > maxw and size > 30:
@@ -54,7 +62,7 @@ def fit_font(key, s, size, maxw):
 # ------------------------------------------------------------------ components
 def g_chip(c, t, g):
     p = g["params"]; a = env_alpha(t, g)
-    chip(c, str(p.get("text", ""))[:42].upper(), W / 2, float(p.get("y", 470)), C(p.get("color"), AMBER), alpha=a,
+    chip(c, words(p.get("text", ""), 42).upper(), W / 2, float(p.get("y", 470)), C(p.get("color"), AMBER), alpha=a,
          dot=bool(p.get("dot", True)), t=t, size=int(p.get("size", 38)))
 
 def g_big_text(c, t, g):
@@ -65,7 +73,7 @@ def g_big_text(c, t, g):
         text(c, ln, W / 2, y + i * size * 0.82, f, colr if i == 0 else C(p.get("color2"), AMBER) if len(lines) > 1 else colr,
              alpha=a, glow=14, scale=0.82 + 0.18 * clamp(a))
     if p.get("sub"):
-        chip(c, str(p["sub"])[:44].upper(), W / 2, y + (len(lines) - 1) * size * 0.82 + 110, C(p.get("sub_color"), CYAN),
+        chip(c, words(p["sub"], 44).upper(), W / 2, y + (len(lines) - 1) * size * 0.82 + 110, C(p.get("sub_color"), CYAN),
              alpha=a * ease_out_back(prog(t, g["t0"] + 0.35, 0.35)), size=34)
 
 def g_counter(c, t, g):
@@ -75,7 +83,7 @@ def g_counter(c, t, g):
     s = f"{p.get('prefix', '')}{v:,.{dec}f}{p.get('suffix', '')}"
     text(c, s, W / 2, y, fit_font("black", s, 300, 980), C(p.get("color"), WHITE), alpha=a, glow=10)
     if p.get("label"):
-        chip(c, str(p["label"])[:44].upper(), W / 2, y + 100, C(p.get("label_color"), RED), alpha=a, dot=True, t=t, size=38)
+        chip(c, words(p["label"], 44).upper(), W / 2, y + 100, C(p.get("label_color"), RED), alpha=a, dot=True, t=t, size=38)
 
 def g_list_card(c, t, g):
     items = (g["params"].get("items") or [])[:4]; out = prog(t, g["t1"] - 0.3, 0.3)
@@ -88,7 +96,7 @@ def g_list_card(c, t, g):
         ok = it.get("ok"); colr = GREEN if ok is True else RED if ok is False else CYAN
         r = skia.Rect.MakeXYWH(120 + (1 - a) * 300, y - 58, 840, 116)
         glass(c, r, alpha=a, border=colr, border_a=0.75)
-        label = str(it.get("text", ""))[:30].upper()
+        label = words(it.get("text", ""), 44).upper()
         text(c, label, r.left() + 40, y + 20, fit_font("black", label, 60, 700 if ok is not None else 760), WHITE, alpha=a, align="l", shadow=False)
         if ok is True: check(c, r.right() - 70, y, 54, GREEN, a)
         elif ok is False: cross(c, r.right() - 70, y, 50, RED, a)
@@ -98,11 +106,11 @@ def g_quote_card(c, t, g):
     hgt = 170 + 78 * len(lines) + (60 if p.get("source") else 0); r = skia.Rect.MakeXYWH(90, 500, 900, hgt)
     glass(c, r, alpha=a, border=AMBER, border_a=0.8)
     if p.get("title"):
-        text(c, str(p["title"])[:46].upper(), W / 2, r.top() + 70, font("psb", 34), AMBER, alpha=a, shadow=False)
+        qt = words(p["title"], 60).upper(); text(c, qt, W / 2, r.top() + 70, fit_font("psb", qt, 34, 820), AMBER, alpha=a, shadow=False)
     for i, ln in enumerate(lines):
         text(c, ln, W / 2, r.top() + 160 + i * 78, fit_font("black", ln, 70, 820), WHITE, alpha=a, shadow=False)
     if p.get("source"):
-        text(c, "— " + str(p["source"])[:70], W / 2, r.bottom() - 30, font("pm", 26), (215, 220, 228), alpha=a, shadow=False)
+        text(c, "— " + words(p["source"], 70), W / 2, r.bottom() - 30, font("pm", 26), (215, 220, 228), alpha=a, shadow=False)
 
 def g_compare(c, t, g):
     p = g["params"]; out = prog(t, g["t1"] - 0.3, 0.3); focus = p.get("focus")
@@ -114,16 +122,16 @@ def g_compare(c, t, g):
         r = skia.Rect.MakeXYWH(x - 430, y - 125, 860, 250)
         glass(c, r, alpha=al * (1 if on else 0.65), border=colr, border_a=0.85 if on else 0.3)
         c.drawRoundRect(skia.Rect.MakeXYWH(r.left() + 28, r.top() + 30, 10, r.height() - 60), 5, 5, skia.Paint(Color4f=col(colr, al), AntiAlias=True))
-        title = str(side.get("title", ""))[:16].upper()
+        title = words(side.get("title", ""), 30).upper()          # fit_font shrinks it; never cut a word
         text(c, title, r.left() + 70, y + 12, fit_font("black", title, 116, 740), colr if on else WHITE, alpha=al, align="l", shadow=False)
-        text(c, str(side.get("sub", ""))[:46], r.left() + 72, y + 88, font("pm", 34), WHITE, alpha=al * (0.95 if on else 0.6), align="l", shadow=False)
+        sub = words(side.get("sub", ""), 60); text(c, sub, r.left() + 72, y + 88, fit_font("pm", sub, 34, 740), WHITE, alpha=al * (0.95 if on else 0.6), align="l", shadow=False)
 
 def g_timer(c, t, g):
     p = g["params"]; a = ease_out_back(prog(t, g["t0"], 0.4)) * (1 - prog(t, g["t1"] + 0.6, 0.4))
     total = float(p.get("seconds", 60)); rem = total * (1 - clamp((t - g["t0"]) / max(0.1, g["t1"] - g["t0"])))
     s = f"{int(rem) // 60}:{int(rem) % 60:02d}"; colr = RED if rem < total * 0.3 else AMBER
     r = skia.Rect.MakeXYWH(W - 330, 205, 260, 112); glass(c, r, rad=22, alpha=a, border=colr, border_a=0.85)
-    text(c, str(p.get("label", "TIME LEFT"))[:14].upper(), r.centerX(), r.top() + 36, font("psb", 24), (215, 220, 228), alpha=a, shadow=False)
+    text(c, words(p.get("label", "TIME LEFT"), 14).upper(), r.centerX(), r.top() + 36, font("psb", 24), (215, 220, 228), alpha=a, shadow=False)
     text(c, s, r.centerX(), r.top() + 96, font("black", 64), RED if rem < total * 0.3 else WHITE, alpha=a, shadow=False)
 
 def g_flash(c, t, g):

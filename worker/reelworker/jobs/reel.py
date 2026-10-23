@@ -275,7 +275,10 @@ def stage_footage(ctx, prog):
         footage.contact_sheets(shots, {k: v for k, v in cands.items() if v}, work, _font_file())
         desc = "\n".join(f"- {s['id']}: \"{s['query']}\" – {s.get('note', '')} – needs {need[s['id']]:.1f}s" for s in shots if cands[s["id"]])
         ctx.trace("footage", "pick", "Claude chooses clips", "run", flush=True)
-        picks = brain.ask("footage", brain.prompt("footage", shots=desc, niche=_brand(ctx).get("niche", "aviation")), schemas.FOOTAGE, ["Read"], work, timeout=900, on_event=_say(ctx))["picks"]
+        prof = _brand(ctx); vs = prof.get("visual_style") or {}
+        look = "" if brandmod.legacy(prof) else "\n".join(["This account's look and rules (follow them strictly; a clip that breaks one is never the pick):",
+            f"- Look: {vs.get('look', '')}", *[f"- {r}" for r in vs.get("footage_rules", [])], *[f"- Never: {r}" for r in vs.get("avoid", [])]])
+        picks = brain.ask("footage", brain.prompt("footage", shots=desc, niche=prof.get("niche", "aviation"), look=look), schemas.FOOTAGE, ["Read"], work, timeout=900, on_event=_say(ctx))["picks"]
         ctx.trace("footage", "pick", "Claude chooses clips", "done")
     prog(0.35)
     chosen, shot_files = {}, {}
