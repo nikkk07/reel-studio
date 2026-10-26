@@ -79,9 +79,11 @@ def g_big_text(c, t, g):
 def g_counter(c, t, g):
     p = g["params"]; a = env_alpha(t, g); y = float(p.get("y", 820))
     to = float(p.get("to", 0)); fr = float(p.get("from", 0)); dec = 0 if float(to).is_integer() else 1
-    v = fr + (to - fr) * ease_out_expo(prog(t, g["t0"] + 0.1, 0.9))
+    small = abs(to - fr) <= 12            # small numbers (5 YEARS, 3 STEPS) never show a wrong in-between value: they pop in final
+    v = to if small else fr + (to - fr) * ease_out_expo(prog(t, g["t0"] + 0.1, 0.9))
     s = f"{p.get('prefix', '')}{v:,.{dec}f}{p.get('suffix', '')}"
-    text(c, s, W / 2, y, fit_font("black", s, 300, 980), C(p.get("color"), WHITE), alpha=a, glow=10)
+    sc = ease_out_back(prog(t, g["t0"], 0.35), 1.2) if small else 1.0
+    text(c, s, W / 2, y, fit_font("black", s, 300, 940), C(p.get("color"), WHITE), alpha=a, glow=10, scale=sc)
     if p.get("label"):
         chip(c, words(p["label"], 44).upper(), W / 2, y + 100, C(p.get("label_color"), RED), alpha=a, dot=True, t=t, size=38)
 

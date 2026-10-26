@@ -354,6 +354,14 @@ def _vo_map(ctx):
             for gid, v in json.loads(ctx.path("voice_out.json").read_text(encoding="utf-8")).items()}
 
 
+def _look(prof):
+    vs = prof.get("visual_style") or {}
+    if not vs:
+        return ""
+    return "\n".join(["This account's look and rules (follow them strictly; a clip that breaks one is never the pick):",
+                      f"- Look: {vs.get('look', '')}", *[f"- {r}" for r in vs.get("footage_rules", [])], *[f"- Never: {r}" for r in vs.get("avoid", [])]])
+
+
 def _pick(ctx, text, work):
     """Footage Picker agent: reads the contact sheets in the footage folder."""
     return agents.call(ctx, "footage_picker", text, schemas.FOOTAGE, ["Read"], timeout=900, on_event=_say(ctx), name="footage", cwd=work)["picks"]
@@ -394,9 +402,7 @@ def stage_footage(ctx, prog):
         footage.contact_sheets(shots, {k: v for k, v in cands.items() if v}, work, _font_file())
         desc = "\n".join(f"- {s['id']}: \"{s['query']}\" – {s.get('note', '')} – needs {need[s['id']]:.1f}s" for s in shots if cands[s["id"]])
         ctx.trace("footage", "pick", "Claude chooses clips", "run", flush=True)
-        prof = _brand(ctx); vs = prof.get("visual_style") or {}
-        look = "" if brandmod.legacy(prof) else "\n".join(["This account's look and rules (follow them strictly; a clip that breaks one is never the pick):",
-            f"- Look: {vs.get('look', '')}", *[f"- {r}" for r in vs.get("footage_rules", [])], *[f"- Never: {r}" for r in vs.get("avoid", [])]])
+        prof = _brand(ctx); look = _look(prof)
         picks = _pick(ctx, brain.prompt("footage", shots=desc, niche=prof.get("niche", "aviation"), look=look), work)
         # no clip fits: search once more with Claude's better query and pick again (never fill the slot with a clip that contradicts the line)
         retry = {p["shot_id"]: p["new_query"].strip() for p in picks if str(p.get("candidate")).lower() == "none" and str(p.get("new_query") or "").strip()}
@@ -424,7 +430,7 @@ def stage_footage(ctx, prog):
         sid = s["id"]; lst = cands.get(sid) or []
         p = pick_map.get(sid, {})
         refused = str(p.get("candidate")).lower() == "none"
-        order = [p.get("candidate")] + list(p.get("alternates") or [])
+        order = [] if refused else [p.get("candidate")] + list(p.get("alternates") or [])
         if not refused or k == 0 and sid == shots_all[0]["id"]:     # Claude said no clip fits: leave the slot out (merged into the previous shot), except the opening shot
             order += [f"{sid}-{i}" for i in range(len(lst))]
         ok = False
@@ -509,19 +515,31 @@ def stage_qc(ctx, prog):
     repick = [i for i in qc["issues"] if i.get("fix") == "repick_shot" and i.get("shot_id")]
     if repick and not ctx.data.get("qc_repaired"):
         fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8")); changed = False
-        for iss in repick:
-            sid = iss["shot_id"]; p = next((x for x in fj["picks"] if x["shot_id"] == sid), {})
-            used = fj["chosen"].get(sid, {}).get("label"); lst = fj["cands"].get(sid) or []
-            for label in list(p.get("alternates") or []) + [f"{sid}-{i}" for i in range(len(lst))]:
-                if label == used: continue
-                try:
-                    c = lst[int(label.split("-")[-1])]
-                    src = footage.download(c, ctx.dir / "footage" / "raw" / f"{c['src']}_{c['id']}.mp4")
-                    seg = next(s for s in TL["shots"] if s["id"] == sid)
-                    footage.prep_shot(src, ctx.dir / "footage" / f"{sid}.mp4", 0.0, seg["need"], 0.5)
-                    fj["chosen"][sid] = {**c, "label": label}; changed = True; break
-                except Exception:  # noqa: BLE001
-                    continue
+        spec = _spec(ctx); q = {x["id"]: x for x in spec["shots"]}; first = spec["shots"][0]["id"]
+        todo = [i for i in repick if i["shot_id"] in fj.get("files", {}) and fj.get("cands", {}).get(i["shot_id"])]
+        if todo:
+            need = {s["id"]: s["need"] for s in TL["shots"]}; prof = _brand(ctx)
+            desc = "\n".join(f"- {i['shot_id']}: \"{q.get(i['shot_id'], {}).get('query', '')}\" – {q.get(i['shot_id'], {}).get('note', '')} – needs {need.get(i['shot_id'], 3):.1f}s"
+                             f" – the Quality Inspector REJECTED the current clip ({fj['chosen'].get(i['shot_id'], {}).get('label')}): {i.get('problem', '')}" for i in todo)
+            picks = _pick(ctx, brain.prompt("footage", shots=desc, niche=prof.get("niche", "aviation"), look=_look(prof)) +
+                          "\n\nPick a DIFFERENT candidate that fixes the Quality Inspector's problem, or `none` if no candidate fits.", ctx.dir / "footage")
+            pm = {x["shot_id"]: x for x in picks}
+            for iss in todo:
+                sid = iss["shot_id"]; p = pm.get(sid, {}); lst = fj["cands"][sid]; used = fj["chosen"].get(sid, {}).get("label")
+                labels = [] if str(p.get("candidate")).lower() == "none" else [p.get("candidate")] + list(p.get("alternates") or [])
+                ok = False
+                for label in labels:
+                    if not label or label == used: continue
+                    try:
+                        c = lst[int(str(label).split("-")[-1])]
+                        src = footage.download(c, ctx.dir / "footage" / "raw" / f"{c['src']}_{c['id']}.mp4")
+                        footage.prep_shot(src, ctx.dir / "footage" / f"{sid}.mp4", float(p.get("in_point") or 0), need.get(sid, 3), float(p.get("focus_x") or 0.5))
+                        fj["chosen"][sid] = {**c, "label": label}; ok = changed = True; break
+                    except Exception:  # noqa: BLE001
+                        continue
+                if not ok and sid != first:          # nothing fits: drop the shot (the previous one runs longer) rather than show a wrong clip
+                    fj["files"].pop(sid, None); fj["chosen"].pop(sid, None); changed = True
+                    ctx.log(f"no better clip for {sid}; the previous shot covers it")
         if changed:
             ctx.path("footage.json").write_text(json.dumps(fj, ensure_ascii=False, indent=1), encoding="utf-8")
             ctx.data["qc_repaired"] = True; ctx.save()

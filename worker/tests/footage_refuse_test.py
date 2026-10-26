@@ -28,7 +28,7 @@ class Brain:
         if len(ROUNDS) == 1:
             return {"picks": [{"shot_id": "s1", "candidate": "none", "new_query": "jet exterior night"},
                               {"shot_id": "s2", "candidate": "none", "new_query": "empty business jet interior"},
-                              {"shot_id": "s3", "candidate": "s3-1"}, {"shot_id": "s4", "candidate": "none"}]}
+                              {"shot_id": "s3", "candidate": "s3-1"}, {"shot_id": "s4", "candidate": "none", "alternates": ["s4-1"]}]}
         return {"picks": [{"shot_id": "s1", "candidate": "none"}, {"shot_id": "s2", "candidate": "s2-2"}]}
 reel.brain = reel.agents.brain = Brain()
 class DB:
