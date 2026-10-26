@@ -88,32 +88,31 @@ def score_and_align(job: Path, cfg: dict, takes: dict, log):
             cover = len(words) / max(1, expected_words)
             u = float(utmos(torch.from_numpy(a16).unsqueeze(0), 16000).item()) if utmos else 4.0
             sc = (1 - wprob) * 3 + abs(1 - min(cover, 1.3)) * 2 + max(0.0, 4.5 - u) * 0.5
+            _, (i0, i1) = librosa.effects.trim(a, top_db=38)
+            s0 = max(0.0, min(i0 / sr, words[0][0] if words else 0) - 0.04)
+            e0 = min(len(a) / sr, max(i1 / sr, words[-1][1] if words else len(a) / sr) + 0.06)
+            spans = phrase_spans([(w[0], w[1], w[2]) for w in words], g["phrases_say"])
             rec = {"file": f, "score": round(sc, 3), "word_prob": round(wprob, 3), "coverage": round(cover, 2), "utmos": round(u, 2),
-                   "transcript": " ".join(w[2] for w in words), "weak_words": [w[2] for w in words if w[3] < 0.4]}
+                   "transcript": " ".join(w[2] for w in words), "weak_words": [w[2] for w in words if w[3] < 0.4],
+                   "text": g["text"], "trim": [round(s0, 3), round(e0, 3)], "spans": [[round(x, 3), round(y, 3)] for x, y in spans]}
             report.append(rec)
-            if best is None or sc < best[0]["score"]:
-                best = (rec, words, a, sr)
-        rec, words, a, sr = best
-        _, (i0, i1) = librosa.effects.trim(a, top_db=38)
-        s0 = max(0.0, min(i0 / sr, words[0][0] if words else 0) - 0.04)
-        e0 = min(len(a) / sr, max(i1 / sr, words[-1][1] if words else len(a) / sr) + 0.06)
-        spans = phrase_spans([(w[0], w[1], w[2]) for w in words], g["phrases_say"])
-        result[g["id"]] = {"file": rec["file"], "trim": [round(s0, 3), round(e0, 3)], "spans": [[round(x, 3), round(y, 3)] for x, y in spans],
-                           "chosen": rec, "takes": report}
+            if best is None or sc < best["score"]:
+                best = rec
+        result[g["id"]] = {"file": best["file"], "trim": best["trim"], "spans": best["spans"], "chosen": best, "takes": report}
         log(f"{g['id']}: chose {Path(rec['file']).name} prob {rec['word_prob']} utmos {rec['utmos']}")
     return result
 
 
-def main(job_dir: str):
+def main(job_dir: str, cfg_name: str = "voice_in.json", out_name: str = "voice_out.json"):
     job = Path(job_dir); (job / "vo").mkdir(exist_ok=True)
-    cfg = json.loads((job / "voice_in.json").read_text(encoding="utf-8"))
+    cfg = json.loads((job / cfg_name).read_text(encoding="utf-8"))
     logf = open(job / "voice.log", "a", encoding="utf-8")
     def log(m):
         logf.write(f"{time.strftime('%H:%M:%S')} {m}\n"); logf.flush(); print(m, flush=True)
     takes = generate(job, cfg, log)
     res = score_and_align(job, cfg, takes, log)
-    (job / "voice_out.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+    (job / out_name).write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(*sys.argv[1:4])

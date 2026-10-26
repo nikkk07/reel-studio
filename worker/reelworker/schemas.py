@@ -101,7 +101,7 @@ PROFILE = {"type": "object",
                           "lane_names": {"type": "object", "required": ["core", "trending"], "properties": {"core": S, "trending": S}},
                           "core_keywords": STRS, "strategy": S, "sources": STRS, "end_sub": {"type": "string", "maxLength": 32}}}
 
-TEAM = ["strategist", "trend_scout", "viral_editor", "fact_checker", "scriptwriter", "hook_critic", "footage_picker", "quality_inspector", "caption_writer", "account_intel"]
+TEAM = ["strategist", "trend_scout", "viral_editor", "fact_checker", "scriptwriter", "hook_critic", "footage_picker", "quality_inspector", "caption_writer", "account_intel", "pronunciation_editor", "voice_inspector"]
 LESSON = {"type": "object", "required": ["agent", "lesson", "why"],
           "properties": {"agent": {"type": "string", "enum": TEAM}, "lesson": S, "why": S, "metric": {"type": "string", "enum": ["engagement", "critic", "qc", "success"]}}}
 ANALYST = {"type": "object", "required": ["insights", "lessons", "retire"],
@@ -110,3 +110,13 @@ RESOURCES = {"type": "object", "required": ["health", "lessons", "usage_note"],
              "properties": {"health": {"type": "array", "items": {"type": "object", "required": ["agent", "status", "note"],
                                                                   "properties": {"agent": S, "status": {"type": "string", "enum": ["ok", "watch", "bad"]}, "note": S}}},
                             "lessons": {"type": "array", "maxItems": 4, "items": LESSON}, "usage_note": S}}
+
+PRONOUNCE = {"type": "object", "required": ["phrases", "terms"],
+             "properties": {"phrases": {"type": "array", "items": {"type": "object", "required": ["group", "index", "tts"],
+                                                                  "properties": {"group": S, "index": I, "tts": S}}},
+                            "terms": {"type": "array", "items": {"type": "object", "required": ["term", "say"], "properties": {"term": S, "say": S}}}}}
+PRONCHECK = {"type": "object", "required": ["parts"],
+             "properties": {"parts": {"type": "array", "items": {"type": "object", "required": ["id", "best_take", "ok", "problems"],
+                            "properties": {"id": S, "best_take": S, "ok": B, "retry_text": S,
+                                           "problems": {"type": "array", "items": {"type": "object", "required": ["intended", "heard"],
+                                                        "properties": {"intended": S, "heard": S, "fix_say": S}}}}}}}}

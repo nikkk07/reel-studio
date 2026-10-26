@@ -275,35 +275,85 @@ def stage_script(ctx, prog):
     ctx.log(f"script ready: {spec['title']} ({sum(len(g['phrases']) for g in spec['groups'])} phrases, {len(spec['shots'])} shots)")
 
 
-def stage_voice(ctx, prog):
-    prof = _brand(ctx); hinglish = brandmod.legacy(prof) or brandmod.hinglish(prof)     # Hindi voice + pronunciation dictionary
-    spec = _spec(ctx); E = _lexicon_entries() if hinglish else []; groups = []; unknown = set()
-    for g in spec["groups"]:
-        says = [lexicon.apply(p["say"], E) if hinglish else p["say"] for p in g["phrases"]]
-        for p in g["phrases"]:
-            if hinglish: unknown.update(lexicon.unknown_english(p["say"], E))
-        groups.append({"id": g["id"], "text": " ".join(says), "phrases_say": says})
-    seeds = [11, 23, 37, 51, 63][:max(1, config.TAKES_PER_GROUP)]
-    ref = config.VOICE_DIR / "refs" / f"{spec.get('voice', 'female')}.wav"
-    if not ref.exists():
-        ref = config.VOICE_DIR / "refs" / "female.wav"
-    cfg = {"groups": groups, "seeds": seeds, "ref": str(ref), "device": config.DEVICE, "utmos_ckpt": str(config.UTMOS_CKPT),
-           "tts_lang": "hi" if hinglish else prof.get("tts_lang", "en"), "asr_lang": "hi" if hinglish else prof.get("asr_lang", "en"),
-           "whisper": config.get("REELSTUDIO_WHISPER", "medium"), "threads": 4}
-    ctx.path("voice_in.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
+TTS_RULES = {
+    "hi": ("- Write the WHOLE phrase in Devanagari: Hindi words as usual; every English word respelled phonetically in Devanagari the way an educated Indian presenter "
+           "says it (registration -> रजिस्ट्रेशन, activation -> एक्टिवेशन, valid -> वैलिड, email -> ईमेल, start -> स्टार्ट, trap -> ट्रैप, document -> डॉक्यूमेंट).\n"
+           "- Abbreviations said letter by letter: each letter's name in Devanagari, separated by spaces (DGCA -> डी जी सी ए, PDF -> पी डी एफ़, BVC -> बी वी सी, "
+           "JPG -> जे पी जी, FAQ -> एफ़ ए क्यू, CPL -> सी पी एल). Abbreviations normally said as a word stay a word (NASA -> नासा).\n"
+           "- Numbers, years, times and units as spoken words in Devanagari, in the language the presenter would use (24 hours -> ट्वेंटी फ़ोर आवर्स, 70% -> सेवेंटी पर्सेंट, "
+           "2026 -> ट्वेंटी ट्वेंटी सिक्स). No digits at all.\n"
+           "- Names and brands respelled in Devanagari (Flying Star Aviator -> फ़्लाइंग स्टार एविएटर, Pariksha -> परीक्षा, We One Aviation -> वी वन एविएशन).\n"
+           "- Punctuation: only comma, । and ? . No dashes, colons, semicolons, brackets, slashes, quotes, ellipses or symbols (% ₹ & + / @). No Latin letters at all."),
+    "en": ("- Plain spoken English. Abbreviations said letter by letter as separate capital letters with spaces (D G C A, P D F) unless normally said as a word (NASA).\n"
+           "- Numbers, years, times, money and units as words (twenty four hours, seventy percent, twenty twenty six). No digits.\n"
+           "- Hindi or Indian words in simple Latin spelling as they are pronounced.\n"
+           "- Punctuation: only commas, full stops and question marks. No dashes, colons, semicolons, brackets, slashes, quotes, ellipses or symbols (% ₹ & + / @)."),
+}
+
+
+def _tts_check(lang):
+    def check(o):
+        probs = []
+        for p in o.get("phrases", []):
+            t = p.get("tts", "")
+            if re.search(r"\d", t):
+                probs.append(f"digits left in {p.get('group')}/{p.get('index')}: '{t[:60]}' (write numbers as words)")
+            if lang == "hi" and re.search(r"[A-Za-z]", t):
+                probs.append(f"Latin letters left in {p.get('group')}/{p.get('index')}: '{t[:60]}' (respell in Devanagari)")
+            if re.search(r"[—–:;()\[\]/%₹&+@\"…]", t):
+                probs.append(f"symbols left in {p.get('group')}/{p.get('index')}: '{t[:60]}'")
+        return probs[:8]
+    return check
+
+
+def _save_terms(ctx, terms):
+    """What the Pronunciation Editor learned is kept in the account's own dictionary and reused next time."""
+    if not terms:
+        return
+    try:
+        bid = ctx.job.get("brand") or "weone"
+        row = (ctx.db.select("brands", f"select=profile&id=eq.{bid}") or [{}])[0]
+        prof = row.get("profile") or {}
+        lex = {e["term"].lower(): e for e in prof.get("lexicon", [])}
+        for t in terms:
+            if t.get("term") and t.get("say") and len(lex) < 400:
+                lex.setdefault(t["term"].lower(), {"term": t["term"], "say": t["say"]})
+        if len(lex) != len(prof.get("lexicon", [])):
+            ctx.db.update("brands", f"id=eq.{bid}", {"profile": {**prof, "lexicon": list(lex.values())}})
+            brandmod._CACHE.pop(bid, None)
+    except Exception as e:  # noqa: BLE001
+        ctx.log(f"could not save new pronunciations ({str(e)[:80]})", "warn")
+
+
+def prepare_tts(ctx, prof, spec, lang, E):
+    """Pronunciation Editor: every phrase in a form the voice model reads correctly (captions are untouched)."""
+    if "tts" in ctx.data:
+        return ctx.data["tts"]
+    lex = [{"term": m, "say": e["say"]} for e in E for m in e["match"][:1]] + list(prof.get("lexicon", []))
+    phrases = [{"group": g["id"], "index": i, "say": lexicon.apply(p["say"], E) if E else p["say"], "caption": p.get("caption", "")}
+               for g in spec["groups"] for i, p in enumerate(g["phrases"])]
+    text = brain.prompt("pronounce", brand_name=prof["name"], mode="Hindi (Devanagari) with Indian English words" if lang == "hi" else "English",
+                        rules=TTS_RULES[lang], lexicon=json.dumps(lex[:300], ensure_ascii=False) if lex else "(empty)",
+                        phrases=json.dumps(phrases, ensure_ascii=False, indent=1))
+    res = agents.call(ctx, "pronunciation_editor", text, schemas.PRONOUNCE, [], timeout=600, check=_tts_check(lang), name="pronounce")
+    got = {(p["group"], int(p["index"])): p["tts"].strip() for p in res.get("phrases", []) if p.get("tts", "").strip()}
+    tts = {g["id"]: [got.get((g["id"], i)) or ph["say"] for i, ph in enumerate(g["phrases"])] for g in spec["groups"]}
+    ctx.data["tts"] = tts; ctx.save()
+    _save_terms(ctx, res.get("terms", []))
+    return tts
+
+
+def _run_voice(ctx, cfg, cfg_name, out_name, prog, lo, hi, label):
+    """Runs the voice model in its own process, watching for stalls; returns its output."""
+    groups, seeds = cfg["groups"], cfg["seeds"]
     total = len(groups) * len(seeds)
-    label = {g["id"]: f"Part {i + 1}" for i, g in enumerate(groups)}
-    for g in groups:
-        ctx.trace("voice", g["id"], label[g["id"]], "wait", f"0/{len(seeds)} takes")
-    ctx.trace("voice", "score", "Pick clearest takes", "wait", flush=True)
     errf = ctx.path("voice.err.log")
 
     def launch(device):
         cfg["device"] = device
-        ctx.path("voice_in.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
-        # child output goes to a file: an unread pipe fills up (progress bars) and freezes the child
-        with open(errf, "ab") as fh:
-            return subprocess.Popen([sys.executable, "-m", "reelworker.media.voice", str(ctx.dir)], cwd=Path(__file__).resolve().parents[2],
+        ctx.path(cfg_name).write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
+        with open(errf, "ab") as fh:         # child output goes to a file: an unread pipe fills up and freezes the child
+            return subprocess.Popen([sys.executable, "-m", "reelworker.media.voice", str(ctx.dir), cfg_name, out_name], cwd=Path(__file__).resolve().parents[2],
                                     stdout=fh, stderr=fh)
 
     p = launch(cfg["device"]); restarts = 0; last_done = -1; last_change = time.time()
@@ -311,11 +361,11 @@ def stage_voice(ctx, prog):
         while True:
             rc = p.poll()
             vo = ctx.dir / "vo"
-            counts = [len(list(vo.glob(f"{g['id']}_s*.wav"))) if vo.exists() else 0 for g in groups]
+            counts = [sum(1 for s in seeds if (vo / f"{g['id']}_s{s}.wav").exists()) for g in groups]
             done = sum(counts); active = next((i for i, n in enumerate(counts) if n < len(seeds)), None)
             for i, (g, n) in enumerate(zip(groups, counts)):
                 st = "done" if n >= len(seeds) else "run" if i == active else "wait"
-                ctx.trace("voice", g["id"], label[g["id"]], st, f"{n}/{len(seeds)} takes")
+                ctx.trace("voice", g["id"], label.get(g["id"], g["id"]), st, f"{n}/{len(seeds)} takes")
             if done >= total:
                 ctx.trace("voice", "score", "Pick clearest takes", "run")
             if rc is not None:
@@ -331,22 +381,114 @@ def stage_voice(ctx, prog):
                 dev = "cpu" if restarts == 2 else cfg["device"]
                 ctx.log(f"voice model stopped responding; restarting it{' on CPU' if dev == 'cpu' else ''} (finished takes are kept)", "warn")
                 p = launch(dev); last_change = time.time(); continue
-            prog(0.85 * done / total); ctx.check_cancel(); time.sleep(5)
+            prog(lo + (hi - lo) * done / max(1, total)); ctx.check_cancel(); time.sleep(5)
     finally:
         if p.poll() is None:
             p.kill()
     if p.returncode != 0:
         tail = errf.read_text(errors="ignore")[-800:] if errf.exists() else ""
         raise RuntimeError(f"voice stage failed: {tail}")
-    out = json.loads(ctx.path("voice_out.json").read_text(encoding="utf-8"))
+    return json.loads(ctx.path(out_name).read_text(encoding="utf-8"))
+
+
+def _inspect(ctx, prof, out):
+    """Voice Inspector: compares what should be said with what the recogniser heard in every take; picks the take said right."""
+    parts = [{"id": gid, "intended": v["chosen"].get("text") or "",
+              "takes": [{"take": Path(t["file"]).stem, "transcript": t["transcript"]} for t in v["takes"]]} for gid, v in out.items()]
+    res = agents.call(ctx, "voice_inspector", brain.prompt("pron_check", brand_name=prof["name"], parts=json.dumps(parts, ensure_ascii=False, indent=1)),
+                      schemas.PRONCHECK, [], timeout=600, name="pron_check",
+                      grade=lambda o: 100 * sum(1 for p in o.get("parts", []) if p.get("ok")) / max(1, len(o.get("parts", []))))
+    verdict = {}
+    for p in res.get("parts", []):
+        v = out.get(p.get("id"))
+        if not v:
+            continue
+        pick = next((t for t in v["takes"] if Path(t["file"]).stem == p.get("best_take")), None)
+        if pick:                                  # the take that is pronounced right wins over the one that merely scored clearest
+            v.update(file=pick["file"], trim=pick["trim"], spans=pick["spans"], chosen=pick)
+        verdict[p["id"]] = p
+    return verdict
+
+
+def stage_voice(ctx, prog):
+    prof = _brand(ctx); hinglish = brandmod.legacy(prof) or brandmod.hinglish(prof)     # Hindi voice + pronunciation dictionary
+    lang = "hi" if hinglish else prof.get("tts_lang", "en")
+    spec = _spec(ctx); E = _lexicon_entries() if hinglish else []
+    unknown = set()
+    if hinglish:
+        for g in spec["groups"]:
+            for p in g["phrases"]:
+                unknown.update(lexicon.unknown_english(p["say"], E))
+    parent = _parent_dir(ctx) if (ctx.job.get("input") or {}).get("notes") else None
+    if parent and "tts" not in ctx.data:
+        pst = json.loads((parent / "state.json").read_text()) if (parent / "state.json").exists() else {}
+        if "tts" not in (pst.get("data") or {}):          # takes recorded before the Pronunciation Editor existed are never reused
+            for f in (ctx.dir / "vo").glob("*.wav"):
+                f.unlink()
+    ctx.trace("voice", "pron", "Pronunciation Editor", "run", flush=True)
+    tts = prepare_tts(ctx, prof, spec, "hi" if hinglish else "en", E)
+    ctx.trace("voice", "pron", "Pronunciation Editor", "done", f"{sum(len(v) for v in tts.values())} lines")
+    groups = [{"id": g["id"], "text": " ".join(tts[g["id"]]), "phrases_say": tts[g["id"]]} for g in spec["groups"]]
+    seeds = [11, 23, 37, 51, 63][:max(1, config.TAKES_PER_GROUP)]
+    ref = config.VOICE_DIR / "refs" / f"{spec.get('voice', 'female')}.wav"
+    if not ref.exists():
+        ref = config.VOICE_DIR / "refs" / "female.wav"
+    base = {"ref": str(ref), "device": config.DEVICE, "utmos_ckpt": str(config.UTMOS_CKPT), "tts_lang": lang,
+            "asr_lang": "hi" if hinglish else prof.get("asr_lang", "en"), "whisper": config.get("REELSTUDIO_WHISPER", "medium"), "threads": 4}
+    label = {g["id"]: f"Part {i + 1}" for i, g in enumerate(groups)}
+    for g in groups:
+        ctx.trace("voice", g["id"], label[g["id"]], "wait", f"0/{len(seeds)} takes")
+    ctx.trace("voice", "score", "Pick clearest takes", "wait", flush=True)
+    if ctx.path("voice_out.json").exists() and ctx.data.get("voice_checked"):
+        out = json.loads(ctx.path("voice_out.json").read_text(encoding="utf-8"))
+    else:
+        out = _run_voice(ctx, {**base, "groups": groups, "seeds": seeds}, "voice_in.json", "voice_out.json", prog, 0.0, 0.6, label)
+    # Voice Inspector: listen (via the recogniser) and redo any part that is not pronounced right, up to twice with better spellings
+    issues = {}
+    for rnd, extra in enumerate(([71, 83, 97], [109, 127, 131])):
+        ctx.trace("voice", "check", "Voice Inspector", "run", flush=True)
+        verdict = _inspect(ctx, prof, out)
+        bad = {gid: v for gid, v in verdict.items() if not v.get("ok")}
+        issues = {gid: [f"{x.get('intended')} -> heard {x.get('heard')}" for x in v.get("problems", [])] for gid, v in bad.items()}
+        ctx.path("voice_out.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+        if not bad:
+            break
+        ctx.log(f"Voice Inspector: {sum(len(v) for v in issues.values())} word(s) not pronounced right in {len(bad)} part(s); recording them again"
+                f" ({'; '.join(x for v in issues.values() for x in v)[:200]})", "warn")
+        redo = []
+        for gid, v in bad.items():
+            lines = list(tts[gid])
+            for x in v.get("problems", []):
+                if x.get("intended") and x.get("fix_say"):
+                    lines = [l.replace(x["intended"], x["fix_say"]) for l in lines]
+            tts[gid] = lines
+            redo.append({"id": gid, "text": " ".join(lines), "phrases_say": lines})
+        ctx.data["tts"] = tts; ctx.save()
+        _save_terms(ctx, [{"term": x["intended"], "say": x["fix_say"]} for v in bad.values() for x in v.get("problems", []) if x.get("intended") and x.get("fix_say")])
+        more = _run_voice(ctx, {**base, "groups": redo, "seeds": extra}, f"voice_redo{rnd + 1}.json", f"voice_redo{rnd + 1}_out.json",
+                          prog, 0.6 + 0.15 * rnd, 0.75 + 0.15 * rnd, label)
+        for gid, v in more.items():
+            out[gid]["takes"] = out[gid]["takes"] + v["takes"]
+            out[gid].update(file=v["file"], trim=v["trim"], spans=v["spans"], chosen=v["chosen"])
+        if rnd == 1:                                 # the last redo still gets one final listen
+            verdict = _inspect(ctx, prof, out)
+            bad = {gid: v for gid, v in verdict.items() if not v.get("ok")}
+            issues = {gid: [f"{x.get('intended')} -> heard {x.get('heard')}" for x in v.get("problems", [])] for gid, v in bad.items()}
+    ctx.path("voice_out.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    ctx.data["voice_checked"] = True; ctx.save()
+    ctx.trace("voice", "check", "Voice Inspector", "done" if not issues else "fail", "all words right" if not issues else f"{sum(len(v) for v in issues.values())} word(s) still off")
     weak = sorted({w.strip(".,!?।") for g in out.values() for w in g["chosen"]["weak_words"]
                    if len(w.strip(".,!?।")) >= 3 and not any(ch.isdigit() for ch in w)})
     for gid, v in out.items():
         ctx.trace("voice", gid, label.get(gid, gid), "done", f"clarity {v['chosen']['word_prob']:.2f}")
     ctx.trace("voice", "score", "Pick clearest takes", "done", f"{len(weak)} words to check", flush=True)
-    ctx.merge_output({"voice": {gid: {k: v["chosen"][k] for k in ("word_prob", "utmos", "transcript")} for gid, v in out.items()},
-                      "weak_words": weak, "new_english_words": sorted(unknown)})
-    ctx.log(f"voice ready; weak words: {', '.join(weak) or 'none'}")
+    upd = {"voice": {gid: {k: v["chosen"][k] for k in ("word_prob", "utmos", "transcript")} for gid, v in out.items()},
+           "weak_words": weak, "new_english_words": sorted(unknown), "voice_issues": issues}
+    if issues:                                       # never auto-post a reel with a word said wrong; a person decides
+        upd["hold"] = True
+        upd["hold_reason"] = "Pronunciation: " + "; ".join(x for v in issues.values() for x in v)[:300]
+    ctx.merge_output(upd)
+    ctx.log(f"voice ready; pronunciation {'all correct' if not issues else 'issues: ' + '; '.join(x for v in issues.values() for x in v)[:200]}")
 
 
 def _vo_map(ctx):

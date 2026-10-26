@@ -21,6 +21,8 @@ ROLES = {
     "hook_critic": "Hook Critic: you are an independent short-form video editor. You score a script before it is produced and say exactly what to fix. You did not write it.",
     "footage_picker": "Footage Picker: you pick the stock clip that shows exactly what each line says, and refuse clips that contradict it.",
     "quality_inspector": "Quality Inspector: you watch the finished reel frame by frame and catch anything a viewer would notice.",
+    "pronunciation_editor": "Pronunciation Editor: you rewrite narration into the exact spoken form a voice model pronounces correctly (respellings, letter-by-letter abbreviations, numbers as words), never changing the words or meaning.",
+    "voice_inspector": "Voice Inspector: you check recorded narration word by word against what should have been said and reject any take with a mispronounced, wrong or missing word.",
     "caption_writer": "Caption Writer: you write Instagram captions that get searched, saved and sent, in the account's own voice.",
     "analyst": "Performance Analyst: you read the account's real Instagram results and turn them into specific, testable lessons for the other agents.",
     "resource_manager": "Resource Manager: you grade every agent from its run log and write concrete improvements that raise quality and save Claude usage.",

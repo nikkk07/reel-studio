@@ -2,10 +2,10 @@
 create or replace function pg_temp.ok(c boolean, m text) returns void language plpgsql as $$ begin if not c then raise exception 'FAIL: %', m; end if; raise notice 'PASS: %', m; end $$;
 create or replace function pg_temp.err(sql text) returns text language plpgsql as $$ begin execute sql; return null; exception when others then return sqlerrm; end $$;
 grant execute on function pg_temp.ok(boolean,text), pg_temp.err(text) to authenticated, anon;
-select pg_temp.ok((select count(*) from agents) = 13, '13 specialised agents are registered');
+select pg_temp.ok((select count(*) from agents) = 15, '15 specialised agents are registered');
 select set_config('request.jwt.claims','{"email":"weoneaviation8@gmail.com"}',false);
 set role authenticated;
-select pg_temp.ok((select count(*) from agents) = 13, 'members see the agent team');
+select pg_temp.ok((select count(*) from agents) = 15, 'members see the agent team');
 select pg_temp.ok(pg_temp.err($$insert into agent_lessons(agent, lesson, metric, created_by) values ('scriptwriter', 'always shout in caps lock', 'critic', 'me')$$) like 'permission denied%', 'the site cannot plant lessons into agents');
 select pg_temp.ok(pg_temp.err($$insert into agent_runs(agent, ok) values ('scriptwriter', true)$$) like 'permission denied%', 'the site cannot fake agent runs');
 select pg_temp.ok(pg_temp.err($$select public.add_brand('Xy', 'not a url')$$) like 'Give the website address%', 'a new account needs a real website');
