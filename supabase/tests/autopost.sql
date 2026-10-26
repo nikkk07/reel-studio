@@ -27,4 +27,16 @@ reset role;
 update jobs set output = output || jsonb_build_object('review_deadline', now() - interval '1 s') where id='dddddddd-0000-0000-0000-000000000002';
 select pg_temp.ok(public.auto_approve_due()=0, 'auto-posting switched off: nothing is approved automatically');
 set role authenticated; select public.set_autopost(true, 5); reset role;
+
+-- a reel the Voice Inspector held keeps its hold in Review and is never auto-posted
+insert into jobs(id, kind, status, output) values ('dddddddd-0000-0000-0000-0000000000f1', 'reel', 'running', '{"voice_issues": {"g2": ["valid -> heard walid"]}, "hold": true}');
+update jobs set status = 'review' where id = 'dddddddd-0000-0000-0000-0000000000f1';
+select pg_temp.ok((select (output ->> 'hold')::boolean from jobs where id = 'dddddddd-0000-0000-0000-0000000000f1'), 'voice-held reel keeps its hold in Review');
+update jobs set output = output || jsonb_build_object('review_deadline', now() - interval '1 s') where id = 'dddddddd-0000-0000-0000-0000000000f1';
+select public.auto_approve_due();
+select pg_temp.ok((select status from jobs where id = 'dddddddd-0000-0000-0000-0000000000f1') = 'review', 'and is never auto-posted');
+insert into jobs(id, kind, status, output) values ('dddddddd-0000-0000-0000-0000000000f2', 'reel', 'running', '{"voice_issues": {}, "hold": true}');
+update jobs set status = 'review' where id = 'dddddddd-0000-0000-0000-0000000000f2';
+select pg_temp.ok((select output ? 'hold' from jobs where id = 'dddddddd-0000-0000-0000-0000000000f2') = false, 'a reel with clean voice starts its normal review window');
+delete from jobs where id in ('dddddddd-0000-0000-0000-0000000000f1', 'dddddddd-0000-0000-0000-0000000000f2');
 select 'ALL AUTOPOST DB CHECKS PASSED';
