@@ -445,7 +445,9 @@ def stage_voice(ctx, prog):
         out = _run_voice(ctx, {**base, "groups": groups, "seeds": seeds}, "voice_in.json", "voice_out.json", prog, 0.0, 0.6, label)
     # Voice Inspector: listen (via the recogniser) and redo any part that is not pronounced right, up to twice with better spellings
     issues = {}
-    for rnd, extra in enumerate(([71, 83, 97], [109, 127, 131])):
+    rounds = ([71, 83, 97, 101, 113], [127, 131, 137, 149, 151], [163, 173, 181, 191, 197])   # retakes: more takes, steadier delivery each round
+    temps = (0.65, 0.55, 0.5)
+    for rnd, extra in enumerate(rounds):
         ctx.trace("voice", "check", "Voice Inspector", "run", flush=True)
         verdict = _inspect(ctx, prof, out)
         bad = {gid: v for gid, v in verdict.items() if not v.get("ok")}
@@ -465,12 +467,12 @@ def stage_voice(ctx, prog):
             redo.append({"id": gid, "text": " ".join(lines), "phrases_say": lines})
         ctx.data["tts"] = tts; ctx.save()
         _save_terms(ctx, [{"term": x["intended"], "say": x["fix_say"]} for v in bad.values() for x in v.get("problems", []) if x.get("intended") and x.get("fix_say")])
-        more = _run_voice(ctx, {**base, "groups": redo, "seeds": extra}, f"voice_redo{rnd + 1}.json", f"voice_redo{rnd + 1}_out.json",
-                          prog, 0.6 + 0.15 * rnd, 0.75 + 0.15 * rnd, label)
+        more = _run_voice(ctx, {**base, "groups": redo, "seeds": extra, "temperature": temps[rnd], "cfg_weight": 0.6}, f"voice_redo{rnd + 1}.json",
+                          f"voice_redo{rnd + 1}_out.json", prog, 0.6 + 0.1 * rnd, 0.7 + 0.1 * rnd, label)
         for gid, v in more.items():
             out[gid]["takes"] = out[gid]["takes"] + v["takes"]
             out[gid].update(file=v["file"], trim=v["trim"], spans=v["spans"], chosen=v["chosen"])
-        if rnd == 1:                                 # the last redo still gets one final listen
+        if rnd == len(rounds) - 1:                   # the last redo still gets one final listen
             verdict = _inspect(ctx, prof, out)
             bad = {gid: v for gid, v in verdict.items() if not v.get("ok")}
             issues = {gid: [f"{x.get('intended')} -> heard {x.get('heard')}" for x in v.get("problems", [])] for gid, v in bad.items()}

@@ -53,7 +53,7 @@ class Brain:
 
 RUNS = []
 def fake_run(ctx, cfg, cfg_name, out_name, prog, lo, hi, label):
-    RUNS.append((cfg_name, [g["id"] for g in cfg["groups"]], cfg["seeds"], [g["text"] for g in cfg["groups"]]))
+    RUNS.append((cfg_name, [g["id"] for g in cfg["groups"]], cfg["seeds"], [g["text"] for g in cfg["groups"]], cfg.get("temperature")))
     out = {}
     for g in cfg["groups"]:
         takes = [{"file": str(ctx.dir / "vo" / f"{g['id']}_s{s}.wav"), "score": 0.5, "word_prob": 0.8, "coverage": 1.0, "utmos": 4.2,
@@ -87,15 +87,16 @@ ok([a[0] for a in b.asks].count("pronounce") == 2 and "Latin letters left" in b.
 brandmod._CACHE.clear(); RUNS.clear(); db = DB()
 bad = {"g2": {"ok": False, "best": "g2_s11", "problems": [{"intended": "रजिस्ट्रेशन", "heard": "लेजिस्ट्रेश्ट्रेश्ण", "fix_say": "रजिस्ट्रेशन्"}]}}
 b = Brain(inspector=[bad, {"g2": {"ok": True, "best": "g2_s83"}}]); reel.brain = agents.brain = b; c = ctx_for(db); reel.stage_voice(c, lambda f: None)
-ok(len(RUNS) == 2 and RUNS[1][1] == ["g2"] and RUNS[1][2] == [71, 83, 97] and "रजिस्ट्रेशन्" in RUNS[1][3][0], "only the wrong part is recorded again, with new seeds and the better spelling")
+ok(len(RUNS) == 2 and RUNS[1][1] == ["g2"] and RUNS[1][2] == [71, 83, 97, 101, 113] and "रजिस्ट्रेशन्" in RUNS[1][3][0], "only the wrong part is recorded again, with new seeds and the better spelling")
 vo = json.loads(c.path("voice_out.json").read_text())
-ok(vo["g2"]["file"].endswith("g2_s83.wav") and len(vo["g2"]["takes"]) == 6, "the Voice Inspector's choice (said right) becomes the narration")
+ok(vo["g2"]["file"].endswith("g2_s83.wav") and len(vo["g2"]["takes"]) == 8, "the Voice Inspector's choice (said right) becomes the narration")
 ok(not c.job["output"].get("hold"), "fixed on the retry -> no hold")
+ok(RUNS[0][4] is None and RUNS[1][4] == 0.65, "retakes are recorded with a steadier delivery (lower temperature)")
 ok(any(r["agent"] == "voice_inspector" for t, r in db.ins if t == "agent_runs"), "the Voice Inspector's checks are logged for the learning loop")
 
 # 4. still wrong after two retries -> held for a person, never auto-posted
 brandmod._CACHE.clear(); RUNS.clear(); db = DB()
-b = Brain(inspector=[bad, bad, bad]); reel.brain = agents.brain = b; c = ctx_for(db); reel.stage_voice(c, lambda f: None)
-ok(len(RUNS) == 3 and c.job["output"]["hold"] is True and "लेजिस्ट्रेश्ट्रेश्ण" in c.job["output"]["hold_reason"], "still mispronounced after 2 retries -> held, with the word named")
+b = Brain(inspector=[bad, bad, bad, bad]); reel.brain = agents.brain = b; c = ctx_for(db); reel.stage_voice(c, lambda f: None)
+ok(len(RUNS) == 4 and c.job["output"]["hold"] is True and "लेजिस्ट्रेश्ट्रेश्ण" in c.job["output"]["hold_reason"], "still mispronounced after 3 retries -> held, with the word named")
 
 bad_ = [n for k, n in R if not k]; print(f"{len(R) - len(bad_)}/{len(R)} pronunciation checks passed" + (" | FAILED: " + "; ".join(bad_) if bad_ else "")); sys.exit(1 if bad_ else 0)

@@ -31,7 +31,8 @@ def generate(job: Path, cfg: dict, log):
             f = job / "vo" / f"{g['id']}_s{s}.wav"
             if not f.exists():
                 torch.manual_seed(s); t0 = time.time()
-                kw = dict(language_id=cfg.get("tts_lang", "hi"), audio_prompt_path=cfg["ref"], exaggeration=0.5, cfg_weight=0.5, temperature=0.8)
+                kw = dict(language_id=cfg.get("tts_lang", "hi"), audio_prompt_path=cfg["ref"], exaggeration=float(cfg.get("exaggeration", 0.5)),
+                          cfg_weight=float(cfg.get("cfg_weight", 0.5)), temperature=float(cfg.get("temperature", 0.8)))
                 try:
                     w = m.generate(g["text"], **kw)
                 except Exception as e:  # noqa: BLE001  (an op unsupported on Apple GPU) -> finish on CPU
