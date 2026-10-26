@@ -12,10 +12,14 @@ export async function rest(method: string, path: string, body?: unknown, prefer 
   if (!r.ok) throw new Error(`db ${method} ${path.split("?")[0]} -> ${r.status} ${(await r.text()).slice(0, 200)}`);
   const t = await r.text(); return t ? JSON.parse(t) : null;
 }
-export async function setting(key: string): Promise<Json> { const r = await rest("GET", `settings?select=value&key=eq.${key}`); return r?.[0]?.value ?? {}; }
+// one account's own settings/secrets: We One Aviation keeps the original keys, every other account gets "<key>@<account>"
+export const bk = (base: string, brand?: string) => (!brand || brand === "weone" ? base : `${base}@${brand}`);
+export type Brand = { id: string; name: string; links?: Json };
+export async function brands(): Promise<Brand[]> { return (await rest("GET", "brands?select=id,name,links&order=sort")) ?? []; }
+export async function setting(key: string): Promise<Json> { const r = await rest("GET", `settings?select=value&key=eq.${encodeURIComponent(key)}`); return r?.[0]?.value ?? {}; }
 export const setSetting = (key: string, value: Json) => rest("POST", "settings", { key, value, updated_at: iso(now()) }, "resolution=merge-duplicates,return=minimal");
 export async function secret(key: string): Promise<[string | null, string | null]> {
-  const r = await rest("GET", `secrets?select=value,updated_at&key=eq.${key}`);
+  const r = await rest("GET", `secrets?select=value,updated_at&key=eq.${encodeURIComponent(key)}`);
   return r?.[0]?.value ? [r[0].value, r[0].updated_at] : [null, null];
 }
 export const setSecret = (key: string, value: string | null) => rest("POST", "secrets", { key, value, updated_at: iso(now()) }, "resolution=merge-duplicates,return=minimal");

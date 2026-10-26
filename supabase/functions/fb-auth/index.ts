@@ -1,16 +1,21 @@
-// Reel Studio – "Connect Facebook": swaps the short-lived token from Graph API Explorer for a long-lived one (needs the
-// App Secret, so it happens here on the server), then takes the We One Aviation Page's own token, which does not expire.
-// Only the page token is stored (server side); the App Secret and user token are used once and never saved.
+// Reel Studio – "Connect Facebook" for one account: swaps the short-lived token from Graph API Explorer for a long-lived
+// one (needs the App Secret, so it happens here on the server), then takes that account's Page token, which does not expire.
+// The App ID/Secret come from the request or from Studio Settings (saved once). Only the Page token is stored, server side,
+// under that account; the user token is used once and never saved. One Page can belong to one account only.
 
 const SB = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
 const KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ANON = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const FB = Deno.env.get("FB_API") ?? "https://graph.facebook.com/v26.0";
-const PAGE_HINT = (Deno.env.get("FB_PAGE_HINT") ?? "we one aviation").toLowerCase();
 const H = { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, "Z");
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+const get = async (path: string) => {
+  const r = await fetch(`${SB}/rest/v1/${path}`, { headers: H });
+  if (!r.ok) throw new Error(`db ${path.split("?")[0]} -> ${r.status}`);
+  return await r.json();
+};
 const upsert = async (table: string, row: Record<string, unknown>) => {
   const r = await fetch(`${SB}/rest/v1/${table}`, { method: "POST", headers: { ...H, Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ ...row, updated_at: iso(new Date()) }) });
   if (!r.ok) throw new Error(`db ${table} -> ${r.status}`);
@@ -31,8 +36,18 @@ Deno.serve(async (req) => {
   try {
     const own = await fetch(`${SB}/rest/v1/rpc/is_owner`, { method: "POST", headers: { apikey: ANON || KEY, Authorization: req.headers.get("Authorization") ?? "", "Content-Type": "application/json" }, body: "{}" });
     if (!own.ok || (await own.json()) !== true) return reply({ error: "Only the studio owner can connect Facebook." }, 403);
-    const { app_id, app_secret, user_token } = await req.json();
-    const id = String(app_id ?? "").trim(), sec = String(app_secret ?? "").trim(), tok = String(user_token ?? "").trim();
+    const { app_id, app_secret, user_token, brand: brandIn, page_id } = await req.json();
+    const brand = String(brandIn ?? "weone");
+    const bk = (base: string) => (brand === "weone" ? base : `${base}@${brand}`);
+    const acct = (await get(`brands?select=id,name,links&id=eq.${encodeURIComponent(brand)}`))?.[0];
+    if (!acct) return reply({ error: "Unknown account." }, 400);
+    let id = String(app_id ?? "").trim(), sec = String(app_secret ?? "").trim();
+    const tok = String(user_token ?? "").trim();
+    if (!id && !sec) {                // saved once in Studio Settings
+      id = String((await get("settings?select=value&key=eq.meta_app"))?.[0]?.value?.app_id ?? "");
+      sec = String((await get("secrets?select=value&key=eq.meta_app_secret"))?.[0]?.value ?? "");
+      if (!id || !sec) return reply({ error: "Save the Meta app (App ID and App Secret) in Studio Settings first, or fill them in here." }, 400);
+    }
     if (!/^\d{6,20}$/.test(id)) return reply({ error: "The App ID is the number in App settings → Basic (not the Instagram app ID)." }, 400);
     if (!/^[a-f0-9]{32}$/i.test(sec)) return reply({ error: "The App Secret is the 32-character code in App settings → Basic (click Show)." }, 400);
     if (tok.length < 50) return reply({ error: "Paste the whole access token from Graph API Explorer." }, 400);
@@ -58,15 +73,20 @@ Deno.serve(async (req) => {
     const need = ["pages_show_list", "pages_read_engagement", "pages_manage_posts"].filter((s) => !granted.includes(s));
     if (granted.length && need.length) return reply({ error: `The token is missing: ${need.join(", ")}. Add them in Graph API Explorer and generate a new token.` }, 400);
     if (!pages.length) {
-      return reply({ error: `The Facebook account "${who || "this account"}" has no access to a Page. Log in to developers.facebook.com with the Facebook account that manages the We One Aviation Page (or give this account Full control in Page settings → Page access), then generate a new token and tick the Page.` }, 400);
+      return reply({ error: `The Facebook account "${who || "this account"}" has no access to a Page. Log in to developers.facebook.com with the Facebook account that manages the ${acct.name} Page (or give this account Full control in Page settings → Page access), then generate a new token and tick the Page.` }, 400);
     }
-    const page = pages.find((p) => String(p.name).toLowerCase().replace(/[^a-z0-9]/g, "").includes(PAGE_HINT.replace(/[^a-z0-9]/g, ""))) ?? (pages.length === 1 ? pages[0] : null);
-    if (!page) return reply({ error: `Found ${pages.map((p) => p.name).join(", ")}, but not the We One Aviation page.` }, 400);
+    const norm = (x: string) => String(x).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const page = page_id ? pages.find((p) => String(p.id) === String(page_id))
+      : pages.find((p) => norm(p.name).includes(norm(acct.name)) || norm(acct.name).includes(norm(p.name))) ?? (pages.length === 1 ? pages[0] : null);
+    if (!page) return reply({ error: `Choose the ${acct.name} Page.`, pages: pages.map((p) => ({ id: String(p.id), name: p.name })) }, 409);
+    const taken = ((await get("settings?select=key,value&key=like.facebook_status*")) ?? [])
+      .find((r: Record<string, any>) => r.key !== bk("facebook_status") && r.value?.state !== "not_connected" && String(r.value?.page_id ?? "") === String(page.id));
+    if (taken) return reply({ error: `The Page "${page.name}" is already connected to another account. Each account posts to its own Page only.` }, 409);
     if (Array.isArray(page.tasks) && !page.tasks.includes("CREATE_CONTENT")) return reply({ error: "Your Facebook account cannot create content on that Page. Ask a Page admin to give you full control." }, 400);
     await fb(`/${page.id}`, { fields: "id,name", access_token: page.access_token });      // the page token works
     // 3. store only the page token (server side) and the visible status
-    await upsert("secrets", { key: "facebook_page_token", value: page.access_token });
-    await upsert("settings", { key: "facebook_status", value: { state: "connected", page_id: page.id, page_name: page.name, checked_at: iso(new Date()) } });
+    await upsert("secrets", { key: bk("facebook_page_token"), value: page.access_token });
+    await upsert("settings", { key: bk("facebook_status"), value: { state: "connected", page_id: page.id, page_name: page.name, checked_at: iso(new Date()) } });
     return reply({ ok: true, page_name: page.name });
   } catch (e) {
     return reply({ error: String((e as Error).message ?? e).slice(0, 300) }, 500);

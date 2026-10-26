@@ -1,6 +1,6 @@
-// Reel Studio – finish "Connect LinkedIn": the site sends the one-time code from LinkedIn's sign-in page here.
-// This function (server side, so the Client Secret never reaches a browser) swaps it for a page token, finds the
-// We One Aviation Company Page the signed-in member administers, and stores token + page in the database.
+// Reel Studio – finish "Connect LinkedIn" for one account: the site sends the one-time code from LinkedIn's sign-in page here.
+// This function (server side, so the Client Secret never reaches a browser) swaps it for a page token, finds that account's
+// Company Page the signed-in member administers, and stores token + page under that account. One page, one account.
 // Only the studio owner may call it (checked with their own Supabase sign-in).
 
 const SB = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
@@ -35,7 +35,13 @@ Deno.serve(async (req) => {
     const auth = req.headers.get("Authorization") ?? "";
     const own = await fetch(`${SB}/rest/v1/rpc/is_owner`, { method: "POST", headers: { apikey: ANON || KEY, Authorization: auth, "Content-Type": "application/json" }, body: "{}" });
     if (!own.ok || (await own.json()) !== true) return reply({ error: "Only the studio owner can connect LinkedIn." }, 403);
-    const { code, redirect_uri } = await req.json();
+    const { code, redirect_uri, brand: brandIn } = await req.json();
+    const brand = String(brandIn ?? "weone");
+    const bk = (base: string) => (brand === "weone" ? base : `${base}@${brand}`);
+    const acct = (await rest("GET", `brands?select=id,name,links&id=eq.${encodeURIComponent(brand)}`))?.[0];
+    if (!acct) return reply({ error: "Unknown account." }, 400);
+    const vanityWanted = brand === "weone" ? PAGE : (String(acct.links?.linkedin ?? "").match(/linkedin\.com\/company\/([^/?#]+)/i)?.[1] ?? "").toLowerCase();
+    const norm = (x: string) => String(x).toLowerCase().replace(/[^a-z0-9]/g, "");
     if (!code || !redirect_uri) return reply({ error: "Missing code from LinkedIn. Start Connect LinkedIn again." }, 400);
     // 2. code -> token (Client Secret stays on the server)
     const app = (await rest("GET", "settings?select=value&key=eq.linkedin_app"))?.[0]?.value ?? {};
@@ -49,22 +55,26 @@ Deno.serve(async (req) => {
     // 3. which Company Page can this member post for?
     const acls = await li("/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED", tok);
     const orgs: string[] = (acls.elements ?? []).map((e: Record<string, string>) => e.organization ?? e.organizationTarget).filter(Boolean);
-    if (!orgs.length) return reply({ error: "This LinkedIn account is not an admin of any Company Page. Sign in with an admin of We One Aviation." }, 400);
-    let pick: { urn: string; name: string; vanity: string } | null = null;
+    if (!orgs.length) return reply({ error: `This LinkedIn account is not an admin of any Company Page. Sign in with an admin of ${acct.name}.` }, 400);
+    const cands: { urn: string; name: string; vanity: string }[] = [];
     for (const urn of orgs) {
       const o = await li(`/organizations/${urn.split(":").pop()}`, tok).catch(() => ({}));
-      const cand = { urn, name: o.localizedName ?? urn, vanity: o.vanityName ?? "" };
-      if (cand.vanity === PAGE) { pick = cand; break; }
-      pick ??= cand;
+      cands.push({ urn, name: o.localizedName ?? urn, vanity: String(o.vanityName ?? "") });
     }
+    const pick = cands.find((c) => vanityWanted && c.vanity.toLowerCase() === vanityWanted)
+      ?? cands.find((c) => norm(c.name) === norm(acct.name)) ?? cands.find((c) => norm(c.name).includes(norm(acct.name)) || norm(acct.name).includes(norm(c.name)))
+      ?? (cands.length === 1 ? cands[0] : null);
+    if (!pick) return reply({ error: `This LinkedIn account manages ${cands.map((c) => c.name).join(", ")}, but none looks like ${acct.name}. Add ${acct.name}'s LinkedIn page link in its Settings, then connect again.` }, 400);
+    const taken = ((await rest("GET", "settings?select=key,value&key=like.linkedin_status*")) ?? [])
+      .find((r: Record<string, any>) => r.key !== bk("linkedin_status") && r.value?.state !== "not_connected" && r.value?.org_urn === pick.urn);
+    if (taken) return reply({ error: `${pick.name} is already connected to another account. Each account posts to its own LinkedIn page only.` }, 409);
     // 4. store (token only server side; status visible to members)
-    await upsert("secrets", { key: "linkedin_token", value: tok });
-    await upsert("secrets", { key: "linkedin_refresh", value: tj.refresh_token ?? null });
-    const status = { state: "connected", org_urn: pick!.urn, org_name: pick!.name, vanity: pick!.vanity, scope: tj.scope ?? "",
-      expires_at: iso(new Date(Date.now() + Number(tj.expires_in ?? 5184000) * 1000)), checked_at: iso(new Date()),
-      note: pick!.vanity === PAGE ? null : `Connected to ${pick!.name}; the We One Aviation page was not found for this account.` };
-    await upsert("settings", { key: "linkedin_status", value: status });
-    return reply({ ok: true, org_name: pick!.name, vanity: pick!.vanity, expires_at: status.expires_at });
+    await upsert("secrets", { key: bk("linkedin_token"), value: tok });
+    await upsert("secrets", { key: bk("linkedin_refresh"), value: tj.refresh_token ?? null });
+    const status = { state: "connected", org_urn: pick.urn, org_name: pick.name, vanity: pick.vanity, scope: tj.scope ?? "",
+      expires_at: iso(new Date(Date.now() + Number(tj.expires_in ?? 5184000) * 1000)), checked_at: iso(new Date()), note: null };
+    await upsert("settings", { key: bk("linkedin_status"), value: status });
+    return reply({ ok: true, org_name: pick.name, vanity: pick.vanity, expires_at: status.expires_at });
   } catch (e) {
     return reply({ error: String((e as Error).message ?? e).slice(0, 300) }, 500);
   }

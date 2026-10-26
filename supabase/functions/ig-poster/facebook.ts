@@ -1,6 +1,6 @@
 // Facebook Page Reels (Graph API video_reels): start -> upload (Facebook fetches our signed file URL) -> finish(PUBLISHED)
 // -> wait until published. State lives in jobs.output.fb; each step is saved, so a lost response is checked, never repeated.
-import { type Json, now, iso, minsAgo, rest, setting, setSetting, secret, setPart } from "./db.ts";
+import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setPart, bk } from "./db.ts";
 
 const FB = Deno.env.get("FB_API") ?? "https://graph.facebook.com/v26.0";
 const RUP = Deno.env.get("FB_RUPLOAD") ?? "https://rupload.facebook.com/video-upload/v26.0";
@@ -29,8 +29,9 @@ async function fb(method: "GET" | "POST", url: string, tok: string, params: Json
   return j;
 }
 
-export function fbCaption(caption: string): string {
-  return caption.replace(/^.*Follow\s+@\S+.*$/gmi, "Follow We One Aviation for daily aviation facts.").replace(/@(\w+)/g, "$1").slice(0, 5000);
+export function fbCaption(caption: string, name = "We One Aviation"): string {
+  const follow = name === "We One Aviation" ? "Follow We One Aviation for daily aviation facts." : `Follow ${name}.`;
+  return caption.replace(/^.*Follow\s+@\S+.*$/gmi, follow).replace(/@(\w+)/g, "$1").slice(0, 5000);
 }
 async function sign(path: string) {
   const r = await fetch(`${SB}/storage/v1/object/sign/reels/${path}`, { method: "POST", headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn: 7200 }) });
@@ -39,7 +40,7 @@ async function sign(path: string) {
   return u.startsWith("http") ? u : `${SB}/storage/v1${u}`;
 }
 
-async function step(job: Json, tok: string, page: string): Promise<string> {
+async function step(job: Json, tok: string, page: string, b: Brand): Promise<string> {
   const o = job.output ?? {}; let g: Json = { ...(o.fb ?? {}) };
   if (g.state === "scheduled") {
     if (!o.ig_caption && minsAgo(o.decided_at) < 15) return "waiting for the caption";
@@ -64,7 +65,7 @@ async function step(job: Json, tok: string, page: string): Promise<string> {
     }
     g = { ...g, state: "processing", finish_sent: true, finished_at: iso(now()) }; await setPart(job, "fb", g);
     await fb("POST", `${FB}/${page}/video_reels`, tok, { video_id: g.video_id, upload_phase: "finish", video_state: "PUBLISHED",
-      description: fbCaption(o.ig_caption ?? String(o.title ?? "")), title: String(o.title ?? "").slice(0, 250) });
+      description: fbCaption(o.ig_caption ?? String(o.title ?? ""), b.name), title: String(o.title ?? "").slice(0, 250) });
     return "uploaded; publishing";
   }
   if (g.state === "processing") {
@@ -79,7 +80,7 @@ async function step(job: Json, tok: string, page: string): Promise<string> {
     }
     if (!g.finish_sent) {
       g = { ...g, finish_sent: true }; await setPart(job, "fb", g);
-      await fb("POST", `${FB}/${page}/video_reels`, tok, { video_id: g.video_id, upload_phase: "finish", video_state: "PUBLISHED", description: fbCaption(o.ig_caption ?? "") });
+      await fb("POST", `${FB}/${page}/video_reels`, tok, { video_id: g.video_id, upload_phase: "finish", video_state: "PUBLISHED", description: fbCaption(o.ig_caption ?? "", b.name) });
     }
     if (minsAgo(g.finished_at) > 30) throw new FBError("Facebook took longer than 30 minutes to publish the reel", true, false, true);
     return `processing (${vs ?? "?"})`;
@@ -87,23 +88,23 @@ async function step(job: Json, tok: string, page: string): Promise<string> {
   return "nothing to do";
 }
 
-async function fail(job: Json, e: FBError) {
+async function fail(job: Json, e: FBError, brand: string) {
   const g: Json = { ...(job.output?.fb ?? {}) }; const msg = e.message.slice(0, 300); const att = Number(g.attempts ?? 1);
   if (e.restart) for (const k of ["video_id", "upload_sent", "finish_sent", "finished_at"]) delete g[k];
   if (e.auth) {
-    const st = await setting("facebook_status");
-    await setSetting("facebook_status", { ...st, state: "expired", note: "Facebook connection stopped working (password change or removed access). Connect Facebook again in Library." });
+    const st = await setting(bk("facebook_status", brand));
+    await setSetting(bk("facebook_status", brand), { ...st, state: "expired", note: "Facebook connection stopped working (password change or removed access). Connect Facebook again in this account's Settings." });
     Object.assign(g, { state: "scheduled", at: iso(new Date(Date.now() + 10 * 60e3)), attempts: Math.max(0, att - 1), error: "Waiting for Facebook to be connected again." });
   } else if (att >= MAX_ATTEMPTS || (!e.transient && att >= 2)) Object.assign(g, { state: "failed", error: `Posting failed: ${msg}` });
   else Object.assign(g, { state: "scheduled", at: iso(new Date(Date.now() + BACKOFF_MIN[Math.min(BACKOFF_MIN.length - 1, att - 1)] * 60e3)), error: msg });
   await setPart(job, "fb", g);
 }
 
-export async function fbTick(): Promise<Json> {
-  const reels: Json[] = await rest("GET", "jobs?select=id,output&kind=eq.reel&brand=eq.weone&status=eq.done&output->fb->>state=in.(scheduled,uploading,processing)&order=updated_at.asc&limit=20");
+async function fbBrand(b: Brand): Promise<Json> {
+  const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&brand=eq.${b.id}&status=eq.done&output->fb->>state=in.(scheduled,uploading,processing)&order=updated_at.asc&limit=20`);
   const due = reels.filter((r) => r.output.fb.state !== "scheduled" || Date.parse(r.output.fb.at ?? 0) <= Date.now());
   if (!due.length) return { due: 0 };
-  const st = await setting("facebook_status"); const [tok] = await secret("facebook_page_token");
+  const st = await setting(bk("facebook_status", b.id)); const [tok] = await secret(bk("facebook_page_token", b.id));
   if (!tok || !st.page_id || st.state === "not_connected") {
     for (const r of due) if (r.output.fb.state === "scheduled" && !r.output.fb.error)
       await setPart(r, "fb", { ...r.output.fb, error: "Waiting for Facebook to be connected." }, "scheduled");
@@ -111,8 +112,13 @@ export async function fbTick(): Promise<Json> {
   }
   const log: Json = {};
   for (const r of due.slice(0, 3)) {
-    try { log[r.id] = await step(r, tok, st.page_id); }
-    catch (e) { const err = e instanceof FBError ? e : new FBError(String((e as Error).message ?? e)); await fail(r, err); log[r.id] = `error: ${err.message}`; }
+    try { log[r.id] = await step(r, tok, st.page_id, b); }
+    catch (e) { const err = e instanceof FBError ? e : new FBError(String((e as Error).message ?? e)); await fail(r, err, b.id); log[r.id] = `error: ${err.message}`; }
   }
   return { connected: true, due: due.length, log };
+}
+export async function fbTick(list: Brand[]): Promise<Json> {
+  const res: Json = {};
+  for (const b of list) { try { const r = await fbBrand(b); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }
+  return res;
 }

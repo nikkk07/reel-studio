@@ -468,8 +468,8 @@ main, .panel, .topic, .strip, dialog { overflow-wrap: anywhere; }
 .fld input { font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink); }
 
 /* Agents */
-.agent-intel .ai-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.agent-intel .ai-head > div { flex: 1 1 220px; }
+.ai-head, .agent-intel .ai-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.ai-head > div, .agent-intel .ai-head > div { flex: 1 1 220px; }
 .agent-intel h3, .team h3 { margin: 0; }
 .ai-sum p { margin: 12px 0 8px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -491,3 +491,29 @@ main, .panel, .topic, .strip, dialog { overflow-wrap: anywhere; }
 /* lanes on topic ideas */
 .lane { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-bottom: 4px; }
 .lane.core { background: #E3ECFA; color: #1D4E9E; } .lane.trending { background: #FDEBDD; color: #A4470F; }
+
+/* ---------------------------------------------------------------- settings: studio + account */
+.set-sec { margin-bottom: 30px; }
+.set-sec > h2 { font-size: 24px; margin-bottom: 2px; }
+.set-sec > p { margin: 0 0 12px; max-width: 760px; }
+.svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-top: 12px; }
+.svc { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-lg); padding: 16px; display: grid; gap: 8px; align-content: start; position: relative; overflow: hidden; }
+.svc::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--rule); }
+.svc.ok::before { background: #12A150; } .svc.warn::before { background: #E8A100; } .svc.wait::before { background: #7A8899; }
+.svc p { margin: 0; }
+.svc-head { display: flex; gap: 12px; align-items: center; }
+.svc-head h3 { font-size: 18px; }
+.svc-logo { flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--sunk); display: grid; place-items: center; padding: 8px; color: var(--ink); }
+.svc-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.svc-logo.wide { width: 104px; padding: 10px 12px; background: #fff; border: 1px solid var(--rule); }
+.svc-ico { width: 44px; height: 44px; flex: none; }
+.svc input { font: inherit; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink); width: 100%; margin-top: 4px; }
+.svc-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.svc code { font-size: 12.5px; background: var(--sunk); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+.svc .slot-edit { margin-top: 4px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 14px; margin-top: 14px; }
+.acct-form .svc-btns .small { margin: 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+button.minis.linkless { appearance: none; border: 0; background: none; padding: 2px; cursor: pointer; border-radius: 8px; }
+button.minis.linkless:hover { background: var(--sunk); }
+@media (max-width: 720px) { .svc-grid, .form-grid { grid-template-columns: 1fr; } .svc-logo.wide { width: 92px; } }

@@ -52,6 +52,7 @@ const ICON = {
   plane: "M21 11.2 13.6 10 9.8 3H8.2l1.6 7.1-4.7.4-1.7-2.3H2.2l1 3.8-1 3.8h1.2l1.7-2.3 4.7.4L8.2 21h1.6l3.8-7 7.4-1.2c.6-.1 1-.4 1-.8s-.4-.7-1-.8Z",
   create: "M12 4v16M4 12h16", route: "M5 18c3-9 11-3 14-12M5 18a2 2 0 1 0 0 .1M19 6a2 2 0 1 0 0 .1",
   library: "M4 4h6v7H4zM14 4h6v4h-6zM14 12h6v8h-6zM4 15h6v5H4z", agents: "M12 3v3M8.5 8h7a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3zM9.5 13h.01M14.5 13h.01M3 13h2.5M18.5 13H21", check: "M5 12.5l4.5 4.5L19 7.5", x: "M6 6l12 12M18 6 6 18",
+  gear: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
   play: "M8 5v14l11-7z", down: "M12 4v12m0 0-5-5m5 5 5-5M5 20h14", bell: "M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20a2 2 0 0 0 4 0",
 };
 function icon(name, size = 18, fill = false) {
@@ -108,6 +109,15 @@ async function ensureLogo(b) {
   if (data?.signedUrl) document.querySelectorAll(`img[data-logo="${b.id}"]`).forEach((im) => { im.src = data.signedUrl; });
 }
 const brandLogo = (b, size = 40) => { ensureLogo(b); return h("span", { cls: "blogo", style: `width:${size}px;height:${size}px` }, h("img", { src: logoSrc(b), alt: "", loading: "lazy", "data-logo": b.id })); };
+// each account's own connection status: We One keeps the original keys, other accounts use "<key>@<account>"
+const bkey = (base, b = S.brand) => (!b || b === "weone" ? base : `${base}@${b}`);
+const stOf = (base, b = S.brand) => S.settings?.[bkey(base, b)] || { state: "not_connected" };
+const PST = { ig: "instagram_status", fb: "facebook_status", li: "linkedin_status" };
+const platState = (k, b = S.brand) => stOf(PST[k], b).state || "not_connected";
+const platSet = (k, b = S.brand) => !["not_connected", "duplicate"].includes(platState(k, b));
+const anyPosting = (b = S.brand) => b === "weone" || ["ig", "fb", "li"].some((k) => platSet(k, b));
+const SVC_IMG = { supabase: "icons/services/supabase.png", vercel: "icons/services/vercel.svg", github: "icons/services/github.svg", apple: "icons/services/apple.png",
+  claude: "icons/services/claude.svg", meta: "icons/services/meta.svg", pexels: "icons/services/pexels.png", pixabay: "icons/services/pixabay.png" };
 const PLAT_IMG = { ig: "icons/platforms/instagram.png", fb: "icons/platforms/facebook.png", li: "icons/platforms/linkedin.png", web: "icons/platforms/website.png" };
 async function getJob(id) { const { data, error } = await sb.from("jobs").select("*").eq("id", id).single(); if (error) throw error; return data; }
 async function events(id, n = 10) { const { data } = await sb.from("job_events").select("id,ts,level,message").eq("job_id", id).order("id", { ascending: false }).limit(n); return data || []; }
@@ -210,7 +220,9 @@ function shell(content, { nav = true } = {}) {
   const reviewN = S.reels.filter((j) => j.status === "review" && mine(j)).length;
   const activeN = S.reels.filter((j) => ACTIVE.includes(j.status) && mine(j)).length;
   const badgeN = reviewN || activeN;
-  const items = [["home", "Dashboard", "home"], ["create", "Create", "create"], ["production", "Production", "route"], ["library", "Library", "library"], ["agents", "Agents", "agents"]];
+  const studioLevel = STUDIO_ROUTES.includes(S.route) || !S.session;
+  const items = studioLevel ? [["home", "Dashboard", "home"], ["settings", "Settings", "gear"]]
+    : [["create", "Create", "create"], ["production", "Production", "route"], ["library", "Library", "library"], ["agents", "Agents", "agents"], ["account", "Settings", "gear"]];
   const navBtn = ([k, label, ic], mobile) => h("button", { "aria-current": S.route === k ? "page" : null, onclick: () => go(k) },
     mobile ? icon(ic, 22) : null, label, k === "production" && badgeN ? h("span", { cls: "badge", "aria-label": `${badgeN} reels` }, badgeN) : null);
   const lamps = S.session ? h("button", { cls: "status", onclick: () => go("check"), title: "Run the pre-flight check" },
@@ -218,14 +230,14 @@ function shell(content, { nav = true } = {}) {
     h("span", {}, h("i", { cls: "lamp " + (!macAlive() ? "" : S.worker?.claude_ok ? "ok" : "bad") }), h("span", { cls: "label" }, "Claude"))) : null;
   const initials = (S.session?.user?.email || "?").slice(0, 2).toUpperCase();
   const top = h("header", { cls: "top" }, h("div", { cls: "top-in" },
-    S.route === "home" || !S.session
+    studioLevel
       ? h("a", { cls: "brand plain", href: "#/home", "aria-label": "Reel Studio dashboard" }, h("div", {}, h("b", {}, "Reel Studio"), h("span", {}, "All accounts")))
       : h("button", { cls: "brand acct", onclick: () => go("home"), title: "Switch account", "aria-label": `${brandOf().name}. Switch account` }, brandLogo(brandOf(), 36),
           h("div", {}, h("b", {}, brandOf().name), h("span", {}, "Switch account ▾"))),
     nav && S.session ? h("nav", { cls: "nav", "aria-label": "Main" }, items.map((it) => navBtn(it, false))) : null,
     h("div", { cls: "spacer" }), lamps,
     S.session ? h("button", { cls: "who", "aria-label": "Account menu", onclick: toggleMenu }, initials) : null));
-  const tab = nav && S.session ? h("nav", { cls: "tabbar", "aria-label": "Main" }, items.map((it) => navBtn(it, true))) : null;
+  const tab = nav && S.session ? h("nav", { cls: "tabbar", "aria-label": "Main", style: `grid-template-columns:repeat(${items.length},1fr)` }, items.map((it) => navBtn(it, true))) : null;
   $app.replaceChildren(top, h("main", { id: "main" }, content), tab || "");
   updateTitle();
 }
@@ -233,6 +245,8 @@ function toggleMenu(e) {
   e.stopPropagation(); const old = document.querySelector(".menu"); if (old) { old.remove(); return; }
   const m = h("div", { cls: "menu", role: "menu" },
     h("div", { cls: "who-line" }, S.session.user.email),
+    h("button", { cls: "btn quiet", onclick: () => go("settings") }, icon("gear"), "Studio settings"),
+    !STUDIO_ROUTES.includes(S.route) ? h("button", { cls: "btn quiet", onclick: () => go("account") }, `${brandOf().name} settings`) : null,
     h("button", { cls: "btn quiet", onclick: () => go("check") }, "Run pre-flight check"),
     "Notification" in window && Notification.permission === "default" ? h("button", { cls: "btn quiet", onclick: async () => { await askAlerts(); m.remove(); } }, icon("bell"), "Turn on ready alerts") : null,
     S.installEvt ? h("button", { cls: "btn quiet", onclick: async () => { S.installEvt.prompt(); S.installEvt = null; m.remove(); } }, "Install as app") : null,
@@ -242,6 +256,7 @@ function toggleMenu(e) {
 }
 
 // ---------------------------------------------------------------- router
+const STUDIO_ROUTES = ["home", "settings"];
 function go(route, focusId) {
   if (focusId) { S.open[focusId] = true; }
   if (location.hash !== `#/${route}`) location.hash = `#/${route}`; else render();
@@ -253,9 +268,10 @@ function render() {
   const r = (location.hash.replace(/^#\/?/, "") || "home").split("/")[0];
   // the pre-flight page shows once per session; later it only returns if the Mac or Claude actually reports a problem
   const fresh = Date.now() - S.checkedAt < 30 * 60e3 || (S.checkedAt > 0 && macAlive() && S.worker?.claude_ok !== false);
-  if (r === "check" || !fresh) return viewPreflight(r === "check" ? "home" : (r || "home"));
-  S.route = ["home", "create", "production", "library", "agents"].includes(r) ? r : "home";
-  ({ home: viewDashboard, create: viewCreate, production: viewProduction, library: viewLibrary, agents: viewAgents })[S.route]();
+  // only starting a reel needs the Mac: every other page (accounts, settings, review, library) works with the Mac and Claude offline
+  if (r === "check" || (!fresh && r === "create")) return viewPreflight(r === "check" ? "home" : r);
+  S.route = ["home", "settings", "create", "production", "library", "agents", "account"].includes(r) ? r : "home";
+  ({ home: viewDashboard, settings: viewSettings, create: viewCreate, production: viewProduction, library: viewLibrary, agents: viewAgents, account: viewAccount })[S.route]();
 }
 
 // ---------------------------------------------------------------- login
@@ -392,12 +408,10 @@ async function viewDashboard() {
       h("span", { cls: "pill" }, `${postedWeek(all)} posted this week`),
       apSet.on ? h("span", { cls: "pill" }, `Autopilot daily ${slotLabel(apSet.time || "13:30")}`) : null].filter(Boolean));
     const plat = (b) => {
-      const ig = b.id === "weone" ? (S.settings?.instagram_status?.state || "not_connected") : "not_connected";
-      const fb = b.id === "weone" ? (S.settings?.facebook_status?.state || "not_connected") : "not_connected";
-      const li = b.id === "weone" ? (S.settings?.linkedin_status?.state || "not_connected") : "not_connected";
-      const dot = (k, state, label) => h("span", { cls: `mini ${k} ${state === "connected" ? "ok" : state === "not_connected" ? "no" : "warn"}`, title: `${label}: ${state.replace("_", " ")}`, role: "img", "aria-label": `${label}: ${state.replace("_", " ")}` },
-        h("img", { src: PLAT_IMG[k], alt: "", width: 24, height: 24 }));
-      return h("span", { cls: "minis" }, dot("ig", ig, "Instagram"), dot("fb", fb, "Facebook"), dot("li", li, "LinkedIn"));
+      const dot = (k, label) => { const state = platState(k, b.id);
+        return h("span", { cls: `mini ${k} ${state === "connected" ? "ok" : state === "not_connected" ? "no" : "warn"}`, title: `${label}: ${state.replace("_", " ")}`, role: "img", "aria-label": `${label}: ${state.replace("_", " ")}` },
+          h("img", { src: PLAT_IMG[k], alt: "", width: 24, height: 24 })); };
+      return h("button", { cls: "minis linkless", onclick: () => { setBrand(b.id); go("account"); }, "aria-label": `${b.name} connections` }, dot("ig", "Instagram"), dot("fb", "Facebook"), dot("li", "LinkedIn"));
     };
     grid.replaceChildren(...[...(S.brands || BRANDS_FALLBACK).map((b) => {
       const list = st(b.id); const live = b.status === "live";
@@ -412,7 +426,7 @@ async function viewDashboard() {
              : h("p", { cls: "acct-next small" }, "Next: content plan, voice and watermark, then its Instagram."),
         h("div", { cls: "acct-foot" }, plat(b),
           safeUrl(b.website) ? h("a", { cls: "acct-web", href: b.website, target: "_blank", rel: "noopener noreferrer" }, h("img", { src: PLAT_IMG.web, alt: "", width: 16, height: 16 }), host(b.website)) : null,
-          h("button", { cls: "btn quiet", onclick: () => assetsDialog(b, paint), "aria-label": `Assets of ${b.name}` }, "Assets"),
+          h("button", { cls: "btn quiet", onclick: () => { setBrand(b.id); go("account"); }, "aria-label": `Settings of ${b.name}` }, icon("gear", 16), "Settings"),
           h("button", { cls: "btn " + (live ? "primary" : "quiet"), onclick: open }, "Open")));
     }), h("button", { cls: "acct add-acct", onclick: () => addAccountDialog(paint), "aria-label": "Add an account" },
       h("span", { cls: "add-plus", "aria-hidden": "true" }, "+"), h("b", {}, "Add account"),
@@ -828,7 +842,7 @@ async function strip(j) {
     h("div", { cls: "stage-detail" }, h("div", {}, h("p", { cls: "small muted", style: "margin:0 0 8px" }, STAGE_HELP[sel]), graph(j, sel)), await liveLog(j)));
   body.append(actions(j)); el.append(body); return el;
 }
-const ownPosting = (j) => ((j && j.brand) || S.brand) === "weone";          // only We One has its own connected platforms today
+const ownPosting = (j) => anyPosting((j && j.brand) || S.brand);          // only an account's own connected platforms, never another's
 const autoOn = (j) => ownPosting(j) && S.settings?.post_schedule?.auto !== false;
 const nightIST = () => { const d = new Date(Date.now() + 330 * 60e3); const m = d.getUTCHours() * 60 + d.getUTCMinutes(); return m < 450 || m > 1380; };   // 23:00-07:30 India time
 const nightWait = (j) => j.input?.autopilot && nightIST();
@@ -836,7 +850,7 @@ function autoPostLine(j) {
   const d = j.output?.review_deadline;
   if (j.output?.autopilot_hold) return "Ready. Autopilot held it back: approve it to post.";
   if (autoOn(j) && nightWait(j)) return "Ready. Autopilot posts it at 7:30 AM (never at night) unless you act.";
-  if (!ownPosting(j)) return `Ready for your review. It goes to the Library only: ${brandOf(j.brand).name} has no Instagram connected yet.`;
+  if (!ownPosting(j)) return `Ready for your review. It goes to the Library only: ${brandOf(j.brand).name} has no Instagram, Facebook or LinkedIn connected yet.`;
   if (!autoOn(j) || !d) return "Ready for your review";
   if (j.output?.hold) return "Ready for review. Auto-post paused while you check.";
   const left = (Date.parse(d) - Date.now()) / 1000;
@@ -887,7 +901,7 @@ async function reviewView(j) {
     oninput: (e) => { S.drafts[j.id] = e.target.value; } });
   notes.value = S.drafts[j.id] || "";
   const changeBox = h("div", { style: openBox ? "" : "display:none" }, notes);
-  const approve = h("button", { cls: "btn go", disabled: !!busy, onclick: () => act(j, "approve", () => rpc("set_review_decision", { p_job: j.id, p_decision: "approve", p_notes: null }), (row) => row?.output?.ig?.state ? "Approved. Posting to Instagram now; the link appears in Library." : ownPosting(j) ? "Approved. It's in the Library." : `Approved. It's in ${brandOf(j.brand).name}'s Library (nothing was posted).`) },
+  const approve = h("button", { cls: "btn go", disabled: !!busy, onclick: () => act(j, "approve", () => rpc("set_review_decision", { p_job: j.id, p_decision: "approve", p_notes: null }), (row) => row?.output?.ig?.state ? "Approved. Posting to its connected pages now; the links appear in Library." : ownPosting(j) ? "Approved. It's in the Library." : `Approved. It's in ${brandOf(j.brand).name}'s Library (nothing was posted).`) },
     icon("check"), busy === "approve" ? "Approving…" : autoOn(j) ? "Approve & post now" : "Approve");
   const change = h("button", { cls: "btn", disabled: !!busy, onclick: () => {
     if (!S.changeOpen[j.id]) { S.changeOpen[j.id] = true; if (deadline && !o.hold) rpc("hold_auto_post", { p_job: j.id, p_hold: true }).then(patchLocal).catch(() => {});   // writing changes pauses auto-post
@@ -996,7 +1010,7 @@ function postBadge(j, p) {
 function postActions(j, p, refresh) {
   const st = j.output?.[p]?.state || "off";
   if (["posted", "posting", "uploading", "processing"].includes(st)) return null;
-  if (!ownPosting(j)) return h("p", { cls: "ig-note" }, `Connect ${brandOf(j.brand).name}'s own ${PLAT[p]} to post. Reels never go to another account.`);
+  if (!(platSet(p, j.brand) || (p === "ig" && (j.brand || "weone") === "weone"))) return h("p", { cls: "ig-note" }, `Connect ${brandOf(j.brand).name}'s own ${PLAT[p]} in Settings to post. Reels never go to another account.`);
   const go_ = (action, label, cls = "btn quiet") => h("button", { cls, onclick: async (e) => {
     e.currentTarget.disabled = true;
     try { const row = await rpc("set_post", { p_job: j.id, p_platform: p, p_action: action }); j.output = row.output;
@@ -1007,154 +1021,292 @@ function postActions(j, p, refresh) {
   return h("div", { cls: "ig-acts" }, st === "failed" ? go_("now", `Retry ${PLAT[p]}`, "btn primary") : go_("now", `Post to ${PLAT[p]}`),
     ["scheduled", "queued"].includes(st) ? go_("off", "Don't post") : null);
 }
-const liSetUp = () => (S.settings?.linkedin_status?.state || "not_connected") !== "not_connected";
+// ---------------------------------------------------------------- connections: each account's own Instagram, Facebook, LinkedIn
+// Tokens go in and never come out: the site only ever sees status, the connected page's name and the last 4 characters.
 const LI_SCOPES = "w_organization_social r_organization_social rw_organization_admin";
 const LI_REDIRECT = location.origin + "/";
-function liSignIn(clientId) {
-  const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-  try { sessionStorage.setItem("li_state", state); } catch { /* */ }
+const armed = (e, label, fn) => { const b = e.currentTarget; if (!b._armed) { b._armed = true; b.textContent = label; setTimeout(() => { b._armed = false; }, 6000); return; } fn(); };
+function liSignIn(clientId, b = S.brand) {
+  const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), (x) => x.toString(16).padStart(2, "0")).join("");
+  try { sessionStorage.setItem("li_state", state); sessionStorage.setItem("li_brand", b); } catch { /* */ }
   location.href = "https://www.linkedin.com/oauth/v2/authorization?" + new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: LI_REDIRECT, state, scope: LI_SCOPES });
 }
-function liPanel(refresh) {
-  const st = S.settings?.linkedin_status || { state: "not_connected" }; const app = S.settings?.linkedin_app || {};
-  const days = st.expires_at ? Math.floor((Date.parse(st.expires_at) - Date.now()) / 86400e3) : null;
-  const lamp = st.state === "connected" ? (days != null && days < 7 ? "wait" : "ok") : st.state === "not_connected" ? "" : "bad";
-  const text = st.state === "connected" ? `Posting to ${st.org_name} on LinkedIn` : st.state === "not_connected" ? "LinkedIn Company Page is not connected yet" : "LinkedIn sign-in expired";
-  return h("section", { cls: "panel igp", "aria-label": "LinkedIn" },
-    h("div", { cls: "igp-head" }, h("div", {}, h("h3", {}, h("i", { cls: "lamp " + lamp }), text),
-      st.note ? h("p", { cls: "small", style: "margin-top:4px;color:#7D1C26" }, st.note) : null,
-      st.state === "connected" && days != null ? h("p", { cls: "tiny " + (days < 7 ? "" : "faint"), style: "margin-top:2px" + (days < 7 ? ";color:#6E4300;font-weight:600" : "") },
-        `LinkedIn asks for a fresh sign-in every 60 days: reconnect by ${dateShort(st.expires_at)}${days < 7 ? " (soon)" : ""}.`) : null),
-      h("div", { cls: "igp-btns" },
-        app.client_id && st.state !== "not_connected" ? h("button", { cls: st.state === "connected" && (days ?? 99) >= 7 ? "btn quiet" : "btn primary", onclick: () => liSignIn(app.client_id) }, "Reconnect LinkedIn") : null,
-        h("button", { cls: st.state === "not_connected" ? "btn primary" : "btn quiet", onclick: () => liDialog(refresh) }, st.state === "not_connected" ? "Connect LinkedIn" : "App settings"),
-        st.state !== "not_connected" ? h("button", { cls: "btn quiet danger", onclick: async (e) => { if (!e.currentTarget._armed) { e.currentTarget._armed = true; e.currentTarget.textContent = "Tap again to disconnect"; return; }
-          try { await rpc("disconnect_linkedin", {}); await loadSettings(); toast("LinkedIn disconnected. Nothing will be posted there."); } catch (err) { toast(errText(err), { err: true }); } refresh(); } }, "Disconnect") : null)),
-    st.state === "connected" ? h("p", { cls: "small muted", style: "margin-top:6px" }, "Every reel that goes to Instagram is also posted to the Company Page, with the same caption.") : null);
+function connCard(k, b, refresh) {
+  const st = stOf(PST[k], b.id); const state = st.state || "not_connected"; const app = S.settings?.linkedin_app || {};
+  const days = k === "li" && st.expires_at ? Math.floor((Date.parse(st.expires_at) - Date.now()) / 86400e3) : null;
+  const kind = state === "connected" ? (days != null && days < 7 ? "warn" : "ok") : state === "not_connected" ? "no" : state === "checking" ? "wait" : "warn";
+  const who = state === "connected" ? (k === "ig" ? `@${st.username}` : k === "fb" ? st.page_name : st.org_name) : "";
+  const word = { ok: `Connected${who ? ": " + who : ""}`, no: "Not connected", wait: "Checking with Instagram…", warn: state === "duplicate" ? "Belongs to another account" : state === "expired" ? "Connection expired" : days != null && days < 7 ? `Reconnect by ${dateShort(st.expires_at)}` : "Needs attention" }[kind];
+  const owner = S.owner;
+  const connect = () => (k === "ig" ? igDialog(b, refresh) : k === "fb" ? fbDialog(b, refresh) : liDialog(b, refresh));
+  const disconnect = (e) => armed(e, "Tap again to disconnect", async () => {
+    try { await rpc({ ig: "disconnect_instagram", fb: "disconnect_facebook", li: "disconnect_linkedin" }[k], { p_brand: b.id }); await loadSettings(); toast(`${PLAT[k]} disconnected from ${b.name}. Nothing will be posted there.`); }
+    catch (err) { toast(errText(err), { err: true }); } refresh(); });
+  const note = st.note && state !== "connected" ? st.note
+    : k === "li" && state === "connected" && days != null ? `LinkedIn asks for a fresh sign-in every 60 days: by ${dateShort(st.expires_at)}.`
+    : k === "fb" && state === "connected" ? "Page connections do not expire." : k === "ig" && state === "connected" ? "Renews itself automatically." : null;
+  return h("article", { cls: `svc conn ${kind}` },
+    h("div", { cls: "svc-head" }, h("span", { cls: "plat-tile svc-ico" }, h("img", { src: PLAT_IMG[k], alt: "" }), h("span", { cls: `plat-badge ${kind}`, "aria-hidden": "true" }, kind === "ok" ? "✓" : kind === "no" ? "✕" : kind === "wait" ? "…" : "!")),
+      h("div", {}, h("h3", {}, PLAT[k]), h("p", { cls: `small plat-state ${kind}` }, word))),
+    note ? h("p", { cls: "small muted" }, note) : null,
+    owner ? h("div", { cls: "svc-btns" },
+      k === "li" && app.client_id && state !== "not_connected" ? h("button", { cls: kind === "ok" ? "btn quiet" : "btn primary", onclick: () => liSignIn(app.client_id, b.id) }, "Reconnect") : null,
+      !(k === "li" && app.client_id && state !== "not_connected") ? h("button", { cls: kind === "ok" ? "btn quiet" : "btn primary", onclick: connect }, state === "not_connected" ? `Connect ${PLAT[k]}` : "Reconnect") : null,
+      state !== "not_connected" ? h("button", { cls: "btn quiet danger", onclick: disconnect }, "Disconnect") : null)
+      : h("p", { cls: "tiny faint" }, "Only the studio owner can connect or disconnect."));
 }
-function liDialog(refresh) {
-  const app = S.settings?.linkedin_app || {};
-  const cid = h("input", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "Client ID", value: app.client_id || "", "aria-label": "LinkedIn Client ID" });
-  const sec = h("input", { type: "password", autocomplete: "off", spellcheck: "false", placeholder: app.client_id ? "Client Secret (leave empty to keep the saved one)" : "Client Secret", "aria-label": "LinkedIn Client Secret", style: "margin-top:8px" });
-  const msg = h("p", { cls: "small", role: "status", style: "min-height:20px;margin-top:8px" });
-  const go_ = h("button", { cls: "btn primary", onclick: async () => {
-    if (!cid.value.trim()) { cid.focus(); return; }
-    go_.disabled = true; msg.textContent = "Saving…";
-    try {
-      if (sec.value.trim() || !app.client_id || cid.value.trim() !== app.client_id) {
-        if (!sec.value.trim()) { msg.textContent = "Paste the Client Secret too."; go_.disabled = false; sec.focus(); return; }
-        await rpc("set_linkedin_app", { p_client_id: cid.value.trim(), p_client_secret: sec.value.trim() }); sec.value = "";
-      }
-      msg.textContent = "Opening LinkedIn…"; liSignIn(cid.value.trim());
-    } catch (e) { msg.textContent = errText(e); go_.disabled = false; }
-  } }, "Save and sign in with LinkedIn");
-  const steps = [
-    ["Create a new app", "linkedin.com/developers/apps → Create app → LinkedIn Page: We One Aviation. It must be a new app: LinkedIn only gives page posting to an app with no other products (your current one has Share on LinkedIn)."],
-    ["Request page posting", "Products → Community Management API → Request access. Use your business email, the company's legal name and this privacy policy: " + location.origin + "/privacy. LinkedIn reviews it and emails you."],
-    ["Add the return address", "Auth tab → Authorized redirect URLs → add " + LI_REDIRECT],
-    ["Connect", "After approval, paste the new app's Client ID and Client Secret here and sign in as an admin of the We One Aviation page. The secret stays on the server."]];
-  const d = h("dialog", { "aria-label": "Connect LinkedIn", cls: "connect" }, h("div", { style: "padding:20px 20px 4px" },
-    h("h2", { style: "font-size:22px" }, "Connect the LinkedIn Company Page"),
-    h("p", { cls: "small muted", style: "margin:6px 0 12px" }, "Free, official LinkedIn API. Reels then post to the page as We One Aviation."),
-    h("ol", { cls: "steps" }, steps.map(([t, x]) => h("li", {}, h("b", {}, t), h("span", {}, x)))), cid, sec, msg),
+function stepsDlg(label, title, sub, steps, fields, msg, go_) {
+  const d = h("dialog", { "aria-label": label, cls: "connect" }, h("div", { style: "padding:20px 20px 4px" },
+    h("h2", { style: "font-size:22px" }, title), h("p", { cls: "small muted", style: "margin:6px 0 12px" }, sub),
+    h("ol", { cls: "steps" }, steps.map(([t, x]) => h("li", {}, h("b", {}, t), h("span", {}, x)))), fields, msg),
     h("div", { cls: "dlg-foot" }, h("button", { cls: "btn quiet", onclick: () => d.close() }, "Close"), go_));
-  d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal(); (app.client_id ? sec : cid).focus();
+  d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal(); return d;
 }
-const fbSetUp = () => (S.settings?.facebook_status?.state || "not_connected") !== "not_connected";
-function fbPanel(refresh) {
-  const st = S.settings?.facebook_status || { state: "not_connected" };
-  const lamp = st.state === "connected" ? "ok" : st.state === "not_connected" ? "" : "bad";
-  const text = st.state === "connected" ? `Posting to ${st.page_name} on Facebook` : st.state === "not_connected" ? "Facebook Page is not connected yet" : "Facebook connection stopped working";
-  return h("section", { cls: "panel igp", "aria-label": "Facebook" },
-    h("div", { cls: "igp-head" }, h("div", {}, h("h3", {}, h("i", { cls: "lamp " + lamp }), text),
-      st.note && st.state !== "connected" ? h("p", { cls: "small", style: "margin-top:4px;color:#7D1C26" }, st.note) : null,
-      st.state === "connected" ? h("p", { cls: "tiny faint", style: "margin-top:2px" }, "Page connections do not expire; reconnect only if you change your Facebook password or remove access.") : null),
-      h("div", { cls: "igp-btns" },
-        h("button", { cls: st.state === "connected" ? "btn quiet" : "btn primary", onclick: () => fbDialog(refresh) }, st.state === "not_connected" ? "Connect Facebook" : "Reconnect"),
-        st.state !== "not_connected" ? h("button", { cls: "btn quiet danger", onclick: async (e) => { if (!e.currentTarget._armed) { e.currentTarget._armed = true; e.currentTarget.textContent = "Tap again to disconnect"; return; }
-          try { await rpc("disconnect_facebook", {}); await loadSettings(); toast("Facebook disconnected. Nothing will be posted there."); } catch (err) { toast(errText(err), { err: true }); } refresh(); } }, "Disconnect") : null)));
+const secretInput = (ph, label) => h("input", { type: "password", autocomplete: "off", spellcheck: "false", placeholder: ph, "aria-label": label || ph, style: "margin-top:8px" });
+const statusMsg = () => h("p", { cls: "small", role: "status", style: "min-height:20px;margin-top:8px" });
+function igDialog(b, refresh) {
+  const tok = secretInput("Paste the access token", "Instagram access token"); const msg = statusMsg();
+  const SK = bkey("instagram_status", b.id);
+  const save = h("button", { cls: "btn primary", onclick: async () => {
+    if (!tok.value.trim()) { tok.focus(); return; }
+    save.disabled = true; msg.textContent = "Saving…";
+    try {
+      await rpc("set_instagram_token", { p_token: tok.value.trim(), p_brand: b.id }); tok.value = ""; msg.textContent = "Saved. Checking it with Instagram (in the cloud, about a minute)…";
+      for (let i = 0; i < 40; i++) { await sleep(3000); await loadSettings(); const st = S.settings[SK] || {};
+        if (st.state === "connected") { msg.textContent = `Connected as @${st.username}.`; toast(`${b.name}: Instagram connected as @${st.username}.`); await sleep(900); d.close(); refresh(); return; }
+        if (["expired", "error", "duplicate"].includes(st.state)) { msg.textContent = st.note || "Instagram did not accept the token."; save.disabled = false; refresh(); return; } }
+      msg.textContent = "Still checking; this page updates by itself."; save.disabled = false;
+    } catch (e) { msg.textContent = errText(e); save.disabled = false; }
+  } }, "Save and check");
+  const d = stepsDlg("Connect Instagram", `Connect ${b.name}'s Instagram`, "Free, official Instagram API. One time, about 5 minutes. Reels of this account then post only here.", [
+    ["Open developers.facebook.com/apps", "Your Reel Studio app (or Create App → Other → Business)."],
+    ["Add the account", `Instagram → API setup with Instagram login → Generate access tokens → Add account → log in to ${b.name}'s Instagram.`],
+    ["Copy the token", "Click Generate token next to that account and paste it below. It stays on the server; the site never shows it again."]], tok, msg, save);
+  tok.focus();
 }
-function fbDialog(refresh) {
-  const inp = (ph, type = "text") => h("input", { type, autocomplete: "off", spellcheck: "false", placeholder: ph, "aria-label": ph, style: "margin-top:8px" });
-  const appId = inp("App ID (numbers)"), secret = inp("App Secret", "password"), tok = inp("Access token from Graph API Explorer", "password");
-  const msg = h("p", { cls: "small", role: "status", style: "min-height:20px;margin-top:8px" });
+function fbDialog(b, refresh) {
+  const meta = S.settings?.meta_app || {}; const saved = !!meta.app_id && meta.state !== "not_set" && meta.state !== "bad";
+  const inp = (ph) => h("input", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: ph, "aria-label": ph, style: "margin-top:8px" });
+  const appId = inp("App ID (numbers)"), secret = secretInput("App Secret"), tok = secretInput("Access token from Graph API Explorer");
+  const pick = h("div"); let pageId = null; const msg = statusMsg();
   const go_ = h("button", { cls: "btn primary", onclick: async () => {
-    if (!appId.value.trim() || !secret.value.trim() || !tok.value.trim()) { msg.textContent = "Fill in all three boxes."; return; }
+    if (!tok.value.trim() || (!saved && (!appId.value.trim() || !secret.value.trim()))) { msg.textContent = saved ? "Paste the access token." : "Fill in all three boxes."; return; }
     go_.disabled = true; msg.textContent = "Connecting…";
-    const { data, error } = await sb.functions.invoke("fb-auth", { body: { app_id: appId.value.trim(), app_secret: secret.value.trim(), user_token: tok.value.trim() } });
-    let err = data?.error; if (error && !err) { try { err = (await error.context?.json())?.error; } catch { /* */ } err ||= error.message; }
+    const body = { user_token: tok.value.trim(), brand: b.id, page_id: pageId, ...(saved ? {} : { app_id: appId.value.trim(), app_secret: secret.value.trim() }) };
+    const { data, error } = await sb.functions.invoke("fb-auth", { body });
+    let err = data?.error, pages = data?.pages; if (error && !err) { try { const j = await error.context?.json(); err = j?.error; pages = j?.pages; } catch { /* */ } err ||= error.message; }
+    if (pages?.length) {          // more than one Page: choose which one belongs to this account
+      msg.textContent = err; go_.disabled = false;
+      pick.replaceChildren(h("p", { cls: "small", style: "margin:10px 0 4px;font-weight:600" }, `Which Page is ${b.name}?`),
+        ...pages.map((p) => h("label", { cls: "small", style: "display:flex;gap:8px;align-items:center;margin:4px 0" },
+          h("input", { type: "radio", name: "fbpage", value: p.id, onchange: () => { pageId = p.id; } }), p.name)));
+      return;
+    }
     if (err) { msg.textContent = err; go_.disabled = false; return; }
-    secret.value = ""; tok.value = ""; toast(`Facebook connected: reels now post to ${data.page_name} too.`); await loadSettings().catch(() => {}); d.close(); refresh();
+    secret.value = ""; tok.value = ""; toast(`${b.name}: Facebook connected to ${data.page_name}.`); await loadSettings().catch(() => {}); d.close(); refresh();
   } }, "Connect");
   const steps = [
-    ["Add the Page use case", "developers.facebook.com → your Reel Studio app → Use cases → Add use case → Manage everything on your Page."],
-    ["Copy App ID and App Secret", "App settings → Basic. Use this App ID (not the Instagram app ID); click Show for the secret."],
-    ["Get a token", "Tools → Graph API Explorer → Meta App: Reel Studio → Get User Access Token → tick pages_show_list, pages_read_engagement, pages_manage_posts → Generate → choose the We One Aviation page → copy the token."],
-    ["Connect", "Paste the three values below. Only the Page's own token is kept, on the server; it does not expire."]];
-  const d = h("dialog", { "aria-label": "Connect Facebook", cls: "connect" }, h("div", { style: "padding:20px 20px 4px" },
-    h("h2", { style: "font-size:22px" }, "Connect the Facebook Page"),
-    h("p", { cls: "small muted", style: "margin:6px 0 12px" }, "Free, official Facebook API. Reels post to the Page as We One Aviation."),
-    h("ol", { cls: "steps" }, steps.map(([t, x]) => h("li", {}, h("b", {}, t), h("span", {}, x)))), appId, secret, tok, msg),
-    h("div", { cls: "dlg-foot" }, h("button", { cls: "btn quiet", onclick: () => d.close() }, "Close"), go_));
-  d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal(); appId.focus();
+    ["Page use case", "developers.facebook.com → your Reel Studio app → Use cases → Manage everything on your Page."],
+    ...(saved ? [] : [["App ID and App Secret", "App settings → Basic (not the Instagram app ID). Save them once in Studio Settings to skip this next time."]]),
+    ["Get a token", `Tools → Graph API Explorer → Get User Access Token → tick pages_show_list, pages_read_engagement, pages_manage_posts → Generate → choose the ${b.name} Page → copy.`],
+    ["Connect", "Only the Page's own token is kept, on the server; it does not expire."]];
+  const d = stepsDlg("Connect Facebook", `Connect ${b.name}'s Facebook Page`, saved ? `Uses the Meta app saved in Studio Settings (App ID ${meta.app_id}).` : "Free, official Facebook API.",
+    steps, [saved ? null : appId, saved ? null : secret, tok, pick], msg, go_);
+  (saved ? tok : appId).focus();
+}
+function liDialog(b, refresh) {
+  const app = S.settings?.linkedin_app || {};
+  const go_ = h("button", { cls: "btn primary", disabled: !app.client_id, onclick: () => liSignIn(app.client_id, b.id) }, "Sign in with LinkedIn");
+  const vanity = (brandOf(b.id).links?.linkedin || "");
+  stepsDlg("Connect LinkedIn", `Connect ${b.name}'s LinkedIn page`, app.client_id ? `Uses the LinkedIn app saved in Studio Settings (Client ID ${app.client_id}).` : "First save the LinkedIn app in Studio Settings.", [
+    ["LinkedIn app", app.client_id ? "Saved in Studio Settings." : "Studio Settings → Developer apps → LinkedIn: paste the app's Client ID and Client Secret."],
+    ["Sign in", `Sign in as an admin of ${b.name}'s Company Page. ${vanity ? "The page in this account's profile is picked: " + vanity : "Tip: add the page link in this account's profile so the right page is picked."}`]],
+    null, statusMsg(), go_);
 }
 async function finishLinkedIn() {     // back from LinkedIn's sign-in page: ?code=…&state=…
   const q = new URLSearchParams(location.search); if (!q.has("code") && !q.has("error")) return;
-  history.replaceState(null, "", location.pathname + "#/library");
-  let expected = null; try { expected = sessionStorage.getItem("li_state"); sessionStorage.removeItem("li_state"); } catch { /* */ }
-  if (q.has("error")) { toast(`LinkedIn: ${q.get("error_description") || q.get("error")}`, { err: true, ms: 9000 }); return; }
-  if (!expected || q.get("state") !== expected) { toast("LinkedIn sign-in could not be verified. Start Connect LinkedIn again.", { err: true, ms: 9000 }); return; }
+  let expected = null, b = "weone"; try { expected = sessionStorage.getItem("li_state"); b = sessionStorage.getItem("li_brand") || "weone"; sessionStorage.removeItem("li_state"); sessionStorage.removeItem("li_brand"); } catch { /* */ }
+  setBrand(b); history.replaceState(null, "", location.pathname + "#/account");
+  if (q.has("error")) { toast(`LinkedIn: ${q.get("error_description") || q.get("error")}`, { err: true, ms: 9000 }); render(); return; }
+  if (!expected || q.get("state") !== expected) { toast("LinkedIn sign-in could not be verified. Start Connect LinkedIn again.", { err: true, ms: 9000 }); render(); return; }
   toast("Connecting the LinkedIn page…", { ms: 4000 });
-  const { data, error } = await sb.functions.invoke("linkedin-auth", { body: { code: q.get("code"), redirect_uri: LI_REDIRECT } });
+  const { data, error } = await sb.functions.invoke("linkedin-auth", { body: { code: q.get("code"), redirect_uri: LI_REDIRECT, brand: b } });
   let msg = data?.error; if (error && !msg) { try { msg = (await error.context?.json())?.error; } catch { /* */ } msg ||= error.message; }
   if (msg) toast(`LinkedIn: ${msg}`, { err: true, ms: 12000 });
-  else toast(`LinkedIn connected: reels now post to ${data.org_name} too.`, { ms: 8000 });
-  await loadSettings().catch(() => {}); go("library");
+  else toast(`${brandOf(b).name}: LinkedIn connected to ${data.org_name}.`, { ms: 8000 });
+  await loadSettings().catch(() => {}); go("account");
 }
-// ---------------------------------------------------------------- Library: one small tile per platform (tap = the same pop-up as before)
-function platformBar(refresh) {
-  const items = [["ig", "Instagram", S.settings?.instagram_status, igPanel, connectDialog],
-                 ["fb", "Facebook", S.settings?.facebook_status, fbPanel, fbDialog],
-                 ["li", "LinkedIn", S.settings?.linkedin_status, liPanel, liDialog]];
-  return h("section", { cls: "plats", "aria-label": "Connected accounts" }, items.map(([k, name, st, panelFn, connectFn]) => {
-    const state = st?.state || "not_connected";
+// Library: small status tiles; tapping one opens the account's Settings
+function platformBar() {
+  return h("section", { cls: "plats", "aria-label": "Connected accounts" }, ["ig", "fb", "li"].map((k) => {
+    const st = stOf(PST[k]); const state = st.state || "not_connected";
     const kind = state === "connected" ? "ok" : state === "not_connected" ? "no" : state === "checking" ? "wait" : "warn";
     const word = { ok: "Connected", no: "Not connected", wait: "Checking…", warn: "Needs attention" }[kind];
-    const who = state === "connected" ? (k === "ig" ? `@${st.username}` : k === "fb" ? st.page_name : st.org_name) : "";
-    return h("button", { cls: `plat ${k}`, "aria-label": `${name}: ${word}${who ? ", " + who : ""}. Tap for options.`, title: who || word,
-        onclick: () => (state === "not_connected" ? connectFn(refresh) : platformDialog(name, panelFn, refresh)) },
+    return h("button", { cls: `plat ${k}`, "aria-label": `${PLAT[k]}: ${word}. Open Settings.`, onclick: () => go("account") },
       h("span", { cls: "plat-tile" }, h("img", { src: PLAT_IMG[k], alt: "", width: 56, height: 56 }),
         h("span", { cls: `plat-badge ${kind}`, "aria-hidden": "true" }, kind === "ok" ? "✓" : kind === "no" ? "✕" : kind === "wait" ? "…" : "!")),
-      h("span", { cls: "plat-name" }, name), h("span", { cls: `plat-state ${kind}` }, word));
+      h("span", { cls: "plat-name" }, PLAT[k]), h("span", { cls: `plat-state ${kind}` }, word));
   }));
 }
-function platformDialog(name, panelFn, refresh) {
-  const inner = h("div");
-  const rr = () => { refresh(); if (inner.isConnected) inner.replaceChildren(panelFn(rr)); };
-  inner.append(panelFn(rr));
-  const d = h("dialog", { "aria-label": name, cls: "connect plat-dlg" }, h("div", { style: "padding:16px 16px 0" }, inner),
-    h("div", { cls: "dlg-foot" }, h("span"), h("button", { cls: "btn quiet", onclick: () => d.close() }, "Close")));
-  d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal();
+
+// ---------------------------------------------------------------- Account settings: profile, logo, its own connections
+async function viewAccount() {
+  const body = h("div", {}, h("div", { cls: "skeleton", style: "height:300px" }));
+  shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Settings"),
+    h("p", {}, `${brandOf().name} only: its profile, logo and its own Instagram, Facebook and LinkedIn. Everything here works even when the Mac and Claude are offline.`))), body));
+  let sig = "";
+  const paint = async (force) => {
+    if (!body.isConnected) return;
+    await Promise.all([loadSettings().catch(() => {}), loadBrands().catch(() => {}), loadOwner()]);
+    const b = brandOf(); const nowSig = JSON.stringify([b, ["ig", "fb", "li"].map((k) => stOf(PST[k])), S.settings?.linkedin_app, S.settings?.meta_app]);
+    if (!force && nowSig === sig) return; sig = nowSig;
+    if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;     // never wipe a half-typed field
+    const L = b.links || {};
+    const f = (name, label, val, ph, type = "text") => h("label", { cls: "fld" }, h("span", {}, label), h("input", { name, type, value: val || "", placeholder: ph, maxlength: "300", autocomplete: "off" }));
+    const msg = h("p", { cls: "small", role: "status" });
+    const form = h("form", { cls: "acct-form", onsubmit: async (e) => {
+      e.preventDefault(); const v = Object.fromEntries(new FormData(form)); const btn = form.querySelector("button[type=submit]"); btn.disabled = true; msg.textContent = "Saving…";
+      let web = String(v.website || "").trim(); if (web && !/^https?:\/\//i.test(web)) web = "https://" + web;
+      try { await rpc("update_brand", { p_brand: b.id, p_patch: { name: v.name, tagline: v.tagline, website: web,
+          links: { instagram: v.instagram || "", facebook: v.facebook || "", linkedin: v.linkedin || "", youtube: v.youtube || "" } } });
+        msg.textContent = "Saved."; toast(`${v.name} profile saved.`); await loadBrands(); sig = ""; paint(true); }
+      catch (err) { msg.textContent = errText(err); btn.disabled = false; }
+    } },
+      h("div", { cls: "form-grid" }, f("name", "Business name", b.name), f("tagline", "Tagline", b.tagline, "What it does, in one line"), f("website", "Website", b.website, "https://…"),
+        f("instagram", "Instagram page", L.instagram, "https://www.instagram.com/…"), f("facebook", "Facebook page", L.facebook, "https://www.facebook.com/…"),
+        f("linkedin", "LinkedIn page", L.linkedin, "https://www.linkedin.com/company/…"), f("youtube", "YouTube (optional)", L.youtube, "https://www.youtube.com/@…")),
+      h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", type: "submit" }, "Save profile"), msg));
+    const logo = h("section", { cls: "panel" }, h("h3", {}, "Assets"),
+      h("div", { cls: "asset-row", style: "margin-top:12px" }, h("span", { cls: "blogo asset-prev" }, h("img", { src: logoSrc(b), alt: `${b.name} logo`, "data-logo": b.id })),
+        h("div", {}, h("b", {}, "Logo"), h("p", { cls: "small muted" }, b.logo_updated_at ? `Updated ${tzClock(b.logo_updated_at)}. Used on every reel of this account (watermark and end card).` : "Built-in logo. Used on every reel of this account (watermark and end card)."),
+          h("button", { cls: "btn quiet", onclick: () => assetsDialog(b, () => paint(true)) }, "Change logo"))));
+    const web = safeUrl(b.website);
+    body.replaceChildren(
+      h("section", { cls: "panel" }, h("div", { cls: "ai-head" }, brandLogo(b, 48), h("div", {}, h("h3", {}, "Profile"),
+        h("p", { cls: "small muted" }, "Account Intelligence reads these pages when it studies the account; LinkedIn uses the page link to pick the right Company Page."))), form),
+      logo,
+      h("section", { cls: "panel" }, h("h3", {}, "Connections"),
+        h("p", { cls: "small muted", style: "margin:4px 0 14px" }, `Reels of ${b.name} post only to the pages connected here. A page connected to another account can't be connected here too.`),
+        h("div", { cls: "svc-grid" }, ["ig", "fb", "li"].map((k) => connCard(k, b, () => paint(true))),
+          h("article", { cls: `svc conn ${web ? "ok" : "no"}` }, h("div", { cls: "svc-head" }, h("span", { cls: "plat-tile svc-ico" }, h("img", { src: PLAT_IMG.web, alt: "" })),
+            h("div", {}, h("h3", {}, "Website"), h("p", { cls: "small plat-state " + (web ? "ok" : "no") }, web ? host(web) : "Not set"))),
+            h("p", { cls: "small muted" }, "Studied by Account Intelligence; never shown as a link inside reels."),
+            web ? h("div", { cls: "svc-btns" }, h("a", { cls: "btn quiet", href: web, target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "Open")) : null))));
+  };
+  await paint(true).catch((e) => body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(e)))));
+  S.timers.push(setInterval(() => paint(false).catch(() => {}), 8000));
 }
-function igPanel(refresh) {
-  const st = S.settings?.instagram_status || { state: "not_connected" }; const sch = S.settings?.post_schedule || { slots: ["19:30"], auto: true };
-  const lamp = st.state === "connected" ? "ok" : st.state === "checking" ? "wait" : st.state === "not_connected" ? "" : "bad";
-  const text = { connected: `Connected as @${st.username}`, checking: "Checking the connection with Instagram…", not_connected: "Instagram is not connected yet",
-    expired: "Instagram connection expired", error: "Instagram is not reachable right now" }[st.state] || st.state;
-  const editing = !!S.editSlots;
-  const mins = sch.review_minutes ?? 5;
-  const slotsView = editing ? slotEditor(sch, refresh) : h("p", { cls: "small muted", style: "margin-top:6px" },
-    sch.auto === false ? "Auto-posting is off: approved reels post only when you tap Post now." :
-      `Approve & post now, or do nothing: ${mins} minutes after a reel is ready it posts by itself to Instagram and every connected Page. Request changes or "Wait, I'm checking" stops it. Posting runs in the cloud, so the Mac can be off.`,
-    " ", h("button", { cls: "linkish", onclick: () => { S.editSlots = { minutes: mins, auto: sch.auto !== false }; refresh(); } }, "Change"));
-  return h("section", { cls: "panel igp", "aria-label": "Instagram" },
-    h("div", { cls: "igp-head" }, h("div", {}, h("h3", {}, h("i", { cls: "lamp " + lamp }), text),
-      st.note && st.state !== "connected" ? h("p", { cls: "small", style: "margin-top:4px;color:#7D1C26" }, st.note) : null,
-      st.state === "connected" && st.expires_at ? h("p", { cls: "tiny faint", style: "margin-top:2px" }, "The connection renews itself automatically.") : null),
-      h("div", { cls: "igp-btns" }, h("button", { cls: st.state === "connected" ? "btn quiet" : "btn primary", onclick: () => connectDialog(refresh) }, st.state === "connected" ? "Reconnect" : "Connect Instagram"),
-        st.state !== "not_connected" ? h("button", { cls: "btn quiet danger", onclick: async (e) => { if (!e.currentTarget._armed) { e.currentTarget._armed = true; e.currentTarget.textContent = "Tap again to disconnect"; return; }
-          try { await rpc("disconnect_instagram", {}); await loadSettings(); toast("Instagram disconnected. Nothing will be posted."); } catch (err) { toast(errText(err), { err: true }); } refresh(); } }, "Disconnect") : null)),
-    slotsView);
+
+// ---------------------------------------------------------------- Studio settings: keys and connections shared by every account
+async function loadOwner() { if (S.owner == null) { try { S.owner = !!(await rpc("is_owner", {})); } catch { S.owner = false; } } return S.owner; }
+const SB_REF = (() => { try { return new URL(SUPABASE_URL).hostname.split(".")[0]; } catch { return ""; } })();
+const VERCEL_PROJECT = "https://vercel.com/weone404s-projects/weone-reelstudio";
+function keyCard({ id, name, img, wide, get, desc, help }, refresh) {
+  const st = (S.settings?.studio_keys || {})[id] || { state: "not_set" }; const used = S.worker?.info?.keys?.[id];
+  const kind = st.state === "ok" ? "ok" : st.state === "bad" ? "warn" : st.state === "checking" ? "wait" : "no";
+  const word = { ok: "Working", warn: "Not accepted", wait: "Checking…", no: "Not saved here" }[kind];
+  const inp = secretInput(st.hint ? `Paste a new key to replace ${st.hint}` : `Paste the ${name} key`, `${name} key`); const msg = statusMsg();
+  const save = async (value) => {
+    msg.textContent = "Saving…";
+    try { await rpc("set_studio_key", { p_name: id, p_value: value }); inp.value = ""; await loadSettings(); toast(value ? `${name} key saved. Checking it now; the Mac uses it from its next search.` : `${name} key removed.`); refresh(); }
+    catch (e) { msg.textContent = errText(e); }
+  };
+  return h("article", { cls: `svc ${kind}` },
+    h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" + (wide ? " wide" : "") }, h("img", { src: img, alt: name })), h("div", {}, wide ? h("h3", { cls: "sr" }, name) : h("h3", {}, name),
+      h("p", { cls: "small" }, h("i", { cls: "lamp " + (kind === "warn" ? "bad" : kind === "no" ? "" : kind) }), word, st.hint ? ` · key ${st.hint}` : ""))),
+    h("p", { cls: "small muted" }, desc),
+    st.note ? h("p", { cls: "small", style: "color:#7D1C26" }, st.note) : null,
+    h("p", { cls: "tiny faint" }, [st.updated_at && st.state !== "not_set" ? `Changed ${ago(st.updated_at)}` : null, st.checked_at ? `checked ${ago(st.checked_at)}` : null,
+      used === "cloud" ? "the Mac uses this key" : used === "mac" ? "the Mac uses its own .env key" : used === null && S.worker ? "the Mac has no key" : null].filter(Boolean).join(" · ")),
+    S.owner ? [inp, h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: () => inp.value.trim() ? save(inp.value.trim()) : inp.focus() }, st.hint ? "Replace key" : "Save key"),
+      st.hint ? h("button", { cls: "btn quiet danger", onclick: (e) => armed(e, "Tap again to remove", () => save("")) }, "Remove") : null,
+      h("a", { cls: "btn quiet", href: get, target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), help)), msg] : null);
+}
+function metaCard(refresh) {
+  const m = S.settings?.meta_app || { state: "not_set" };
+  const kind = m.state === "ok" ? "ok" : m.state === "bad" ? "warn" : m.state === "checking" ? "wait" : "no";
+  const id = h("input", { type: "text", autocomplete: "off", placeholder: "App ID (numbers)", value: m.app_id || "", "aria-label": "Meta App ID", style: "margin-top:8px" });
+  const sec = secretInput(m.hint ? `App Secret (saved ${m.hint})` : "App Secret"); const msg = statusMsg();
+  return h("article", { cls: `svc ${kind}` },
+    h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, h("img", { src: SVC_IMG.meta, alt: "" })), h("div", {}, h("h3", {}, "Meta app"),
+      h("p", { cls: "small" }, h("i", { cls: "lamp " + (kind === "warn" ? "bad" : kind === "no" ? "" : kind) }), { ok: `Working${m.name ? ": " + m.name : ""}`, warn: "Not accepted", wait: "Checking…", no: "Not saved" }[kind]))),
+    h("p", { cls: "small muted" }, "Used by Connect Facebook of every account (the App Secret turns a short token into a Page token that does not expire). Instagram tokens are made in the same app."),
+    m.note ? h("p", { cls: "small", style: "color:#7D1C26" }, m.note) : null,
+    S.owner ? [id, sec, h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: async () => {
+      if (!id.value.trim() || !sec.value.trim()) { msg.textContent = "Fill in App ID and App Secret."; return; }
+      msg.textContent = "Saving…";
+      try { await rpc("set_meta_app", { p_app_id: id.value.trim(), p_app_secret: sec.value.trim() }); sec.value = ""; await loadSettings(); toast("Meta app saved. Checking it now…"); refresh(); }
+      catch (e) { msg.textContent = errText(e); } } }, m.app_id ? "Replace" : "Save"),
+      h("a", { cls: "btn quiet", href: "https://developers.facebook.com/apps/", target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "Meta apps")), msg] : null);
+}
+function liAppCard(refresh) {
+  const app = S.settings?.linkedin_app || {};
+  const cid = h("input", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "Client ID", value: app.client_id || "", "aria-label": "LinkedIn Client ID", style: "margin-top:8px" });
+  const sec = secretInput(app.hint ? `Client Secret (saved ${app.hint})` : "Client Secret"); const msg = statusMsg();
+  return h("article", { cls: `svc ${app.client_id ? "ok" : "no"}` },
+    h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, h("img", { src: PLAT_IMG.li, alt: "" })), h("div", {}, h("h3", {}, "LinkedIn app"),
+      h("p", { cls: "small" }, h("i", { cls: "lamp " + (app.client_id ? "ok" : "") }), app.client_id ? `Saved · Client ID ${app.client_id}` : "Not saved"))),
+    h("p", { cls: "small muted" }, "Used by Connect LinkedIn of every account. Needs the Community Management API. Authorized redirect URL: ", h("code", {}, LI_REDIRECT)),
+    S.owner ? [cid, sec, h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: async () => {
+      if (!cid.value.trim() || !sec.value.trim()) { msg.textContent = "Fill in Client ID and Client Secret."; return; }
+      msg.textContent = "Saving…";
+      try { await rpc("set_linkedin_app", { p_client_id: cid.value.trim(), p_client_secret: sec.value.trim() }); sec.value = ""; await loadSettings(); toast("LinkedIn app saved."); refresh(); }
+      catch (e) { msg.textContent = errText(e); } } }, app.client_id ? "Replace" : "Save"),
+      h("a", { cls: "btn quiet", href: "https://www.linkedin.com/developers/apps", target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "LinkedIn apps")), msg] : null);
+}
+function infoCard({ img, name, state, word, lines, links, mono }) {
+  return h("article", { cls: `svc ${state}` },
+    h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" + (mono ? " mono" : "") }, h("img", { src: img, alt: "" })), h("div", {}, h("h3", {}, name),
+      h("p", { cls: "small" }, h("i", { cls: "lamp " + (state === "warn" ? "bad" : state === "no" ? "" : state) }), word))),
+    lines.filter(Boolean).map((l) => h("p", { cls: "small muted" }, l)),
+    links?.length ? h("div", { cls: "svc-btns" }, links.map(([label, url]) => h("a", { cls: "btn quiet", href: url, target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), label))) : null);
+}
+async function viewSettings() {
+  const body = h("div", {}, h("div", { cls: "skeleton", style: "height:300px" }));
+  shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Studio settings"),
+    h("p", {}, "Keys and connections shared by every account. Saved in the cloud, so you can change them any time, even when the Mac and Claude are offline. Keys can be replaced but never shown again; only their last 4 characters are visible."))), body));
+  let sig = "";
+  const paint = async (force) => {
+    if (!body.isConnected) return;
+    await Promise.all([loadSettings().catch(() => {}), loadWorker().catch(() => {}), loadOwner()]);
+    const nowSig = JSON.stringify([S.settings?.studio_keys, S.settings?.meta_app, S.settings?.linkedin_app, S.settings?.post_schedule, S.settings?.worker_settings, S.worker?.info?.keys, macAlive(), S.worker?.claude_ok, S.editSlots]);
+    if (!force && nowSig === sig) return; sig = nowSig;
+    if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    const rr = () => paint(true); const w = S.worker; const i = w?.info || {};
+    const sch = S.settings?.post_schedule || {}; const cap = S.settings?.worker_settings?.daily_cap || i.daily_cap || 3;
+    const capIn = h("input", { type: "number", min: "1", max: "10", value: String(cap), style: "width:80px", "aria-label": "New reels per day" });
+    const sect = (title, sub, ...cards) => h("section", { cls: "set-sec" }, h("h2", {}, title), sub ? h("p", { cls: "small muted" }, sub) : null, h("div", { cls: "svc-grid" }, cards));
+    body.replaceChildren(
+      !S.owner ? h("div", { cls: "banner info", style: "margin-bottom:16px" }, "Only the studio owner can change keys. You can see their status.") : "",
+      sect("Stock footage", "Where the clips in every reel come from. Free keys; the Mac falls back to its own .env key if one is removed here.",
+        keyCard({ id: "pexels", name: "Pexels", img: SVC_IMG.pexels, wide: true, get: "https://www.pexels.com/api/", help: "Get a key", desc: "Main source of video clips (required)." }, rr),
+        keyCard({ id: "pixabay", name: "Pixabay", img: SVC_IMG.pixabay, wide: true, get: "https://pixabay.com/api/docs/", help: "Get a key", desc: "Second source of video clips (optional, more choice)." }, rr)),
+      sect("Developer apps", "Saved once here, used when you connect any account's Facebook or LinkedIn (in that account's Settings).", metaCard(rr), liAppCard(rr)),
+      sect("Posting", null, h("article", { cls: "svc" }, h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, icon("route", 26)), h("div", {}, h("h3", {}, "Auto-post"),
+          h("p", { cls: "small" }, sch.auto === false ? "Off: approved reels post only when you tap Post." : `On: ${sch.review_minutes ?? 5} min after a reel is ready it posts to that account's own connected pages, unless you act.`))),
+        S.editSlots ? slotEditor(sch, rr) : h("div", { cls: "svc-btns" }, h("button", { cls: "btn quiet", onclick: () => { S.editSlots = { minutes: sch.review_minutes ?? 5, auto: sch.auto !== false }; rr(); } }, "Change")))),
+      sect("Studio Mac & Claude", "The Mac makes the reels; Claude Code on it writes and checks them.",
+        h("article", { cls: `svc ${macAlive() ? "ok" : "warn"}` }, h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo mono" }, h("img", { src: SVC_IMG.apple, alt: "" })), h("div", {}, h("h3", {}, "Studio Mac"),
+            h("p", { cls: "small" }, h("i", { cls: "lamp " + (macAlive() ? "ok" : "bad") }), macAlive() ? "Online" : `Offline${w ? " · last heard " + ago(w.last_seen) : ""}`))),
+          h("p", { cls: "small muted" }, w ? `Version ${w.version} · ${i.reels_today ?? 0} new reels today · ${i.disk_free_gb ?? "?"} GB free` : "No Mac has connected yet."),
+          S.owner ? h("div", { cls: "svc-btns", style: "align-items:center" }, h("span", { cls: "small" }, "New reels per day"), capIn,
+            h("button", { cls: "btn quiet", onclick: async () => { try { await rpc("set_worker_settings", { p_daily_cap: Number(capIn.value) }); await loadSettings(); toast(`Limit set to ${capIn.value} new reels a day. The Mac picks it up within 2 minutes.`); rr(); } catch (e) { toast(errText(e), { err: true }); } } }, "Save")) : null,
+          h("p", { cls: "tiny faint" }, "Each reel uses about 10-12 Claude requests on the Pro plan; Request changes always runs, even after the limit.")),
+        infoCard({ img: SVC_IMG.claude, name: "Claude", state: !macAlive() ? "no" : w?.claude_ok ? "ok" : "warn",
+          word: !macAlive() ? "Waits for the Mac" : w?.claude_ok ? "Signed in and ready" : `Not ready${w?.claude_note ? ": " + w.claude_note : ""}`,
+          lines: ["Claude Code on the Mac, signed in with your Claude plan (no API key). To switch accounts, run claude on the Mac and log in again."], links: [["Usage", "https://claude.ai/settings/usage"]] })),
+      sect("Platform", "The site and the Mac sign in with these keys, so they are changed at the source, never from inside the site (one wrong edit here would lock everything out). The buttons open the exact page.",
+        infoCard({ img: SVC_IMG.supabase, name: "Supabase", state: S.net.ok ? "ok" : "warn", word: S.net.ok ? "Connected" : "Connection dropped",
+          lines: [`Project ${SB_REF}: database, sign-in, storage, cloud posting (Edge Functions) and the schedules.`, "Keys: the Mac's service key lives in its .env; the site uses only the public key."],
+          links: [["API keys", `https://supabase.com/dashboard/project/${SB_REF}/settings/api-keys`], ["Function secrets", `https://supabase.com/dashboard/project/${SB_REF}/functions/secrets`]] }),
+        infoCard({ img: SVC_IMG.vercel, name: "Vercel", mono: true, state: "ok", word: `Live at ${location.hostname}`,
+          lines: ["Hosts this site (reel-studio-hq.vercel.app and weone-reelstudio.vercel.app). It holds no secrets: the site only needs the public Supabase address and key."],
+          links: [["Environment variables", `${VERCEL_PROJECT}/settings/environment-variables`], ["Deployments", `${VERCEL_PROJECT}/deployments`]] }),
+        infoCard({ img: SVC_IMG.github, name: "GitHub", mono: true, state: "ok", word: "nikkk07/reel-studio",
+          lines: ["The studio's code and account profiles. No keys are stored in it."], links: [["Repository", "https://github.com/nikkk07/reel-studio"]] })));
+  };
+  await paint(true).catch((e) => body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(e)))));
+  S.timers.push(setInterval(() => paint(false).catch(() => {}), 6000));
 }
 function slotEditor(sch, refresh) {
   const ed = S.editSlots;
@@ -1169,32 +1321,6 @@ function slotEditor(sch, refresh) {
         catch (err) { toast(errText(err), { err: true }); } refresh(); } }, "Save"),
       h("button", { cls: "btn quiet", onclick: () => { S.editSlots = null; refresh(); } }, "Cancel")));
 }
-function connectDialog(refresh) {
-  const tok = h("input", { type: "password", autocomplete: "off", spellcheck: "false", placeholder: "Paste the access token", "aria-label": "Instagram access token" });
-  const msg = h("p", { cls: "small", role: "status", style: "min-height:20px;margin-top:8px" });
-  const save = h("button", { cls: "btn primary", onclick: async () => {
-    if (!tok.value.trim()) { tok.focus(); return; }
-    save.disabled = true; msg.textContent = "Saving…";
-    try {
-      await rpc("set_instagram_token", { p_token: tok.value.trim() }); tok.value = ""; msg.textContent = "Saved. The Mac is checking it with Instagram…";
-      for (let i = 0; i < 30; i++) { await sleep(3000); await loadSettings(); const st = S.settings.instagram_status || {};
-        if (st.state === "connected") { msg.textContent = `Connected as @${st.username}.`; toast(`Instagram connected as @${st.username}.`); await sleep(900); d.close(); refresh(); return; }
-        if (st.state === "expired" || st.state === "error") { msg.textContent = st.note || "Instagram did not accept the token."; save.disabled = false; return; } }
-      msg.textContent = macAlive() ? "Still checking; this page updates when the Mac finishes." : "Saved. The Mac checks it as soon as it is back online."; save.disabled = false;
-    } catch (e) { msg.textContent = errText(e); save.disabled = false; }
-  } }, "Save and check");
-  const steps = [
-    ["Open developers.facebook.com/apps", "Create App → use case Other → type Business → name it (e.g. Reel Studio)."],
-    ["Add Instagram", "Instagram → Set up → API setup with Instagram login."],
-    ["Add your account", "Generate access tokens → Add account → log in to the Instagram account the reels are for."],
-    ["Copy the token", "Click Generate token next to the account, copy it, paste it below. It stays on the server; the site never shows it again."]];
-  const d = h("dialog", { "aria-label": "Connect Instagram", cls: "connect" }, h("div", { style: "padding:20px 20px 4px" },
-    h("h2", { style: "font-size:22px" }, "Connect Instagram"),
-    h("p", { cls: "small muted", style: "margin:6px 0 12px" }, "Free, official Instagram API. One time, about 5 minutes."),
-    h("ol", { cls: "steps" }, steps.map(([t, x]) => h("li", {}, h("b", {}, t), h("span", {}, x)))), tok, msg),
-    h("div", { cls: "dlg-foot" }, h("button", { cls: "btn quiet", onclick: () => d.close() }, "Close"), save));
-  d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal(); tok.focus();
-}
 async function viewLibrary() {
   const panel = h("div"); const grid = h("div", { cls: "lib" }, [1, 2, 3, 4].map(() => h("div", { cls: "skeleton", style: "aspect-ratio:9/16;height:auto" })));
   shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Library"), h("p", {}, "Approved reels and their Instagram, Facebook and LinkedIn posts. Cloud copies are kept for 30 days; the full-quality masters stay on the Mac."))), panel, grid));
@@ -1205,15 +1331,16 @@ async function viewLibrary() {
     const now = JSON.stringify([(data || []).map((j) => [j.id, j.output?.ig, j.output?.li, j.output?.fb]), S.settings, S.editSlots]);
     if (!force && now === sig) return; sig = now;
     if (panel.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;    // never wipe a half-edited time
-    panel.replaceChildren(!isLive() ? setupCard() : ownPosting() ? platformBar(() => refresh(true))
-      : h("div", { cls: "banner info" }, h("span", {}, `${brandOf().name} has no Instagram, Facebook or LinkedIn connected yet. Approved reels are kept here to download; nothing is posted to another account.`)));
+    panel.replaceChildren(!isLive() ? setupCard() : ownPosting() ? platformBar()
+      : h("div", { cls: "banner info" }, h("span", {}, `${brandOf().name} has no Instagram, Facebook or LinkedIn connected yet. Approved reels are kept here to download; nothing is posted to another account.`),
+          h("button", { cls: "btn quiet", style: "margin-left:auto", onclick: () => go("account") }, "Connect in Settings")));
     if (!data?.length) { grid.replaceChildren(h("div", { cls: "panel empty", style: "grid-column:1/-1" }, h("h3", {}, "Nothing here yet"), h("p", {}, "Approved reels appear here, ready to download and post."), h("button", { cls: "btn primary", onclick: () => go("create") }, "Create a reel"))); return; }
     const cards = await Promise.all(data.map(async (j) => {
       const o = j.output || {}; if (!(j.id in thumbs)) thumbs[j.id] = o.pruned ? null : await signed(o.thumb);
       return h("div", { cls: "libcard" }, h("button", { cls: "poster", onclick: () => openPlayer(j) }, h("div", { cls: "frame" }, thumbs[j.id] ? h("img", { src: thumbs[j.id], alt: "", loading: "lazy" }) : null, h("span", { cls: "play" }, icon("play", 18, true))),
-        h("h3", {}, titleOf(j)), h("p", { cls: "tiny" }, `${dateShort(j.updated_at)}, ${o.duration ?? "?"} s`)), postBadge(j, "ig"), postActions(j, "ig", () => refresh(true)),
-        fbSetUp() || o.fb ? [postBadge(j, "fb"), postActions(j, "fb", () => refresh(true))] : null,
-        liSetUp() || o.li ? [postBadge(j, "li"), postActions(j, "li", () => refresh(true))] : null);
+        h("h3", {}, titleOf(j)), h("p", { cls: "tiny" }, `${dateShort(j.updated_at)}, ${o.duration ?? "?"} s`)),
+        ["ig", "fb", "li"].filter((p) => o[p] || platSet(p) || (p === "ig" && S.brand === "weone")).map((p) => [postBadge(j, p), postActions(j, p, () => refresh(true))]),
+        !ownPosting() && !o.ig ? h("p", { cls: "ig-note" }, "Kept here to download. Connect this account's own pages in Settings to post.") : null);
     }));
     grid.replaceChildren(...cards);
   };

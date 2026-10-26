@@ -2,7 +2,7 @@
 // State lives in jobs.output.li:  scheduled -> uploading (parts) -> processing -> posting -> posted
 // Safety: progress (video urn, uploaded parts) is saved after every part, so a timeout resumes instead of restarting;
 // before creating a post, the page's recent posts are checked for this video, so a lost response never double-posts.
-import { type Json, now, iso, minsAgo, rest, setting, setSetting, secret, setSecret, setPart, storageSize, storageRange } from "./db.ts";
+import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setSecret, setPart, storageSize, storageRange, bk } from "./db.ts";
 
 const LI_API = Deno.env.get("LI_API") ?? "https://api.linkedin.com/rest";
 const LI_OAUTH = Deno.env.get("LI_OAUTH") ?? "https://www.linkedin.com/oauth/v2";
@@ -33,32 +33,33 @@ async function li(method: string, path: string, tok: string, body?: unknown): Pr
 }
 
 // LinkedIn "little text": escape reserved characters, keep #hashtags as hashtags
-export function commentary(caption: string): string {
-  const text = caption.replace(/^.*Follow\s+@\S+.*$/gmi, "Follow We One Aviation for daily aviation facts.")
+export function commentary(caption: string, name = "We One Aviation"): string {
+  const text = caption.replace(/^.*Follow\s+@\S+.*$/gmi, name === "We One Aviation" ? "Follow We One Aviation for daily aviation facts." : `Follow ${name}.`)
     .replace(/@(\w+)/g, "$1");
   return text.replace(/[|{}@\[\]()<>\\*_~]/g, (c) => `\\${c}`).replace(/#(?!\w)/g, "\\#").slice(0, 2900);
 }
 
 // ---------------------------------------------------------------- connection
-async function connection(): Promise<[string | null, Json]> {
-  const st = await setting("linkedin_status");
-  let [tok] = await secret("linkedin_token");
+async function connection(brand: string): Promise<[string | null, Json]> {
+  const SK = bk("linkedin_status", brand), TK = bk("linkedin_token", brand), RK = bk("linkedin_refresh", brand);
+  const st = await setting(SK);
+  let [tok] = await secret(TK);
   if (!tok) return [null, st];
   // refresh tokens exist only for some apps; when present, renew a week before expiry
-  const [ref] = await secret("linkedin_refresh");
+  const [ref] = await secret(RK);
   if (ref && st.expires_at && Date.parse(st.expires_at) - Date.now() < 7 * 86400e3) {
     const [app] = [await setting("linkedin_app")]; const [sec] = await secret("linkedin_client_secret");
     const r = await fetch(`${LI_OAUTH}/accessToken`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: ref, client_id: app.client_id ?? "", client_secret: sec ?? "" }) });
     if (r.ok) {
       const j = await r.json(); tok = j.access_token;
-      await setSecret("linkedin_token", tok!); if (j.refresh_token) await setSecret("linkedin_refresh", j.refresh_token);
+      await setSecret(TK, tok!); if (j.refresh_token) await setSecret(RK, j.refresh_token);
       st.expires_at = iso(new Date(Date.now() + Number(j.expires_in ?? 5184000) * 1000));
-      await setSetting("linkedin_status", { ...st, state: "connected", note: null });
+      await setSetting(SK, { ...st, state: "connected", note: null });
     }
   }
   if (st.expires_at && Date.parse(st.expires_at) < Date.now()) {
-    if (st.state !== "expired") await setSetting("linkedin_status", { ...st, state: "expired", note: "LinkedIn sign-in expired (LinkedIn allows 60 days). Tap Reconnect LinkedIn in Library." });
+    if (st.state !== "expired") await setSetting(SK, { ...st, state: "expired", note: "LinkedIn sign-in expired (LinkedIn allows 60 days). Tap Reconnect LinkedIn in this account's Settings." });
     return [null, st];
   }
   return [tok, st];
@@ -72,7 +73,7 @@ async function findPost(tok: string, org: string, video: string): Promise<string
 }
 const postUrl = (urn: string) => `https://www.linkedin.com/feed/update/${urn}/`;
 
-async function step(job: Json, tok: string, st: Json): Promise<string> {
+async function step(job: Json, tok: string, st: Json, b: Brand): Promise<string> {
   const o = job.output ?? {}; let g: Json = { ...(o.li ?? {}) }; const org = st.org_urn;
   const file = o.ig_video ?? o.video;
   if (g.state === "scheduled") {
@@ -121,9 +122,9 @@ async function step(job: Json, tok: string, st: Json): Promise<string> {
     if (!urn) {
       g = { ...g, post_attempted: true }; await setPart(job, "li", g);
       const [, r] = await li("POST", "/posts", tok, {
-        author: org, commentary: commentary(o.ig_caption ?? `${o.title ?? ""}`), visibility: "PUBLIC",
+        author: org, commentary: commentary(o.ig_caption ?? `${o.title ?? ""}`, b.name), visibility: "PUBLIC",
         distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },
-        content: { media: { title: String(o.title ?? "We One Aviation").slice(0, 200), id: g.video } },
+        content: { media: { title: String(o.title ?? b.name).slice(0, 200), id: g.video } },
         lifecycleState: "PUBLISHED", isReshareDisabledByAuthor: false });
       urn = r.headers.get("x-restli-id");
     }
@@ -134,24 +135,24 @@ async function step(job: Json, tok: string, st: Json): Promise<string> {
   return "nothing to do";
 }
 
-async function fail(job: Json, e: LIError) {
+async function fail(job: Json, e: LIError, brand: string) {
   const g: Json = { ...(job.output?.li ?? {}) }; const msg = e.message.slice(0, 300); const att = Number(g.attempts ?? 1);
   if (e.restart) for (const k of ["video", "token", "parts", "etags", "size", "finalized_at", "resume"]) delete g[k];
   else if (["uploading", "processing", "posting"].includes(g.state)) g.resume = g.state;
   if (e.auth) {
-    const st = await setting("linkedin_status");
-    await setSetting("linkedin_status", { ...st, state: "expired", note: "LinkedIn sign-in expired or was removed. Tap Reconnect LinkedIn in Library." });
+    const st = await setting(bk("linkedin_status", brand));
+    await setSetting(bk("linkedin_status", brand), { ...st, state: "expired", note: "LinkedIn sign-in expired or was removed. Tap Reconnect LinkedIn in this account's Settings." });
     Object.assign(g, { state: "scheduled", at: iso(new Date(Date.now() + 10 * 60e3)), attempts: Math.max(0, att - 1), error: "Waiting for LinkedIn to be connected again." });
   } else if (att >= MAX_ATTEMPTS || (!e.transient && att >= 2)) Object.assign(g, { state: "failed", error: `Posting failed: ${msg}` });
   else Object.assign(g, { state: "scheduled", at: iso(new Date(Date.now() + BACKOFF_MIN[Math.min(BACKOFF_MIN.length - 1, att - 1)] * 60e3)), error: msg });
   await setPart(job, "li", g);
 }
 
-export async function liTick(): Promise<Json> {
-  const reels: Json[] = await rest("GET", "jobs?select=id,output&kind=eq.reel&brand=eq.weone&status=eq.done&output->li->>state=in.(scheduled,uploading,processing,posting)&order=updated_at.asc&limit=20");
+async function liBrand(b: Brand): Promise<Json> {
+  const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&brand=eq.${b.id}&status=eq.done&output->li->>state=in.(scheduled,uploading,processing,posting)&order=updated_at.asc&limit=20`);
   const due = reels.filter((r) => r.output.li.state !== "scheduled" || Date.parse(r.output.li.at ?? 0) <= Date.now());
   if (!due.length) return { due: 0 };
-  const [tok, st] = await connection();
+  const [tok, st] = await connection(b.id);
   if (!tok || !st.org_urn) {
     for (const r of due) if (r.output.li.state === "scheduled" && !r.output.li.error)
       await setPart(r, "li", { ...r.output.li, error: "Waiting for LinkedIn to be connected." }, "scheduled");
@@ -159,8 +160,13 @@ export async function liTick(): Promise<Json> {
   }
   const log: Json = {};
   for (const r of due.slice(0, 2)) {
-    try { log[r.id] = await step(r, tok, st); }
-    catch (e) { const err = e instanceof LIError ? e : new LIError(String((e as Error).message ?? e)); await fail(r, err); log[r.id] = `error: ${err.message}`; }
+    try { log[r.id] = await step(r, tok, st, b); }
+    catch (e) { const err = e instanceof LIError ? e : new LIError(String((e as Error).message ?? e)); await fail(r, err, b.id); log[r.id] = `error: ${err.message}`; }
   }
   return { connected: true, due: due.length, log };
+}
+export async function liTick(list: Brand[]): Promise<Json> {
+  const res: Json = {};
+  for (const b of list) { try { const r = await liBrand(b); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }
+  return res;
 }

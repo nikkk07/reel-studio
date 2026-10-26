@@ -3,14 +3,14 @@ import concurrent.futures as cf, json, subprocess, urllib.parse
 from pathlib import Path
 import httpx
 from PIL import Image, ImageDraw, ImageFont
-from .. import config
+from .. import config, studio
 
 UA = {"User-Agent": "WeOneAviation-ReelStudio/1.0"}
 
 
 def search(query: str, per_source=6) -> list:
     out = []
-    key = config.get("PEXELS_API_KEY")
+    key = studio.get("PEXELS_API_KEY")
     if key:
         try:
             r = httpx.get("https://api.pexels.com/videos/search", params={"query": query, "per_page": per_source},
@@ -24,7 +24,7 @@ def search(query: str, per_source=6) -> list:
                                 dl=b["link"], thumb=v["image"], author=v["user"]["name"], licence="Pexels License"))
         except Exception:  # noqa: BLE001
             pass
-    key = config.get("PIXABAY_API_KEY")
+    key = studio.get("PIXABAY_API_KEY")
     if key:
         try:
             r = httpx.get("https://pixabay.com/api/videos/", params={"key": key, "q": query, "per_page": max(3, per_source)},

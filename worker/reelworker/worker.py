@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from . import config, brain
 from .db import Supabase, now_iso
 from .runner import JobContext, QuotaError, TransientError, Cancelled
-from . import procs, instagram
+from . import procs, instagram, studio
 from urllib.parse import quote
 
 log = logging.getLogger("reelworker")
@@ -75,8 +75,8 @@ def heartbeat_loop(db: Supabase):
                 "claude_ok": STATUS["claude_ok"], "claude_note": STATUS["claude_note"],
                 "claude_checked_at": now_iso(datetime.fromtimestamp(STATUS["claude_checked"], timezone.utc)) if STATUS["claude_checked"] else None,
                 "info": {"disk_free_gb": round(disk.free / 1e9, 1), "current": CURRENT, "reels_today": reels_today(),
-                         "daily_cap": config.DAILY_REEL_CAP, "blocked": STATUS.get("blocked"), "selftest": STATUS.get("selftest"),
-                         "cap_hit": reels_today() >= config.DAILY_REEL_CAP},
+                         "daily_cap": studio.daily_cap(), "blocked": STATUS.get("blocked"), "selftest": STATUS.get("selftest"),
+                         "cap_hit": reels_today() >= studio.daily_cap(), "keys": studio.sources()},
             }, upsert=True)
             if time.time() - last_prune > 86400:
                 prune(db); last_prune = time.time()
@@ -117,7 +117,7 @@ def ping_loop(db: Supabase):
                 db.update("pings", f"id=eq.{p['id']}&answered_at=is.null", {
                     "answered_at": now_iso(), "worker_id": config.WORKER_ID,
                     "reply": {"claude_checking": CHECKING.is_set(), "claude_ok": STATUS["claude_ok"], "claude_note": STATUS["claude_note"], "busy": CURRENT,
-                              "reels_today": reels_today(), "daily_cap": config.DAILY_REEL_CAP, "version": config.VERSION}})
+                              "reels_today": reels_today(), "daily_cap": studio.daily_cap(), "version": config.VERSION}})
         except Exception as e:  # noqa: BLE001
             log.warning("ping loop: %s", e)
         STOP.wait(3)
@@ -220,7 +220,7 @@ def lane_loop(db: Supabase, lane: str, kinds: list):
     handlers = {"suggest": suggest.run, "optimize": optimize.run, "reel": reel.run, "onboard": onboard.run, "learn": learn.run}
     while not STOP.is_set():
         try:
-            cap_hit = lane == "B" and reels_today() >= config.DAILY_REEL_CAP    # after the cap only revisions (Request changes) run
+            cap_hit = lane == "B" and reels_today() >= studio.daily_cap()    # after the cap only revisions (Request changes) run
             st = STATUS.get("selftest")
             if lane == "B" and (st is None or not st["ok"]):
                 if st is not None:
@@ -248,6 +248,7 @@ def main():
     setup_logging()
     log.info("reelworker %s starting as %s (root %s)", config.VERSION, config.WORKER_ID, config.ROOT)
     db = Supabase()
+    studio.bind(db)
     global CODE_SIG0
     CODE_SIG0 = code_signature()
     signal.signal(signal.SIGTERM, lambda *_: STOP.set())

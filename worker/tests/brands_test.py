@@ -20,7 +20,7 @@ class DB:
     def select(self, t, q=""):
         if t == "brands":
             bid = q.split("id=eq.")[1].split("&")[0]; return [BRANDS[bid]] if bid in BRANDS else []
-        if t == "settings": return [{"value": {"username": "we_one_aviation"}}]
+        if t == "settings": return [{"value": {"username": "we_one_aviation"}}] if "key=eq.instagram_status&" in q + "&" else []   # per-account keys
         if t == "jobs":
             if "brand=eq." in q:
                 b = q.split("brand=eq.")[1].split("&")[0]

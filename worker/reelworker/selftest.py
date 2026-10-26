@@ -34,9 +34,16 @@ def tools():
     return "h264_videotoolbox" if "h264_videotoolbox" in enc else "libx264 (no hardware encoder)"
 
 def env_keys():
-    miss = [k for k in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "PEXELS_API_KEY") if not config.get(k)]
-    if miss: raise RuntimeError(f"not set in {config.ROOT / '.env'}: {', '.join(miss)}")
-    return "keys present" + ("" if config.get("PIXABAY_API_KEY") else " (Pixabay optional key missing)")
+    from . import studio
+    if studio._state["db"] is None and config.get("SUPABASE_URL"):
+        try:
+            from .db import Supabase
+            studio.bind(Supabase())
+        except Exception:  # noqa: BLE001
+            pass
+    miss = [k for k in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY") if not config.get(k)] + [k for k in ("PEXELS_API_KEY",) if not studio.get(k)]
+    if miss: raise RuntimeError(f"not set (Studio Settings or {config.ROOT / '.env'}): {', '.join(miss)}")
+    return "keys present" + ("" if studio.get("PIXABAY_API_KEY") else " (Pixabay optional key missing)")
 
 def supabase():
     from .db import Supabase

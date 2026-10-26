@@ -39,7 +39,7 @@ def make_caption(db, job_id, output, brand_id="weone"):
         h = handle(db)
         text = brain.prompt("caption", reel=json.dumps(reel, ensure_ascii=False, indent=1), handle=h); own = OUR
     else:                                    # this account's own voice, handle and tag; never We One's
-        own = (prof.get("instagram") or "").lstrip("@"); h = f"@{own}" if own else prof["name"]
+        own = (_setting(db, f"instagram_status@{brand_id}").get("username") or prof.get("instagram") or "").lstrip("@"); h = f"@{own}" if own else prof["name"]
         tag = re.sub(r"[^a-z0-9]", "", prof["name"].lower())
         text = brain.prompt("caption_brand", brand_name=prof["name"], brand_brief=brandmod.brief(prof, full=False), reel=json.dumps(reel, ensure_ascii=False, indent=1),
                             handle=h, language=prof.get("language", "english").title(), brand_tag=tag)
