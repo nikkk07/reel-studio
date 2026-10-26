@@ -99,7 +99,7 @@ PROFILE = {"type": "object",
                                            "properties": {"look": S, "footage_keywords": STRS, "footage_rules": STRS, "avoid": STRS, "mood": S, "graphics": S}},
                           "hashtags": STRS, "lanes": {"type": "object", "required": ["core", "trending"], "properties": {"core": S, "trending": S}},
                           "lane_names": {"type": "object", "required": ["core", "trending"], "properties": {"core": S, "trending": S}},
-                          "core_keywords": STRS, "strategy": S, "sources": STRS, "end_sub": S}}
+                          "core_keywords": STRS, "strategy": S, "sources": STRS, "end_sub": {"type": "string", "maxLength": 32}}}
 
 TEAM = ["strategist", "trend_scout", "viral_editor", "fact_checker", "scriptwriter", "hook_critic", "footage_picker", "quality_inspector", "caption_writer", "account_intel"]
 LESSON = {"type": "object", "required": ["agent", "lesson", "why"],

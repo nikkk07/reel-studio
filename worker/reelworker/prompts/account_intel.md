@@ -15,8 +15,10 @@ What we know:
 5. **Instagram strategy**: the content pillars, split into the two lanes:
    - `core`: the business's own expertise, services and the concepts its customers must understand (identity, trust, leads);
    - `trending`: what its audience talks about now (reach), still clearly right for this account.
+   The owner has fixed the mix at **50 % core and 50 % trending** (over every 10 reels); plan within it, never suggest another ratio.
    Write hook patterns that fit this audience, and a topic bank of at least 16 ready topics (at least 10 core), each with a scroll-stopping hook, the 1-3 facts it relies on and a real source URL.
-6. **Look**: the visual style its reels should have (stock footage keywords, what to avoid, graphics), in line with its brand.
+6. **End card line** (`end_sub`, at most 32 characters, whole words): the account's promise in a few words, e.g. "private flying, explained".
+7. **Look**: the visual style its reels should have (stock footage keywords, what to avoid, graphics), in line with its brand.
 
 ## Language
 `language`: "english" for a premium / professional / international audience; "hinglish" when the audience is mainly Indian students or the mass market that speaks Hinglish. Keep the current language if one is set.

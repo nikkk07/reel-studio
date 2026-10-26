@@ -115,7 +115,10 @@ def run(ctx):
     lang = new.get("language", "english")
     new.setdefault("tts_lang", "hi" if lang == "hinglish" else "en"); new.setdefault("asr_lang", new["tts_lang"])
     new.setdefault("voice", "female"); new.setdefault("end_title", "FOLLOW FOR MORE")
-    new["end_sub"] = old.get("end_sub") or str(new.get("end_sub") or "")[:28]
+    sub = " ".join(str(new.get("end_sub") or "").split())
+    if len(sub) > 32:                          # end card line: whole words only
+        sub = sub[:33].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    new["end_sub"] = old.get("end_sub") or sub
     if "palette" not in new and _hex(row.get("color")) and bid != "weone":
         new["palette"] = {"accent": _hex(row.get("color")), "secondary": [233, 236, 240]}
     if bid != "weone":                         # the account's own logo for its reels (an upload in Assets always wins)
