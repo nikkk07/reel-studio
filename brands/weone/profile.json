@@ -1,9 +1,404 @@
 {
-  "version": 1,
-  "name": "We One Aviation",
-  "language": "hinglish",
-  "voice": "female",
-  "legacy_prompts": true,
-  "instagram": "we_one_aviation",
-  "note": "Uses the original Hinglish aviation prompts, lexicon, CTA and logo (unchanged)."
+ "version": 2,
+ "updated": "2026-10-23",
+ "name": "We One Aviation",
+ "website": "https://weoneaviation.in",
+ "instagram": "we_one_aviation",
+ "language": "hinglish",
+ "voice": "female",
+ "legacy_prompts": true,
+ "note": "Original Hinglish prompts, lexicon, CTA and logo are kept; this profile adds the academy's own knowledge and the content mix.",
+ "niche": "pilot training (DGCA ground classes, CPL pathway) and aviation explainers for India",
+ "tone": "Hinglish (about 60-70 % English), friendly senior-pilot-mentor energy: clear, exact, encouraging, never hype. Teaches like a good instructor: one concept, made obvious.",
+ "business": "We One Aviation is a pilot-training academy in Dwarka, New Delhi (since 2009). It teaches the DGCA CPL ground subjects in classroom batches in Dwarka and online batches for students outside Delhi, guides students on the full CPL pathway (computer number, medicals, exams, flying school, interviews) and arranges flight training through partner flying schools in India and abroad. It does not own aircraft or run a flying school. Career counselling is free. Training never guarantees a licence or a job.",
+ "services": [
+  "DGCA ground classes for CPL: Air Navigation, Aviation Meteorology, Air Regulations, Technical General, Technical Specific",
+  "RTR (A) radiotelephony preparation (examined separately from the five papers)",
+  "CPL pathway guidance: DGCA computer number, Class 2 / Class 1 medicals, Pariksha exam booking, eGCA licence application",
+  "Flight training arranged with partner flying schools in India and abroad (USA, Canada, South Africa, Australia, Sri Lanka guides on the site)",
+  "PPL and ATPL guidance; airline interview preparation",
+  "Free career counselling; classroom batches in Dwarka and online batches"
+ ],
+ "usp": [
+  "Teaches the exact DGCA syllabus, with study plans built around exam readiness",
+  "Honest guidance: published official rules and fees, no guaranteed jobs or pass promises",
+  "One place for the whole route: ground classes, exam booking, flying-school choice in India or abroad, interviews"
+ ],
+ "audience": [
+  "Class 11-12 students (PCM and non-PCM) and parents deciding on a pilot career",
+  "CPL students preparing for the DGCA papers and RTR",
+  "Graduates and career-switchers asking if it is too late",
+  "Aviation fans and flyers (reach audience for trending reels)"
+ ],
+ "rules": [
+  "Never claim pass rates, placement or job guarantees, 'number 1', 'best', 'oldest', pilots-trained counts or airline tie-ups.",
+  "Never name faculty, batch sizes or class timings. Never quote course fees (only official DGCA fees with their source).",
+  "Never promise salary; if pay comes up, use an authoritative published source and say it varies by airline.",
+  "Academy facts allowed: since 2009, Dwarka classroom + online batches, the five DGCA papers and RTR (A), free career counselling, flight training through partner flying schools.",
+  "Every exam/licence rule must be checked against DGCA (CAR Section 7, Pariksha / eGCA documents) at writing time; rules change.",
+  "No crash blame, no live investigations, nothing that mocks airlines or people."
+ ],
+ "market_facts": [
+  {
+   "fact": "DGCA CPL written papers: Air Navigation, Aviation Meteorology, Air Regulations, Technical General, Technical Specific (Aircraft Rules 1937, Schedule II); RTR (A) is a separate exam.",
+   "source": "https://weoneaviation.in/blogs/dgca-exam-guide",
+   "date": "2026"
+  },
+  {
+   "fact": "Pass mark is 70 % in each written paper, no aggregate (CAR Section 7 Series B Part I, para 5.6).",
+   "source": "https://www.dgca.gov.in/digigov-portal/?dynamicPage=civilAviationRequirements%2F6%2F0%2FviewDynamicRulesReq",
+   "date": "2019-02-13"
+  },
+  {
+   "fact": "A CPL/ATPL written pass stays valid 5 years, counted back from the licence application (CAR Section 7, para 6.7).",
+   "source": "https://www.dgca.gov.in/digigov-portal/?dynamicPage=civilAviationRequirements%2F6%2F0%2FviewDynamicRulesReq",
+   "date": "2019-02-13"
+  },
+  {
+   "fact": "DGCA exam fee: Rs 2,500 per paper in a regular session, Rs 5,000 in an on-demand session; paid via Bharatkosh; no refund once submitted.",
+   "source": "https://pariksha.dgca.gov.in/PDFViewer.jsp?pdf=6F8C326FEC34C153B92877E1A963F221",
+   "date": "2026"
+  },
+  {
+   "fact": "2026 regular DGCA exam sessions: 10-14 March, 16-20 June, 22-26 September, 15-19 December (tentative); 8 on-demand sessions.",
+   "source": "https://pariksha.dgca.gov.in/PDFViewer.jsp?pdf=027F234C1243D44B5BF5C787082CDCC8",
+   "date": "2026"
+  },
+  {
+   "fact": "A DGCA computer number is needed before booking any exam; it can be obtained via DigiLocker or manually; exams are booked on pariksha.dgca.gov.in.",
+   "source": "https://pariksha.dgca.gov.in/PDFViewer.jsp?pdf=6F8C326FEC34C153B92877E1A963F221",
+   "date": "2026"
+  },
+  {
+   "fact": "CPL needs 200 flying hours; minimum ages: 16 student pilot, 17 PPL, 18 CPL.",
+   "source": "https://weoneaviation.in/faqs",
+   "date": "2026"
+  }
+ ],
+ "lanes": {
+  "core": "Academy lane: teach ONE real thing from pilot training — a DGCA ground-subject concept (Air Navigation, Aviation Meteorology, Air Regulations, Technical General/Specific, RTR), an exact DGCA exam/licence rule or step (computer number, medicals, Pariksha sessions, pass marks, validity, eGCA), or a pilot-career decision (after 12th, non-PCM route, India vs abroad, cadet vs CPL, type rating). Check what aspirants need right now (upcoming DGCA session dates, results, rule changes, admission season) and verify every rule on DGCA's own pages. The viewer should finish thinking: these people really know how to teach this. Never random trivia.",
+  "trending": "Trending lane: aviation topics people are talking about right now (India first: news of the last 7 days, travel season, rules changing on a date, viral questions, myths) with the highest chance to be sent and saved. Still right for an academy's audience of aspiring pilots and flyers."
+ },
+ "mix": {
+  "core": 5,
+  "trending": 5,
+  "window": 10
+ },
+ "pillars": [
+  {
+   "id": "syllabus",
+   "lane": "core",
+   "name": "DGCA syllabus, made simple",
+   "why": "Concepts students struggle with (navigation maths, met, air law, instruments, RTR) explained in 35 s: high saves, pure identity."
+  },
+  {
+   "id": "exam_rules",
+   "lane": "core",
+   "name": "DGCA exam & licence rules",
+   "why": "Exact, official answers (pass marks, sessions, validity, computer number, medicals): saves and shares among aspirants."
+  },
+  {
+   "id": "pathway",
+   "lane": "core",
+   "name": "Pilot pathway decisions",
+   "why": "After 12th, non-PCM route, India vs abroad, cadet vs CPL, age: questions parents and students search."
+  },
+  {
+   "id": "cockpit_skills",
+   "lane": "core",
+   "name": "How pilots think",
+   "why": "CRM, decision-making, ATC phraseology, instruments: aspirational and educational."
+  },
+  {
+   "id": "trend_news",
+   "lane": "trending",
+   "name": "Aviation now",
+   "why": "News, rules changing on a date, airport/airline moves in India."
+  },
+  {
+   "id": "curiosity",
+   "lane": "trending",
+   "name": "You never noticed this",
+   "why": "Everyday-flyer curiosity: high sends, broad reach."
+  },
+  {
+   "id": "myths",
+   "lane": "trending",
+   "name": "Myth vs fact",
+   "why": "Contradiction hooks stop the scroll."
+  }
+ ],
+ "hook_patterns": [
+  "DGCA paper mein yeh question har baar aata hai… aur 70 % pass mark ke liye yeh samajhna zaroori hai",
+  "Pilot banna hai par PCM nahi liya? DGCA ka asli rule yeh hai",
+  "Is ek rule ki wajah se students apna DGCA pass waste kar dete hain",
+  "Navigation ka yeh concept 30 second mein samajh aa jayega",
+  "Ground class mein hum pehle din yeh sikhate hain"
+ ],
+ "topic_bank": [
+  {
+   "title": "DGCA ke 5 papers: kaunsa sabse tough aur kyun",
+   "lane": "core",
+   "pillar": "exam_rules",
+   "hook": "CPL ke liye 5 papers clear karne hain. Students sabse zyada kis mein atakte hain?",
+   "source": "https://weoneaviation.in/blogs/dgca-exam-guide"
+  },
+  {
+   "title": "70 % har paper mein: DGCA pass mark ka asli matlab",
+   "lane": "core",
+   "pillar": "exam_rules",
+   "hook": "DGCA mein 69 % matlab fail. Aur aggregate jaisa kuch nahi hota.",
+   "source": "https://weoneaviation.in/blogs/dgca-exam-pass-marks-and-retakes-cpl"
+  },
+  {
+   "title": "DGCA pass sirf 5 saal valid: yeh galti mat karna",
+   "lane": "core",
+   "pillar": "exam_rules",
+   "hook": "Aapne DGCA paper clear kiya… aur 5 saal baad woh zero ho sakta hai.",
+   "source": "https://weoneaviation.in/blogs/dgca-exam-pass-validity-cpl-five-years"
+  },
+  {
+   "title": "Regular vs on-demand DGCA session: Rs 2,500 ya Rs 5,000?",
+   "lane": "core",
+   "pillar": "exam_rules",
+   "hook": "Same paper, double fees. Kab on-demand session lena chahiye?",
+   "source": "https://weoneaviation.in/blogs/dgca-regular-vs-on-demand-exam-session"
+  },
+  {
+   "title": "DGCA computer number: pilot banne ka pehla step",
+   "lane": "core",
+   "pillar": "exam_rules",
+   "hook": "Exam se pehle ek number chahiye, warna booking hi nahi hogi.",
+   "source": "https://weoneaviation.in/blogs/dgca-computer-number-digilocker-instant-route"
+  },
+  {
+   "title": "Computer number reject kyun hota hai",
+   "lane": "core",
+   "pillar": "exam_rules",
+   "hook": "Ek chhoti si galti aur DGCA computer number reject.",
+   "source": "https://weoneaviation.in/blogs/dgca-computer-number-rejected-reasons"
+  },
+  {
+   "title": "Class 2 vs Class 1 medical: pehle kaunsa",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "Pilot medical do baar hota hai. Order galat kiya toh paisa aur time dono waste.",
+   "source": "https://weoneaviation.in/blogs/how-to-become-an-airline-pilot-in-india"
+  },
+  {
+   "title": "Specs pehente ho? Phir bhi pilot ban sakte ho",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "Chashma hai toh pilot nahi ban sakte? Yeh myth hai.",
+   "source": "https://weoneaviation.in/faqs"
+  },
+  {
+   "title": "PCM nahi liya? Pilot banne ka official route",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "Arts ya Commerce? Pilot ka darwaza band nahi hua.",
+   "source": "https://weoneaviation.in/blogs/become-pilot-without-physics-and-maths-class-12"
+  },
+  {
+   "title": "Pilot banne ki age limit: kab se kab tak",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "16 mein student pilot, 18 mein CPL. Aur maximum age?",
+   "source": "https://weoneaviation.in/blogs/age-limit-to-become-a-pilot-in-india"
+  },
+  {
+   "title": "200 ghante ka CPL: yeh hours kaise bante hain",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "200 flying hours sunne mein simple hai. Breakdown dekh ke shock ho jaoge.",
+   "source": "https://weoneaviation.in/blogs/cpl-pilot-in-command-hours-requirement-india"
+  },
+  {
+   "title": "CPL India vs abroad: sach mein kya farak hai",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "Abroad CPL sasta aur fast? Wapas aake ek step aur hai.",
+   "source": "https://weoneaviation.in/blogs/cpl-training-india-vs-abroad"
+  },
+  {
+   "title": "Foreign licence ko DGCA licence mein convert kaise karte hain",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "USA ka CPL leke India aaye… ab kya?",
+   "source": "https://weoneaviation.in/blogs/convert-foreign-pilot-licence-to-dgca-india"
+  },
+  {
+   "title": "CPL vs ATPL: difference 30 second mein",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "CPL se job milti hai, ATPL se captain banta hai. Kaise?",
+   "source": "https://weoneaviation.in/blogs/cpl-vs-atpl-difference-india"
+  },
+  {
+   "title": "Type rating kya hota hai aur kab chahiye",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "CPL hai par A320 nahi uda sakte. Missing piece: type rating.",
+   "source": "https://weoneaviation.in/blogs/type-rating-for-pilots-in-india"
+  },
+  {
+   "title": "MCC training: CPL ke baad ka hidden step",
+   "lane": "core",
+   "pillar": "cockpit_skills",
+   "hook": "Akele udna aata hai. Do pilots ke saath udna alag skill hai.",
+   "source": "https://weoneaviation.in/blogs/mcc-training-for-pilots-in-india"
+  },
+  {
+   "title": "1 nautical mile = 1,852 m: pilots km kyun nahi use karte",
+   "lane": "core",
+   "pillar": "syllabus",
+   "hook": "Pilot km mein baat kyun nahi karte? Jawab Earth ki shape mein hai.",
+   "source": "https://weoneaviation.in/air-navigation"
+  },
+  {
+   "title": "Heading vs track: wind plane ko kaise side mein dhakelti hai",
+   "lane": "core",
+   "pillar": "syllabus",
+   "hook": "Nose ek taraf, plane doosri taraf ja raha hai. Kaise?",
+   "source": "https://weoneaviation.in/air-navigation"
+  },
+  {
+   "title": "ISA: 15 degree aur 1013 hPa, har pilot ka base number",
+   "lane": "core",
+   "pillar": "syllabus",
+   "hook": "Har aircraft calculation ek 'perfect din' se start hoti hai.",
+   "source": "https://weoneaviation.in/aviation-meteorology"
+  },
+  {
+   "title": "Upar jaate hi thand: lapse rate simple language mein",
+   "lane": "core",
+   "pillar": "syllabus",
+   "hook": "Har 1,000 feet par temperature girta hai. Kitna?",
+   "source": "https://weoneaviation.in/aviation-meteorology"
+  },
+  {
+   "title": "METAR padhna seekho 30 second mein",
+   "lane": "core",
+   "pillar": "syllabus",
+   "hook": "Yeh ajeeb code pilot ka weather report hai. Padh ke dikhaate hain.",
+   "source": "https://weoneaviation.in/aviation-meteorology"
+  },
+  {
+   "title": "Fog mein landing: visibility vs RVR",
+   "lane": "core",
+   "pillar": "syllabus",
+   "hook": "Delhi fog mein flights kaise land karti hain? Ek number decide karta hai.",
+   "source": "https://weoneaviation.in/aviation-meteorology"
+  },
+  {
+   "title": "Six-pack instruments: cockpit ke 6 sabse important gauges",
+   "lane": "core",
+   "pillar": "syllabus",
+   "hook": "Screen fail ho jaye toh pilot in 6 instruments pe zinda rehta hai.",
+   "source": "https://weoneaviation.in/technical-general"
+  },
+  {
+   "title": "RTR: 'Roger' aur 'Wilco' ka farak",
+   "lane": "core",
+   "pillar": "cockpit_skills",
+   "hook": "Roger ka matlab 'haan' nahi hota. Pilots yeh galti nahi karte.",
+   "source": "https://weoneaviation.in/rtr-a"
+  },
+  {
+   "title": "Phonetic alphabet: Alpha, Bravo… aur 'Niner' kyun",
+   "lane": "core",
+   "pillar": "cockpit_skills",
+   "hook": "Pilot 9 ko 'niner' kyun bolte hain?",
+   "source": "https://weoneaviation.in/rtr-a"
+  },
+  {
+   "title": "Air Regulations: licence ke saath kya documents carry karne hote hain",
+   "lane": "core",
+   "pillar": "syllabus",
+   "hook": "Licence hai, phir bhi pilot ko udne nahi diya. Kyun?",
+   "source": "https://weoneaviation.in/air-regulations"
+  },
+  {
+   "title": "Cadet programme vs self-funded CPL",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "Cadet programme ya CPL khud? Dono ka hidden trade-off.",
+   "source": "https://weoneaviation.in/blogs/how-to-become-an-airline-pilot-in-india"
+  },
+  {
+   "title": "Flying school kaise choose karein: DGCA ka apna data",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "Flying school ka ad mat dekho. DGCA ka data dekho.",
+   "source": "https://weoneaviation.in/blogs/best-flying-school-in-india"
+  },
+  {
+   "title": "Ground classes ka 6-mahine ka plan: kab kaunsa paper",
+   "lane": "core",
+   "pillar": "exam_rules",
+   "hook": "5 papers, 4 sessions. Smart students kaunsa order follow karte hain?",
+   "source": "https://weoneaviation.in/blogs/dgca-ground-school-guide"
+  },
+  {
+   "title": "Pilot shortage in India: government data kya kehta hai",
+   "lane": "core",
+   "pillar": "pathway",
+   "hook": "Kya India mein sach mein pilots ki kami hai? Numbers dekhiye.",
+   "source": "https://weoneaviation.in/blogs/pilot-shortage-in-india"
+  }
+ ],
+ "visual_style": {
+  "look": "Cockpits, students studying, runways, aircraft in flight, ATC, charts and instruments; clean motion graphics with numbers.",
+  "footage_keywords": [
+   "cockpit instruments close up",
+   "pilot student studying",
+   "small training aircraft takeoff",
+   "airline pilot cockpit",
+   "aviation chart navigation",
+   "air traffic control tower",
+   "runway lights night",
+   "weather clouds timelapse"
+  ],
+  "avoid": [
+   "crash footage",
+   "unrelated people in close-up"
+  ],
+  "graphics": "list_card for steps/rules, counter for numbers (70 %, 200 hours, 5 years), compare for A vs B, quote_card for an official rule with its source."
+ },
+ "lane_names": {
+  "core": "Academy",
+  "trending": "Trending"
+ },
+ "core_keywords": [
+  "dgca",
+  "cpl",
+  "ppl",
+  "atpl",
+  "rtr",
+  "computer number",
+  "pariksha",
+  "egca",
+  "ground class",
+  "ground classes",
+  "class 1 medical",
+  "class 2 medical",
+  "air navigation",
+  "meteorology",
+  "air regulations",
+  "technical general",
+  "type rating",
+  "cadet",
+  "flying school",
+  "pilot banne",
+  "pilot banna",
+  "pilot training",
+  "pilot career",
+  "student pilot",
+  "nautical mile",
+  "metar",
+  "lapse rate",
+  "phonetic",
+  "roger",
+  "wilco"
+ ]
 }

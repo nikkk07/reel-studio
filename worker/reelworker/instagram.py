@@ -43,7 +43,10 @@ def make_caption(db, job_id, output, brand_id="weone"):
         tag = re.sub(r"[^a-z0-9]", "", prof["name"].lower())
         text = brain.prompt("caption_brand", brand_name=prof["name"], brand_brief=brandmod.brief(prof, full=False), reel=json.dumps(reel, ensure_ascii=False, indent=1),
                             handle=h, language=prof.get("language", "english").title(), brand_tag=tag)
-    res = brain.ask("caption", text, schemas.CAPTION, [], config.JOBS_DIR / job_id / "brain", timeout=300)
+    from . import agents
+    import types
+    actx = types.SimpleNamespace(db=db, job={"id": job_id, "brand": brand_id}, id=job_id, dir=config.JOBS_DIR / job_id, log=lambda *a, **k: None)
+    res = agents.call(actx, "caption_writer", text, schemas.CAPTION, [], timeout=300, name="caption")
     return compose(res["caption"], res["hashtags"], own=own or "-")
 
 

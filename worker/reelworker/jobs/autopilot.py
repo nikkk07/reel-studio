@@ -10,7 +10,7 @@
 import json, random, re
 from datetime import datetime, timedelta, timezone
 from statistics import median
-from .. import brain, schemas
+from .. import agents, brain, lanes, schemas
 
 IST = timezone(timedelta(hours=5, minutes=30))
 WEIGHTS = {"hook": .18, "shareability": .16, "curiosity": .12, "saveability": .10, "timeliness": .10,
@@ -38,7 +38,7 @@ def engagement(s):
     return round(100 * (4 * (s.get("shares") or 0) + 3 * (s.get("saved") or 0) + 2 * (s.get("comments") or 0) + (s.get("likes") or 0)) / reach, 2)
 
 
-def history(db, days=60, brand="weone"):
+def history(db, days=60, brand="weone", prof=None):
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = db.select("jobs", f"select=id,status,input,output,created_at&kind=eq.reel&brand=eq.{brand}&created_at=gte.{since}&order=created_at.desc&limit=120")
     out = []
@@ -50,13 +50,27 @@ def history(db, days=60, brand="weone"):
         st = o.get("ig_stats") or {}
         posted = (o.get("ig") or {}).get("posted_at")
         when = datetime.fromisoformat(posted.replace("Z", "+00:00")).astimezone(IST) if posted else None
-        out.append({"title": title, "status": r["status"], "category": (i.get("concept") or {}).get("category") or i.get("category"),
+        cat = (i.get("concept") or {}).get("category") or i.get("category")
+        out.append({"title": title, "status": r["status"], "category": cat, "lane": lanes.of((i.get("concept") or {}).get("lane") or i.get("lane"), cat, title, prof),
                     "hook": (i.get("concept") or {}).get("hook"), "autopilot": "autopilot" in i,
                     "posted": when.strftime("%a %H:%M") if when else None, "hours_live": st.get("hours_since_post"),
                     "views": st.get("views"), "reach": st.get("reach"), "likes": st.get("likes"), "comments": st.get("comments"),
                     "shares": st.get("shares"), "saved": st.get("saved"), "avg_watch_s": st.get("avg_watch_s"),
-                    "skip_rate": st.get("reels_skip_rate"), "eng": engagement(st), "created": r["created_at"][:10]})
+                    "skip_rate": st.get("reels_skip_rate"), "eng": engagement(st), "created": r["created_at"][:10],
+                    "posted_at": posted, "critic": (o.get("critic") or {}).get("total"), "qc": (o.get("qc") or {}).get("score"),
+                    "words": (o.get("critic") or {}).get("words")})
     return out
+
+
+def check_topics(obj):
+    """Supervisor contract for topic ideas: verifiable, sourced, no links in hooks."""
+    probs = []
+    for k, t in enumerate(obj.get("topics", [])):
+        if not any(str(x.get("url", "")).startswith("http") for x in t.get("sources", [])):
+            probs.append(f"topic {k + 1} ('{t.get('title', '')[:40]}') has no real source URL")
+        if re.search(r"https?://|www\.", str(t.get("hook", "")) + str(t.get("title", ""))):
+            probs.append(f"topic {k + 1} puts a link in its title or hook")
+    return probs
 
 
 def performance_text(hist):
@@ -112,18 +126,25 @@ def run(ctx):
         return ctx.finish("done", autopilot={**(ctx.job.get("output") or {}).get("autopilot", {}), "reel_id": made[0]["id"]})
 
     ctx.progress("research", 0.05); ctx.log("Autopilot: learning from our posted reels")
-    hist = history(ctx.db, brand=ctx.job.get("brand") or "weone")
+    from .. import brand as brandmod
+    prof = brandmod.load(ctx.db, ctx.job.get("brand") or "weone")
+    hist = history(ctx.db, brand=ctx.job.get("brand") or "weone", prof=prof)
     perf = performance_text(hist)
     recent = "\n".join(f"- {h['created']} [{h['category'] or '?'}] {h['title']}" for h in hist[:40]) or "none"
     cats = [h["category"] for h in hist if h["autopilot"] and h["category"]][:7]
+    if "lane" not in ctx.data:
+        ctx.data["mix"] = lanes.mix_status(hist); ctx.data["lane"] = ctx.data["mix"]["next"]
+    lane = ctx.data["lane"]; mix = ctx.data["mix"]
     ctx.data["performance"] = perf; ctx.save()
+    ctx.log(f"Autopilot: today is a {lane} reel ({mix['text']})")
 
     if "scout" not in ctx.data:
         ctx.progress("research", 0.1); ctx.log("Autopilot: researching what is trending today")
+        rules = lanes.rules(prof, lane) + ("\n\nCore topic bank (verify facts before using; adapt freely):\n" + lanes.core_bank(prof) if lane == "core" else "")
         p = brain.prompt("autopilot_scout", today=today.strftime("%A %d %B %Y"), performance=perf, recent=recent,
-                         recent_categories=", ".join(cats) or "none yet")
-        ctx.data["scout"] = brain.ask("autopilot_scout", p, schemas.SCOUT, ["WebSearch", "WebFetch"], ctx.dir / "brain",
-                                      timeout=1200, on_event=lambda m: ctx.log(m))["topics"]
+                         recent_categories=", ".join(cats) or "none yet", lane=lanes.name(prof, lane), lane_rules=rules, mix=mix["text"], brand_brief=brandmod.brief(prof, full=False))
+        ctx.data["scout"] = agents.call(ctx, "trend_scout", p + "\n\n" + brain.prompt("ig_playbook"), schemas.SCOUT, ["WebSearch", "WebFetch"],
+                                        timeout=1200, on_event=lambda m: ctx.log(m), name="autopilot_scout", check=check_topics)["topics"]
         ctx.save()
     topics = [dict(t) for t in ctx.data["scout"]]
 
@@ -140,9 +161,9 @@ def run(ctx):
         order = list(range(len(fresh))); random.Random(ctx.id).shuffle(order)      # no position bias
         shown = [{"index": k, **{f: fresh[i].get(f) for f in ("title", "hook", "angle", "why_viral", "category", "trend_signal", "key_facts", "sources", "risk_note")}}
                  for k, i in enumerate(order)]
-        j = brain.ask("autopilot_judge", brain.prompt("autopilot_judge", today=today.strftime("%A %d %B %Y"), performance=perf, recent=recent,
-                                                      candidates=json.dumps(shown, ensure_ascii=False, indent=1)),
-                      schemas.JUDGE, [], ctx.dir / "brain", timeout=600)
+        j = agents.call(ctx, "viral_editor", brain.prompt("autopilot_judge", today=today.strftime("%A %d %B %Y"), performance=perf, recent=recent,
+                                                      candidates=json.dumps(shown, ensure_ascii=False, indent=1), lane=lanes.name(prof, lane), lane_rules=lanes.rules(prof, lane)),
+                      schemas.JUDGE, [], timeout=600, name="autopilot_judge")
         for s in j.get("scores", []):            # back to fresh[] positions
             s["index"] = order[s["index"]] if 0 <= s.get("index", -1) < len(order) else -1
         ctx.data["judge"] = j; ctx.save()
@@ -158,14 +179,15 @@ def run(ctx):
     if win.get("_better", {}).get("title"):
         concept["title"] = win["_better"]["title"]
     concept["est_seconds"] = concept.get("est_seconds") or 35
+    concept["lane"] = lane
     ctx.progress("research", 0.9)
     reel = ctx.db.insert("jobs", {"kind": "reel", "input": {"concept": concept, "source": "autopilot", "autopilot": ctx.id,
                                                              "category": win.get("category"), "virality": win["_score"]}})[0]
-    pick = {"title": concept["title"], "hook": concept["hook"], "category": win.get("category"), "score": win["_score"],
+    pick = {"title": concept["title"], "hook": concept["hook"], "category": win.get("category"), "lane": lane, "mix": {k: mix[k] for k in ("core", "trending", "window")}, "score": win["_score"],
             "why": win.get("_why"), "trend": win.get("trend_signal"), "reel_id": reel["id"], "day": today.isoformat(),
             "summary": ctx.data["judge"].get("summary", "")}
-    board = [{**{k: t.get(k) for k in ("title", "hook", "angle", "why_viral", "key_facts", "sources", "risk_note", "est_seconds", "category", "trend_signal")},
+    board = [{**{k: t.get(k) for k in ("title", "hook", "angle", "why_viral", "key_facts", "sources", "risk_note", "est_seconds", "category", "trend_signal")}, "lane": lane,
               "score": t.get("_score"), "scout_score": t.get("viral_score"), "rubric": t.get("_rubric"), "editor_note": t.get("_why") if not t.get("_sensitive") else "skipped: sensitive topic", "repeat": t.get("_repeat")}
              for t in sorted(topics, key=lambda t: -(t.get("_score") or -1))]
     ctx.finish("done", autopilot=pick, topics=board)
-    ctx.log(f"Autopilot picked \"{concept['title']}\" (score {win['_score']}/100, {win.get('category')}); the reel is queued")
+    ctx.log(f"Autopilot picked \"{concept['title']}\" ({lane}, score {win['_score']}/100, {win.get('category')}); the reel is queued")

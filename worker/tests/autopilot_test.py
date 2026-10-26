@@ -5,6 +5,7 @@ from pathlib import Path
 os.environ["REELSTUDIO_ROOT"] = tempfile.mkdtemp(); os.environ["REELSTUDIO_BRAIN"] = "mock"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from reelworker.runner import JobContext, Cancelled  # noqa: E402
+from reelworker import agents  # noqa: E402
 from reelworker.jobs import autopilot, reel, suggest  # noqa: E402
 from reelworker import schemas  # noqa: E402
 
@@ -25,11 +26,15 @@ class DB:
             if op == "eq" and got != val: return False
         return True
     def select(self, t, q=""):
+        if t == "brands" and "id=eq.weone" in q:     # the live profile of We One Aviation
+            return [{"id": "weone", "name": "We One Aviation", "website": "https://weoneaviation.in", "instagram": "we_one_aviation", "logo_asset": None,
+                     "profile": json.load(open(Path(__file__).resolve().parents[2] / "brands/weone/profile.json"))}]
         if t != "jobs": return []
         lim = int(next((p[6:] for p in q.split("&") if p.startswith("limit=")), 999))
         return [r for r in sorted(self.rows.values(), key=lambda r: r["created_at"], reverse=True) if self._m(r, q)][:lim]
     def insert(self, t, row, upsert=False):
         if t == "job_events": self.events.append(row); return [row]
+        if t != "jobs": self.__dict__.setdefault("other", []).append((t, row)); return [row]
         row = {"id": str(uuid.uuid4()), "status": "queued", "output": {}, "parent_id": None, "created_at": datetime.now(timezone.utc).isoformat(), **row}
         self.rows[row["id"]] = row; return [row]
     def update(self, t, match, vals):
@@ -62,7 +67,7 @@ past = {"id": "p1", "kind": "reel", "status": "done", "created_at": "2026-10-21T
                    "ig_stats": {"views": 1500, "reach": 1200, "likes": 60, "comments": 5, "shares": 14, "saved": 9, "avg_watch_s": 11.2, "hours_since_post": 20}}}
 
 # 1. normal run: best weighted topic wins, reel queued with its concept, scoreboard kept
-db = DB([dict(past)]); b = Brain({"CPL ke liye DGCA ke 6 exams": 9, "Winter schedule se flight time kyun badalta hai": 6}); autopilot.brain = b
+db = DB([dict(past)]); b = Brain({"CPL ke liye DGCA ke 6 exams": 9, "Winter schedule se flight time kyun badalta hai": 6}); autopilot.brain = agents.brain = b
 ctx = job(db, {"autopilot": True, "day": today, "trigger": "schedule"}); suggest.run(ctx)
 reels = [r for r in db.rows.values() if r["kind"] == "reel" and r["id"] != "p1"]
 pick = ctx.job["output"]["autopilot"]
@@ -77,15 +82,15 @@ cands = json.loads(b.vars["autopilot_judge"]["candidates"]); ok(not any("7700" i
 ctx.job["status"] = "running"; db.rows[ctx.id]["status"] = "running"; ctx.job["output"]["autopilot"] = pick
 autopilot.run(ctx); ok(len([r for r in db.rows.values() if r["kind"] == "reel" and r["id"] != "p1"]) == 1, "restart after the reel was queued never makes a second one")
 # 3. unsafe topics are never picked; all unsafe -> retry
-db = DB([dict(past)]); autopilot.brain = Brain({"CPL ke liye DGCA ke 6 exams": 10}, unsafe=("CPL ke liye DGCA ke 6 exams",))
+db = DB([dict(past)]); autopilot.brain = agents.brain = Brain({"CPL ke liye DGCA ke 6 exams": 10}, unsafe=("CPL ke liye DGCA ke 6 exams",))
 ctx = job(db, {"autopilot": True, "day": today, "trigger": "manual"}); suggest.run(ctx)
 ok(ctx.job["output"]["autopilot"]["title"] != "CPL ke liye DGCA ke 6 exams", "a topic the editor marks unsafe is never picked, even with the top score")
-db = DB(); autopilot.brain = Brain(unsafe=tuple(t["title"] for t in json.loads((Path(__file__).parent / "fixtures/autopilot_scout.json").read_text())["topics"]))
+db = DB(); autopilot.brain = agents.brain = Brain(unsafe=tuple(t["title"] for t in json.loads((Path(__file__).parent / "fixtures/autopilot_scout.json").read_text())["topics"]))
 ctx = job(db, {"autopilot": True, "day": today, "trigger": "manual"})
 try: suggest.run(ctx); ok(False, "all unsafe -> error")
 except RuntimeError as e: ok("unsafe" in str(e) and not [r for r in db.rows.values() if r["kind"] == "reel"], "every topic unsafe -> no reel, the run retries with new research")
 # 4. a scheduled run the Mac sees only the next day is skipped
-db = DB(); autopilot.brain = Brain(); y = (datetime.now(autopilot.IST) - timedelta(days=1)).date().isoformat()
+db = DB(); autopilot.brain = agents.brain = Brain(); y = (datetime.now(autopilot.IST) - timedelta(days=1)).date().isoformat()
 ctx = job(db, {"autopilot": True, "day": y, "trigger": "schedule"}); suggest.run(ctx)
 ok(ctx.job["output"]["autopilot"].get("skipped") == "missed" and not autopilot.brain.calls and not [r for r in db.rows.values() if r["kind"] == "reel"], "yesterday's missed run is skipped (no surprise reel, no Claude use)")
 # 5. normal suggestions are untouched
@@ -115,7 +120,7 @@ ok(c.job["status"] == "review" and not c.job["output"].get("autopilot_hold"), "m
 ok(autopilot.engagement({"reach": 1000, "shares": 10, "saved": 5, "comments": 3, "likes": 50}) == 11.1 and autopilot.engagement({}) is None, "engagement per 100 reached weights sends > saves > comments > likes")
 ok(autopilot.similar("Squawk 7700 ka matlab", "7700, 7600, 7500: squawk codes") >= 0.6 and autopilot.similar("CPL exams DGCA", "Lightning strike plane") == 0, "repeat detector")
 # 8. abuse / abnormal cases
-db = DB(); db.settings_off = True; autopilot.brain = Brain()
+db = DB(); db.settings_off = True; autopilot.brain = agents.brain = Brain()
 _sel = DB.select
 def sel_off(self, t, q=""):
     return [{"value": {"on": False}}] if t == "settings" else _sel(self, t, q)
@@ -131,7 +136,7 @@ class B2(Brain):
     def ask(self, name, *a, **k):
         if name == "autopilot_scout": self.calls.append((name, a[2])); return fx
         return Brain.ask(self, name, *a, **k)
-db = DB(); autopilot.brain = B2({"Plane crash ke victims aur death toll": 10}); ctx = job(db, {"autopilot": True, "day": today, "trigger": "manual"}); suggest.run(ctx)
+db = DB(); autopilot.brain = agents.brain = B2({"Plane crash ke victims aur death toll": 10}); ctx = job(db, {"autopilot": True, "day": today, "trigger": "manual"}); suggest.run(ctx)
 ok("death toll" not in ctx.job["output"]["autopilot"]["title"] and any(t.get("editor_note") == "skipped: sensitive topic" for t in ctx.job["output"]["topics"]), "a tragedy topic is never auto-picked, even with the top score")
 from reelworker.runner import TransientError
 from reelworker import instagram
@@ -141,6 +146,25 @@ except TransientError as e: ok("cheapflights.xyz" in str(e), "a web address plan
 spec["groups"][0]["phrases"][0]["say"] = "35000 feet par Boeing 737-800, 2019 - 2024"; ok(reel.validate_spec(spec)["groups"], "normal numbers, aircraft names and year ranges pass")
 cap = instagram.compose("Book now at www.x.xyz, call +91 98765 43210, DM @rival_page. Follow @we_one_aviation #a #b #c #d #e #f", ["aviation", "pilot"])
 ok("www" not in cap and "98765" not in cap and "@rival_page" not in cap and "@we_one_aviation" in cap and cap.count("#") == 5, "caption: links, phone numbers and other accounts removed, max 5 hashtags")
+
+# ---- content mix: core (the account's own subjects) vs trending, 50 / 50
+from reelworker import lanes  # noqa: E402
+H = lambda ls: [{"title": "x", "status": "done", "lane": l} for l in ls]
+ok(lanes.mix_status(H(["trending"] * 7 + ["core"] * 3))["next"] == "core", "7 trending / 3 core in the last 10 -> next is core")
+ok(lanes.mix_status(H(["core"] * 6 + ["trending"] * 4))["next"] == "trending", "6 core / 4 trending -> next is trending")
+ok(lanes.mix_status(H(["core", "trending"] * 5))["next"] == "trending" and lanes.mix_status(H(["trending", "core"] * 5))["next"] == "core", "balanced -> they alternate (1 course reel, 1 trending reel)")
+ok(lanes.mix_status(H(["trending"] * 12 + ["core"] * 5))["window"] == 10, "only the last 10 kept reels count")
+ok(lanes.mix_status([{"title": "x", "status": "cancelled", "lane": "core"}] + H(["trending"]))["next"] == "core", "cancelled reels don't count")
+WP = json.load(open(Path(__file__).resolve().parents[2] / "brands/weone/profile.json"))
+ok(lanes.of(None, "career", "") == "core" and lanes.of(None, None, "DGCA ke 5 papers", WP) == "core" and lanes.of(None, "news", "Black box orange kyun", WP) == "trending"
+   and lanes.of("academy") == "core", "older reels without a lane are classified by category and the account's own keywords")
+db = DB(); [db.rows.update({f"h{k}": {"id": f"h{k}", "kind": "reel", "status": "done", "brand": "weone", "input": {"concept": {"title": f"Trivia {k}", "lane": "trending"}}, "output": {"title": f"Trivia {k}"}, "created_at": "2026-10-2%dT00:00:00Z" % (k % 3)}}) for k in range(4)]
+ctx = job(db, {"autopilot": True, "trigger": "manual"}); b = Brain(); autopilot.brain = agents.brain = b; autopilot.run(ctx)
+r = [x for x in db.rows.values() if x["kind"] == "reel" and x["input"].get("autopilot") == ctx.id][0]
+ok(ctx.job["output"]["autopilot"]["lane"] == "core" and r["input"]["concept"]["lane"] == "core", "after trending reels, Autopilot makes a core (academy) reel and tags it")
+ok("Academy lane" in b.vars["autopilot_scout"]["lane_rules"] and "DGCA" in b.vars["autopilot_scout"]["brand_brief"] and b.vars["autopilot_judge"]["lane"] == "Academy", "the scout and the judge are both told today's lane and the academy's own facts")
+runs = [r for t, r in db.__dict__.get("other", []) if t == "agent_runs"]
+ok({r["agent"] for r in runs} >= {"trend_scout", "viral_editor"} and all(r["ok"] for r in runs), "every agent call is logged for the learning loop")
 
 bad_ = [n for k, n in R if not k]
 print(f"{len(R) - len(bad_)}/{len(R)} autopilot checks passed" + (" | FAILED: " + "; ".join(bad_) if bad_ else "")); sys.exit(1 if bad_ else 0)

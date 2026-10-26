@@ -8,10 +8,11 @@ SRC = {"type": "object", "properties": {"title": S, "url": S}, "required": ["tit
 
 TOPIC = {"type": "object", "required": ["title", "hook", "angle", "why_viral", "key_facts", "sources"],
          "properties": {"title": S, "hook": S, "angle": S, "why_viral": S, "key_facts": {"type": "array", "items": S},
-                        "sources": {"type": "array", "items": SRC}, "risk_note": S, "est_seconds": I}}
+                        "sources": {"type": "array", "items": SRC}, "risk_note": S, "est_seconds": I,
+                        "lane": {"type": "string", "enum": ["core", "trending"]}}}
 
 SUGGEST = {"type": "object", "required": ["topics"],
-           "properties": {"topics": {"type": "array", "minItems": 5, "maxItems": 5, "items": TOPIC}}}
+           "properties": {"topics": {"type": "array", "minItems": 5, "maxItems": 6, "items": TOPIC}}}
 
 OPTIMIZE = {"type": "object", "required": ["title", "hook", "concept", "outline", "key_facts", "sources"],
             "properties": {"title": S, "hook": S, "concept": S, "outline": {"type": "array", "items": S},
@@ -58,7 +59,7 @@ CAPTION = {"type": "object", "required": ["caption", "hashtags"],
            "properties": {"caption": S, "hashtags": {"type": "array", "minItems": 3, "maxItems": 5, "items": S}}}
 
 # ---- autopilot (daily, no human): scout proposes, an independent judge scores, code picks the winner
-CATEGORIES = ["news", "myth", "emergency", "how_it_works", "career", "numbers", "cabin", "history"]
+CATEGORIES = ["news", "myth", "emergency", "how_it_works", "career", "numbers", "cabin", "history", "syllabus", "exam"]
 SCOUT_TOPIC = {"type": "object", "required": TOPIC["required"] + ["category", "trend_signal", "viral_score"],
                "properties": {**TOPIC["properties"], "category": {"type": "string", "enum": CATEGORIES},
                               "trend_signal": S, "viral_score": I}}
@@ -70,3 +71,42 @@ JUDGE = {"type": "object", "required": ["scores", "summary"],
              "type": "object", "required": ["index", "safe", "note"] + CRITERIA,
              "properties": {"index": I, "safe": B, "note": S, "better_hook": S, "better_title": S,
                             **{c: I for c in CRITERIA}}}}}}      # 0-10, clamped in code
+
+# ---- agent team
+FACTSHEET = {"type": "object", "required": ["facts", "angle", "do_not_say"],
+             "properties": {"facts": {"type": "array", "minItems": 3, "items": {"type": "object", "required": ["fact", "source_url", "source_title", "confidence"],
+                                      "properties": {"fact": S, "source_url": S, "source_title": S, "quote": S, "confidence": {"type": "string", "enum": ["high", "medium"]}}}},
+                            "angle": S, "do_not_say": {"type": "array", "items": S}, "corrections": {"type": "array", "items": S}}}
+CRITIC_KEYS = ["hook", "open_loop", "clarity", "pacing", "payoff", "shareability", "saveability", "fact_fidelity", "brand_fit", "ending"]
+CRITIC = {"type": "object", "required": CRITIC_KEYS + ["total", "pass", "fixes"],
+          "properties": {**{k: I for k in CRITIC_KEYS}, "total": I, "pass": B, "fixes": {"type": "array", "items": S}, "better_hook": S, "summary": S}}
+
+STRS = {"type": "array", "items": S}
+PROFILE = {"type": "object",
+           "required": ["business", "niche", "tone", "language", "services", "usp", "audience", "rules", "market_facts", "competitors", "competitor_gap",
+                        "pillars", "hook_patterns", "topic_bank", "visual_style", "hashtags", "lanes", "lane_names", "core_keywords", "strategy", "sources", "end_sub"],
+           "properties": {"business": S, "niche": S, "tone": S, "language": {"type": "string", "enum": ["english", "hinglish"]},
+                          "services": STRS, "usp": STRS, "audience": STRS, "rules": STRS,
+                          "market_facts": {"type": "array", "items": {"type": "object", "required": ["fact", "source"], "properties": {"fact": S, "source": S, "date": S}}},
+                          "competitors": {"type": "array", "items": {"type": "object", "required": ["name", "note"], "properties": {"name": S, "note": S}}},
+                          "competitor_gap": S,
+                          "pillars": {"type": "array", "items": {"type": "object", "required": ["id", "name", "why", "lane"],
+                                                                 "properties": {"id": S, "name": S, "why": S, "lane": {"type": "string", "enum": ["core", "trending"]}}}},
+                          "hook_patterns": STRS,
+                          "topic_bank": {"type": "array", "minItems": 16, "items": {"type": "object", "required": ["title", "hook", "lane", "source"],
+                                         "properties": {"title": S, "hook": S, "pillar": S, "lane": {"type": "string", "enum": ["core", "trending"]}, "facts": STRS, "source": S}}},
+                          "visual_style": {"type": "object", "required": ["look", "footage_keywords", "avoid", "graphics"],
+                                           "properties": {"look": S, "footage_keywords": STRS, "footage_rules": STRS, "avoid": STRS, "mood": S, "graphics": S}},
+                          "hashtags": STRS, "lanes": {"type": "object", "required": ["core", "trending"], "properties": {"core": S, "trending": S}},
+                          "lane_names": {"type": "object", "required": ["core", "trending"], "properties": {"core": S, "trending": S}},
+                          "core_keywords": STRS, "strategy": S, "sources": STRS, "end_sub": S}}
+
+TEAM = ["strategist", "trend_scout", "viral_editor", "fact_checker", "scriptwriter", "hook_critic", "footage_picker", "quality_inspector", "caption_writer", "account_intel"]
+LESSON = {"type": "object", "required": ["agent", "lesson", "why"],
+          "properties": {"agent": {"type": "string", "enum": TEAM}, "lesson": S, "why": S, "metric": {"type": "string", "enum": ["engagement", "critic", "qc", "success"]}}}
+ANALYST = {"type": "object", "required": ["insights", "lessons", "retire"],
+           "properties": {"insights": S, "lessons": {"type": "array", "maxItems": 4, "items": LESSON}, "retire": {"type": "array", "items": I}}}
+RESOURCES = {"type": "object", "required": ["health", "lessons", "usage_note"],
+             "properties": {"health": {"type": "array", "items": {"type": "object", "required": ["agent", "status", "note"],
+                                                                  "properties": {"agent": S, "status": {"type": "string", "enum": ["ok", "watch", "bad"]}, "note": S}}},
+                            "lessons": {"type": "array", "maxItems": 4, "items": LESSON}, "usage_note": S}}

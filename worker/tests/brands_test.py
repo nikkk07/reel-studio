@@ -7,6 +7,7 @@ os.environ["REELSTUDIO_ROOT"] = tempfile.mkdtemp(); os.environ["REELSTUDIO_BRAIN
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from reelworker import config, brand as brandmod, instagram, brain as realbrain  # noqa: E402
 from reelworker.runner import JobContext  # noqa: E402
+from reelworker import agents  # noqa: E402
 from reelworker.jobs import reel, suggest, optimize  # noqa: E402
 R = []
 def ok(c, n): R.append((bool(c), n)); print(("PASS " if c else "FAIL ") + n)
@@ -30,11 +31,11 @@ class DB:
     def update(self, t, match, vals): self.updates.append(vals); return [{"id": "x"}]
 
 class Brain:
-    def __init__(self): self.calls = []
+    def __init__(self): self.calls = []; self.texts = {}
     def prompt(self, name, **v):
         self.calls.append((name, v)); return realbrain.prompt(name, **v)
     def ask(self, name, text, schema, tools, cwd, timeout=0, on_event=None):
-        self.last_text = text
+        self.last_text = text; self.texts[name] = text
         if name == "caption": return {"caption": "Your private jet quote is missing a line.\\n\\nFollow @we_one_aviation and @bookmycharter_fake. Visit www.x.com", "hashtags": ["privatejet", "charter", "bookmycharter"]}
         return json.loads((Path(__file__).parent / f"fixtures/{name}.json").read_text())
 
@@ -79,14 +80,14 @@ ok(last["say"] == PROFILE["cta"]["say"] and not any("we one" in (x["say"] + x["c
 s3 = reel.validate_spec(json.loads(json.dumps(spec)), w)
 ok(s3["groups"][-1]["phrases"][-1]["caption"] == reel.CTA_CAPTION, "We One reel keeps 'follow karein We One Aviation'")
 
-B = Brain(); reel.brain = B
+B = Brain(); reel.brain = agents.brain = B
 c, _ = ctx_for("reel", "bookmycharter", {"concept": {"title": "The line missing from your private jet quote"}})
 reel.stage_script(c, lambda f: None)
-name, v = B.calls[-1]
-ok(name == "script_brand" and v["brand_name"] == "Book My Charter" and PROFILE["cta"]["say"] in B.last_text and "Devanagari" not in B.last_text,
+name, v = [c for c in B.calls if c[0] in ("script", "script_brand")][-1]
+ok(name == "script_brand" and v["brand_name"] == "Book My Charter" and PROFILE["cta"]["say"] in B.texts["script"] and "Devanagari" not in B.texts["script"],
    "Book My Charter script prompt: English, its own brief and call to action")
 c, _ = ctx_for("reel", "weone", {"concept": {"title": "Squawk 7700"}})
-reel.stage_script(c, lambda f: None); ok(B.calls[-1][0] == "script", "We One script prompt unchanged")
+reel.stage_script(c, lambda f: None); ok([c for c in B.calls if c[0] in ("script", "script_brand")][-1][0] == "script", "We One script prompt unchanged")
 
 # voice language (stop right after the settings are written)
 import subprocess
@@ -102,22 +103,22 @@ for bid, lang in (("bookmycharter", "en"), ("weone", "hi")):
 subprocess.Popen = orig
 
 # ideas
-S = Brain(); suggest.brain = S
+S = Brain(); suggest.brain = agents.brain = S
 c, _ = ctx_for("suggest", "bookmycharter", {"note": ""}); suggest.run(c)
-n, v = S.calls[-1]
+n, v = [c for c in S.calls if c[0] in ("suggest", "suggest_brand")][-1]
 ok(n == "suggest_brand" and "Book My Charter" in S.last_text and "bookmycharter old reel" in S.last_text and "weone old reel" not in S.last_text and "empty" in v["topic_bank"].lower(),
    "Book My Charter ideas use its own topic bank and its own past reels only")
-O = Brain(); optimize.brain = O
+O = Brain(); optimize.brain = agents.brain = O
 c, _ = ctx_for("optimize", "bookmycharter", {"prompt": "helicopter for wedding"}); optimize.run(c)
-ok(O.calls[-1][0] == "optimize_brand" and "Book My Charter" in O.last_text, "'Use my idea' is shaped with Book My Charter's own knowledge")
+ok([c for c in O.calls if c[0].startswith("optimize")][-1][0] == "optimize_brand" and "Book My Charter" in O.last_text, "'Use my idea' is shaped with Book My Charter's own knowledge")
 
 # caption: own handle only
-I = Brain(); instagram.brain = I
+I = Brain(); instagram.brain = agents.brain = I
 cap = instagram.make_caption(DB(), "x", {"title": "T", "script": [], "claims": []}, "bookmycharter")
-ok(I.calls[-1][0] == "caption_brand" and "@we_one_aviation" not in cap and "www." not in cap and "Book My Charter" in I.last_text,
+ok([c for c in I.calls if c[0].startswith("caption")][-1][0] == "caption_brand" and "@we_one_aviation" not in cap and "www." not in cap and "Book My Charter" in I.last_text,
    "Book My Charter caption never mentions We One's handle (or any link)")
 cap2 = instagram.make_caption(DB(), "x", {"title": "T", "script": [], "claims": []}, "weone")
-ok(I.calls[-1][0] == "caption" and "@we_one_aviation" in cap2, "We One caption keeps its own handle")
+ok([c for c in I.calls if c[0].startswith("caption")][-1][0] == "caption" and "@we_one_aviation" in cap2, "We One caption keeps its own handle")
 
 # look
 from reelworker.media import compose

@@ -16,7 +16,21 @@ DB = {"jobs": {}, "job_events": [], "pings": {}, "workers": {"mac-mini": {"id": 
       "brands": {b["id"]: b for b in [
           {"id": "weone", "name": "We One Aviation", "tagline": "DGCA ground classes", "website": "https://weoneaviation.in", "logo": "brands/weone.png", "color": "#0A2342", "instagram": "we_one_aviation", "status": "live", "sort": 1, "logo_asset": None, "logo_updated_at": None},
           {"id": "bookmycharter", "name": "Book My Charter", "tagline": "Private jet & helicopter charter", "website": "https://bookmycharter.in", "logo": "brands/bookmycharter.png", "color": "#13213D", "instagram": None, "status": "live", "sort": 2, "logo_asset": None, "logo_updated_at": None}]},
-      "settings": {}}
+      "settings": {},
+      "agents": {a[0]: {"id": a[0], "name": a[1], "role": a[2], "team": a[3], "sort": i} for i, a in enumerate([
+          ("account_intel", "Account Intelligence", "Studies each account.", "intelligence"), ("strategist", "Strategist", "Picks topics.", "strategy"),
+          ("fact_checker", "Fact-Checker", "Verifies facts.", "production"), ("scriptwriter", "Scriptwriter", "Writes scripts.", "production"),
+          ("hook_critic", "Hook Critic", "Judges scripts.", "quality"), ("analyst", "Performance Analyst", "Learns from results.", "learning"),
+          ("resource_manager", "Resource Manager", "Grades agents.", "learning"), ("supervisor", "Supervisor", "Checks contracts.", "control")])},
+      "agent_runs": [{"agent": "scriptwriter", "ok": True, "grade": 82, "ms": 60000, "brand": "weone", "created_at": NOW()},
+                     {"agent": "scriptwriter", "ok": False, "grade": None, "ms": 1000, "brand": "weone", "created_at": NOW()},
+                     {"agent": "hook_critic", "ok": True, "grade": 78, "ms": 9000, "brand": "bookmycharter", "created_at": NOW()}],
+      "agent_lessons": [{"id": 1, "agent": "scriptwriter", "brand": "weone", "lesson": "Open core reels with the exam rule as a number.", "why": "3 reels got 2x saves",
+                         "metric": "engagement", "baseline": 2.0, "status": "active", "result": None, "created_by": "analyst", "created_at": NOW()},
+                        {"id": 2, "agent": "scriptwriter", "brand": "bookmycharter", "lesson": "BMC ONLY lesson must not show on We One.", "why": "x",
+                         "metric": "engagement", "baseline": 1.0, "status": "active", "result": None, "created_by": "analyst", "created_at": NOW()},
+                        {"id": 3, "agent": "scriptwriter", "brand": None, "lesson": "Keep every line under 9 words.", "why": "critics flagged long lines",
+                         "metric": "critic", "baseline": 70, "status": "rolled_back", "result": {"baseline": 70, "after": 58, "n": 4}, "created_by": "resource_manager", "created_at": NOW()}]}
 USER = {"id": "11111111-1111-1111-1111-111111111111", "email": os.environ.get("USER_EMAIL", "owner@example.com"), "aud": "authenticated", "role": "authenticated",
         "app_metadata": {"provider": "email"}, "user_metadata": {}, "created_at": NOW()}
 LOG = []
@@ -71,6 +85,12 @@ def filt(rows, q):
     for k, v in q.items():
         if k in ("select", "order", "limit", "offset"): continue
         v = v[0]
+        if k == "or":
+            alts = v.strip("()").split(",")
+            def m_(r, a):
+                f, op, val = a.split(".", 2)
+                return (r.get(f) is None) if op == "is" else str(r.get(f)) == val
+            rows = [r for r in rows if any(m_(r, a) for a in alts)]; continue
         if v.startswith("eq."): rows = [r for r in rows if str(r.get(k)) == v[3:]]
         elif v.startswith("in.("): vals = v[4:-1].split(","); rows = [r for r in rows if str(r.get(k)) in vals]
     if "order" in q:
@@ -181,6 +201,15 @@ class H(SimpleHTTPRequestHandler):
             DB["jobs"][b["p_job"]]["status"] = "cancelled"; return self.js(None)
         if p.startswith("/storage/v1/object/sign/"):
             return self.js({"signedURL": p.replace("/storage/v1", "") + "?token=t"})
+        if p == "/rest/v1/rpc/add_brand":
+            bid = re.sub(r"[^a-z0-9]+", "-", b["p_name"].lower()).strip("-")[:20]
+            DB["brands"][bid] = {"id": bid, "name": b["p_name"], "tagline": "", "website": b["p_website"], "logo": None, "color": "#335", "instagram": None,
+                                 "status": "setup", "sort": 9, "logo_asset": None, "logo_updated_at": None, "intel_at": None}
+            j = {"id": str(uuid.uuid4()), "kind": "onboard", "brand": bid, "status": "queued", "input": {"brand": bid}, "output": {}, "created_at": NOW(), "updated_at": NOW()}
+            DB["jobs"][j["id"]] = j; LOG.append(("ADD", bid)); return self.js({"brand": bid, "job": j["id"]})
+        if p == "/rest/v1/rpc/run_onboard":
+            j = {"id": str(uuid.uuid4()), "kind": "onboard", "brand": b["p_brand"], "status": "queued", "input": {"brand": b["p_brand"]}, "output": {}, "created_at": NOW(), "updated_at": NOW()}
+            DB["jobs"][j["id"]] = j; LOG.append(("STUDY", b["p_brand"])); return self.js(j["id"])
         if p == "/rest/v1/rpc/set_brand_logo":
             br = DB["brands"][b["p_brand"]]
             if not str(b["p_path"]).startswith(b["p_brand"] + "/"): return self.js({"message": "That file does not belong to this account."}, 400)

@@ -216,8 +216,8 @@ def disk_free_gb():
 
 
 def lane_loop(db: Supabase, lane: str, kinds: list):
-    from .jobs import suggest, optimize, reel
-    handlers = {"suggest": suggest.run, "optimize": optimize.run, "reel": reel.run}
+    from .jobs import suggest, optimize, reel, onboard, learn
+    handlers = {"suggest": suggest.run, "optimize": optimize.run, "reel": reel.run, "onboard": onboard.run, "learn": learn.run}
     while not STOP.is_set():
         try:
             cap_hit = lane == "B" and reels_today() >= config.DAILY_REEL_CAP    # after the cap only revisions (Request changes) run
@@ -253,7 +253,7 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: STOP.set())
     threads = [threading.Thread(target=heartbeat_loop, args=(db,), name="heartbeat", daemon=True),
                threading.Thread(target=ping_loop, args=(db,), name="ping", daemon=True),
-               threading.Thread(target=lane_loop, args=(db, "A", ["suggest", "optimize"]), name="laneA", daemon=True),
+               threading.Thread(target=lane_loop, args=(db, "A", ["suggest", "optimize", "onboard", "learn"]), name="laneA", daemon=True),
                threading.Thread(target=lane_loop, args=(db, "B", ["reel"]), name="laneB", daemon=True),
                threading.Thread(target=instagram.loop, args=(db, STOP), name="instagram", daemon=True)]
     for t in threads:

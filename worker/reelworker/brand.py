@@ -33,7 +33,12 @@ def load(db, brand_id):
 
 
 def legacy(p):
-    return bool(p.get("legacy_prompts")) or p.get("language") == "hinglish"
+    """We One Aviation's original Hinglish prompts, lexicon and CTA. Every other account (Hinglish or not) uses its own profile."""
+    return bool(p.get("legacy_prompts"))
+
+
+def hinglish(p):
+    return p.get("language") == "hinglish"
 
 
 ASSETS_BUCKET = "brand-assets"
@@ -77,6 +82,8 @@ def logo(p, db=None):
 
 def cta(p):
     c = p.get("cta") or {}
+    if hinglish(p):
+        return c.get("say") or f"follow करें {p['name']}।", c.get("caption") or f"follow karein *{p['name']}*"
     return c.get("say") or f"Follow {p['name']}.", c.get("caption") or f"Follow *{p['name']}*"
 
 
@@ -93,6 +100,8 @@ def brief(p, full=True):
     if full:
         if p.get("market_facts"):
             L += ["", "## Dated market facts (cite the source if used)"] + [f"- {m['fact']} [{m['source']}, {m.get('date', '')}]" for m in p["market_facts"]]
+        if p.get("strategy"):
+            L += ["", "## Content strategy (from Account Intelligence)", p["strategy"]]
         if p.get("competitor_gap"):
             L += ["", "## Positioning vs competitors (never name competitors in a reel)", p["competitor_gap"]]
         if p.get("pillars"):

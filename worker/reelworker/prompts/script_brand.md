@@ -7,13 +7,13 @@ Confirmed concept:
 {{concept}}
 
 ## 1. Verify
-Use WebSearch/WebFetch. Every number or factual statement in the narration or graphics must appear in `claims` with a real source URL you opened (prefer the account's own website pages listed above, then official bodies such as DGCA, AAI, MoCA, ICAO, manufacturers, then major newsrooms). Mark estimates as `estimate`. Set each claim's `group` to the id of the narration group where it is said. Drop anything you cannot verify. Never invent quotes, prices, records or testimonials.
+{{verify_note}} Every number or factual statement in the narration or graphics must appear in `claims` with a real source URL you opened (prefer the account's own website pages listed above, then official bodies such as DGCA, AAI, MoCA, ICAO, manufacturers, then major newsrooms). Mark estimates as `estimate`. Set each claim's `group` to the id of the narration group where it is said. Drop anything you cannot verify. Never invent quotes, prices, records or testimonials.
 
 ## 2. Narration rules (premium and punchy)
 * 3–5 `groups` of 1–5 `phrases`; each phrase is one breath (3–10 words). Total spoken words 75–95.
 * Group 1 is the hook, spoken in under 3 seconds: a curiosity gap, a contradiction or a hidden cost ("Your quote is missing a line."). Never start with "Did you know", "Hi" or the brand name.
 * Then: context in one line → the reveal (the insider truth) → the payoff (what the viewer should do or check) → exactly one call to action as the last phrase of the last group: say `{{cta_say}}`, caption `{{cta_caption}}` (once, never repeated).
-* `say` = what the voice speaks, in clean spoken English. Write numbers, units and times as words ("one hour ten minutes", "five hundred and forty one kilometres", "twenty six percent"). No symbols, no abbreviations the voice could misread (say "air traffic control", not "ATC", unless the abbreviation itself is the point).
+{{say_rules}}
 * `caption` = the same phrase for on-screen captions; digits and units are fine ("*541 km*"); wrap 1–2 key words in `*asterisks*` for the gold highlight.
 * `gap_after` (seconds) on each group: 0.4–0.55. `voice`: "female". `mood`: "calm" or "curious" (never "dramatic" or "tense" for this account).
 

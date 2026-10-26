@@ -24,13 +24,13 @@ ROUNDS = []
 class Brain:
     def prompt(self, name, **v): return json.dumps(v)
     def ask(self, name, text, schema, tools, cwd, timeout=0, on_event=None):
-        ROUNDS.append(json.loads(text))
+        ROUNDS.append(json.loads(text.split("---\n\n", 1)[-1]))
         if len(ROUNDS) == 1:
             return {"picks": [{"shot_id": "s1", "candidate": "none", "new_query": "jet exterior night"},
                               {"shot_id": "s2", "candidate": "none", "new_query": "empty business jet interior"},
                               {"shot_id": "s3", "candidate": "s3-1"}, {"shot_id": "s4", "candidate": "none"}]}
         return {"picks": [{"shot_id": "s1", "candidate": "none"}, {"shot_id": "s2", "candidate": "s2-2"}]}
-reel.brain = Brain()
+reel.brain = reel.agents.brain = Brain()
 class DB:
     def update(self, *a, **k): return [{}]
     def insert(self, *a, **k): return [{}]

@@ -1,0 +1,35 @@
+\set ON_ERROR_STOP 1
+create or replace function pg_temp.ok(c boolean, m text) returns void language plpgsql as $$ begin if not c then raise exception 'FAIL: %', m; end if; raise notice 'PASS: %', m; end $$;
+create or replace function pg_temp.err(sql text) returns text language plpgsql as $$ begin execute sql; return null; exception when others then return sqlerrm; end $$;
+grant execute on function pg_temp.ok(boolean,text), pg_temp.err(text) to authenticated, anon;
+select pg_temp.ok((select count(*) from agents) = 13, '13 specialised agents are registered');
+select set_config('request.jwt.claims','{"email":"weoneaviation8@gmail.com"}',false);
+set role authenticated;
+select pg_temp.ok((select count(*) from agents) = 13, 'members see the agent team');
+select pg_temp.ok(pg_temp.err($$insert into agent_lessons(agent, lesson, metric, created_by) values ('scriptwriter', 'always shout in caps lock', 'critic', 'me')$$) like 'permission denied%', 'the site cannot plant lessons into agents');
+select pg_temp.ok(pg_temp.err($$insert into agent_runs(agent, ok) values ('scriptwriter', true)$$) like 'permission denied%', 'the site cannot fake agent runs');
+select pg_temp.ok(pg_temp.err($$select public.add_brand('Xy', 'not a url')$$) like 'Give the website address%', 'a new account needs a real website');
+select pg_temp.ok(((public.add_brand('Acme Flying Club', 'https://acme.example.com', '@acme_fly', 'https://www.linkedin.com/company/acme')) ->> 'brand') = 'acme-flying-club', 'a member adds an account');
+reset role;
+select pg_temp.ok((select status from brands where id = 'acme-flying-club') = 'setup' and (select instagram from brands where id = 'acme-flying-club') = 'acme_fly'
+                  and (select links ->> 'linkedin' from brands where id = 'acme-flying-club') like '%linkedin%', 'it starts in setup with its handles saved');
+select pg_temp.ok((select count(*) from jobs where kind = 'onboard' and brand = 'acme-flying-club' and status = 'queued') = 1, 'Account Intelligence is queued to study it, filed under that account');
+set role authenticated;
+select public.run_onboard('acme-flying-club');
+select pg_temp.ok((select count(*) from jobs where kind = 'onboard' and brand = 'acme-flying-club') = 1, 'a second Re-study tap does not queue a second study');
+select pg_temp.ok(((public.add_brand('Acme Flying Club', 'https://acme2.example.com')) ->> 'brand') = 'acme-flying-club-2', 'same name gets its own id');
+select set_config('request.jwt.claims','{"email":"stranger@x.com"}',false);
+select pg_temp.ok(pg_temp.err($$select public.add_brand('Evil', 'https://evil.example.com')$$) like 'Your account is not on the members list%', 'non-members cannot add accounts');
+select pg_temp.ok((select count(*) from agents) = 0 and (select count(*) from agent_lessons) = 0, 'non-members see no agents or lessons');
+reset role;
+select pg_temp.ok(pg_temp.err($$select public.learn_tick()$$) is null, 'the daily learning tick runs');
+select pg_temp.ok((select count(*) from jobs where kind = 'learn' and (input ->> 'resources')::boolean) = 1, 'exactly one learning run also runs the Resource Manager');
+select pg_temp.ok((select count(*) from jobs where kind = 'learn' and brand = 'acme-flying-club') = 0, 'accounts still being set up are not in the learning run');
+select pg_temp.ok((select count(*) from jobs where kind = 'onboard' and brand = 'weone') = 1, 'accounts never studied (or older than 30 days) are re-studied');
+select public.learn_tick();
+select pg_temp.ok((select count(*) from jobs where kind = 'learn') = (select count(*) from brands where status = 'live'), 'a second tick on the same day adds nothing');
+update jobs set status = 'cancelled' where kind in ('suggest', 'optimize') and status in ('queued', 'waiting_quota', 'running');
+insert into jobs(kind, input, status) values ('reel', '{"concept":{"title":"ZZ"}}', 'queued');
+select pg_temp.ok((select kind from public.claim_next('mac', array['suggest','optimize','onboard','learn'], 90)) = 'onboard', 'idea lane picks studies before the daily learning runs');
+delete from jobs where kind in ('onboard', 'learn') or input->'concept'->>'title' = 'ZZ'; delete from brands where id like 'acme-flying-club%';
+select 'ALL AGENT CHECKS PASSED';

@@ -1,0 +1,30 @@
+{
+ "facts": [
+  {
+   "fact": "On average each commercial airliner is struck by lightning about once a year.",
+   "source_url": "https://skybrary.aero/articles/lightning",
+   "source_title": "SKYbrary: Lightning",
+   "quote": "on average, each airliner in commercial service is struck by lightning about once a year",
+   "confidence": "high"
+  },
+  {
+   "fact": "Lightning current flows along the conductive outer skin and exits from an extremity such as the tail.",
+   "source_url": "https://skybrary.aero/articles/lightning",
+   "source_title": "SKYbrary: Lightning",
+   "quote": "the current passes along the outer skin",
+   "confidence": "high"
+  },
+  {
+   "fact": "Aircraft are designed and certified to withstand lightning strikes.",
+   "source_url": "https://www.faa.gov/",
+   "source_title": "FAA",
+   "quote": "",
+   "confidence": "medium"
+  }
+ ],
+ "angle": "A lightning strike is routine engineering, not a disaster.",
+ "do_not_say": [
+  "that lightning never causes damage"
+ ],
+ "corrections": []
+}

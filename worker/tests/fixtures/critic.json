@@ -1,0 +1,18 @@
+{
+ "hook": 8,
+ "open_loop": 7,
+ "clarity": 8,
+ "pacing": 8,
+ "payoff": 8,
+ "shareability": 7,
+ "saveability": 6,
+ "fact_fidelity": 10,
+ "brand_fit": 8,
+ "ending": 8,
+ "total": 80,
+ "pass": true,
+ "fixes": [
+  "Add a number in the first caption."
+ ],
+ "summary": "Strong hook, clean facts."
+}

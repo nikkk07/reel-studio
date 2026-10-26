@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json, re, shutil, subprocess, sys, time
 from pathlib import Path
 from .. import brain, config, schemas
+from .. import agents, lanes
 from .. import brand as brandmod
 from ..runner import run_stages, TransientError
 from ..media import footage, lexicon, mix, render, timeline
@@ -14,8 +15,9 @@ CTA_CAPTION = "follow karein *We One Aviation*"
 def _is_cta(p, name="We One Aviation"):
     """Any spelling of the account's call-to-action line: English, Devanagari respelling (We One), or in the caption."""
     say, cap = p.get("say", ""), p.get("caption", "").replace("*", "")
-    n = name.lower()
-    return n in say.lower() or n in cap.lower() or (n == "we one aviation" and "वी वन एविएशन" in say)
+    n = name.lower(); t = (say + " " + cap).lower()
+    named = n in t or (n == "we one aviation" and "वी वन एविएशन" in say)
+    return named and ("follow" in t or "फॉलो" in say)          # a factual identity line ("We One Aviation: DGCA ground classes") is kept
 
 
 ACCOUNTS = ("we one aviation", "वी वन एविएशन", "book my charter", "flying star", "legal group")
@@ -117,6 +119,73 @@ def validate_spec(spec: dict, prof: dict = None) -> dict:
 
 
 # ------------------------------------------------------------------ stages
+SAY_EN = ("* `say` = what the voice speaks, in clean spoken English. Write numbers, units and times as words (\"one hour ten minutes\", "
+          "\"five hundred and forty one kilometres\", \"twenty six percent\"). No symbols, no abbreviations the voice could misread "
+          "(say \"air traffic control\", not \"ATC\", unless the abbreviation itself is the point).")
+SAY_HI = ("* `say` = what the voice speaks: **Hindi in Devanagari**, English technical words in **English letters**, about 60-70 % English words. "
+          "Numbers and years as **English words** (`nineteen seventy-five`, `one thousand`). Use the pronunciation dictionary: write its `say` form for any listed word.\n"
+          "Pronunciation dictionary (term -> say):\n{lex}")
+
+
+def _core_note(prof, concept):
+    """Core-lane reels teach the account's own subject; We One adds its academy identity line."""
+    if lanes.of(concept.get("lane"), concept.get("category"), concept.get("title"), prof) != "core":
+        return ""
+    note = ("\n## This is a core reel (the account's own subject)\n" + lanes.rules(prof, "core") +
+            "\nTeach the ONE idea exactly as the best expert in this business would: the rule or idea, one simple example or number, and the common mistake people make. ")
+    if brandmod.legacy(prof):
+        note += ("Just before the CTA you may add ONE short factual identity phrase, e.g. say `We One Aviation में DGCA ground classes, Dwarka और online।` / "
+                 "caption `We One Aviation: DGCA ground classes, *Dwarka + online*`. Never claim pass rates, jobs, placements, salaries or course fees.\n\n"
+                 "Academy facts you may use:\n" + brandmod.brief(prof, full=False))
+    return note
+
+
+def _sheet_text(fs):
+    return json.dumps({"facts": fs.get("facts", []), "angle": fs.get("angle", ""), "do_not_say": fs.get("do_not_say", []),
+                       "corrections": fs.get("corrections", [])}, ensure_ascii=False, indent=1)
+
+
+def check_factsheet(fs):
+    probs = []
+    good = [f for f in fs.get("facts", []) if str(f.get("source_url", "")).startswith("http")]
+    if len(good) < 3:
+        probs.append("fewer than 3 facts with a real source URL")
+    if not any(f.get("confidence") == "high" for f in good):
+        probs.append("no fact is confirmed by an official or primary page (confidence high)")
+    return probs
+
+
+def make_spec_check(prof, fs):
+    """Supervisor contract for a script: safe text, right length, facts from the fact sheet, one CTA, own account only."""
+    urls = {f.get("source_url", "").rstrip("/") for f in (fs or {}).get("facts", [])}
+
+    def check(spec):
+        probs = []
+        try:
+            validate_spec(json.loads(json.dumps(spec)), prof)
+        except TransientError as e:
+            probs.append(str(e))
+        except Exception as e:  # noqa: BLE001
+            probs.append(f"the spec is incomplete: {str(e)[:120]}")
+        words = sum(len(p.get("say", "").split()) for g in spec.get("groups", []) for p in g.get("phrases", []))
+        if not 55 <= words <= 125:
+            probs.append(f"narration has {words} words; it must be 75-100 for a 30-40 s reel")
+        claims = spec.get("claims", [])
+        if not claims:
+            probs.append("no claims with sources")
+        if urls and claims and not any(c.get("source_url", "").rstrip("/") in urls for c in claims):
+            probs.append("none of the claims comes from the Fact-Checker's sheet; write only from the verified facts")
+        return probs
+    return check
+
+
+def critic_text(prof, spec, fs, lane):
+    lines = [{"group": g["id"], "say": p.get("say"), "caption": p.get("caption")} for g in spec["groups"] for p in g["phrases"]]
+    view = {"title": spec.get("title"), "narration": lines, "graphics": spec.get("graphics", []), "shots": [{k: s.get(k) for k in ("id", "query", "at_group", "at_phrase")} for s in spec.get("shots", [])]}
+    return brain.prompt("critic", brand_name=prof["name"], lane=lanes.name(prof, lane), lane_job=lanes.rules(prof, lane), playbook=brain.prompt("ig_playbook"),
+                        factsheet=_sheet_text(fs) if fs else "(revision of an approved script: judge against its own claims)", script=json.dumps(view, ensure_ascii=False, indent=1))
+
+
 def stage_script(ctx, prog):
     inp = ctx.job.get("input") or {}
     concept = inp.get("concept") or {"title": inp.get("topic", "")}
@@ -125,27 +194,67 @@ def stage_script(ctx, prog):
     lex = "\n".join(f"- {e['term']} → {e['say']}" for e in _lexicon_entries())
     parent = _parent_dir(ctx) if inp.get("notes") else None
     prof = _brand(ctx)
+    lane = lanes.of(concept.get("lane"), concept.get("category"), concept.get("title"), prof)
+    playbook = brain.prompt("ig_playbook")
+    fs = None
+    ctx.trace("script", "research", "Fact-Checker", "run")
+    ctx.trace("script", "write", "Scriptwriter", "wait")
+    ctx.trace("script", "facts", "Hook Critic", "wait", flush=True)
+    if not parent:                           # 1. Fact-Checker: verified fact sheet before anything is written
+        if "factsheet" not in ctx.data:
+            ctx.log("Fact-Checker: researching the topic on official sources")
+            ctx.data["factsheet"] = agents.call(ctx, "fact_checker", brain.prompt("factsheet", brand_name=prof["name"], brand_brief=brandmod.brief(prof, full=False),
+                                                concept=json.dumps(concept, ensure_ascii=False, indent=1)), schemas.FACTSHEET, ["WebSearch", "WebFetch"],
+                                                timeout=1200, check=check_factsheet, on_event=_say(ctx), name="factsheet")
+            ctx.save()
+        fs = ctx.data["factsheet"]
+        ctx.path("factsheet.json").write_text(json.dumps(fs, ensure_ascii=False, indent=1), encoding="utf-8")
+    ctx.trace("script", "research", "Fact-Checker", "done", f"{len((fs or {}).get('facts', []))} verified facts" if fs else "kept from the approved version")
+    ctx.trace("script", "write", "Scriptwriter", "run", flush=True)
+    verify = ("The Fact-Checker has already verified the facts below. Write ONLY from them; do not search again unless a fact you need is missing, and never "
+              "contradict the sheet's `do_not_say` or `corrections`." if fs else "Use WebSearch/WebFetch only if the notes need a new fact.")
+    block = ("\n\n## Verified fact sheet from the Fact-Checker\n" + _sheet_text(fs) if fs else "") + "\n\n" + playbook + _core_note(prof, concept)
     if not brandmod.legacy(prof):            # every other account: its own knowledge, language, tone and call to action
         cs, cc = brandmod.cta(prof)
-        common = dict(brand_name=prof["name"], brand_brief=brandmod.brief(prof), language=prof.get("language", "english").title(), cta_say=cs, cta_caption=cc)
+        common = dict(brand_name=prof["name"], brand_brief=brandmod.brief(prof), language=prof.get("language", "english").title(), cta_say=cs, cta_caption=cc,
+                      say_rules=SAY_HI.format(lex=lex or "(empty)") if brandmod.hinglish(prof) else SAY_EN, verify_note=verify)
         if parent:
             ctx.log("revising the previous version with your notes (unchanged narration and footage are reused)")
             p = brain.prompt("revise_brand", spec=(parent / "spec.json").read_text(encoding="utf-8"), notes=str(inp["notes"])[:2000], **common)
         else:
-            p = brain.prompt("script_brand", concept=json.dumps(concept, ensure_ascii=False, indent=1), **common)
+            p = brain.prompt("script_brand", concept=json.dumps(concept, ensure_ascii=False, indent=1), **common) + block
     elif parent:
         ctx.log("revising the previous version with your notes (unchanged narration and footage are reused)")
         p = brain.prompt("revise", spec=(parent / "spec.json").read_text(encoding="utf-8"), notes=str(inp["notes"])[:2000], lexicon=lex or "(empty)")
     else:
-        p = brain.prompt("script", concept=json.dumps(concept, ensure_ascii=False, indent=1), lexicon=lex or "(empty)")
+        p = brain.prompt("script", concept=json.dumps(concept, ensure_ascii=False, indent=1), lexicon=lex or "(empty)", academy="", verify_note=verify) + block
     prog(0.1)
-    ctx.trace("script", "research", "Research sources", "run")
-    ctx.trace("script", "write", "Write narration", "wait")
-    ctx.trace("script", "facts", "Fact list", "wait", flush=True)
-    spec = validate_spec(brain.ask("script", p, schemas.SPEC, ["WebSearch", "WebFetch"], ctx.dir / "brain", timeout=1500, on_event=_say(ctx)), prof)
-    ctx.trace("script", "research", "Research sources", "done", f"{len({c['source_url'] for c in spec['claims']})} sources")
-    ctx.trace("script", "write", "Write narration", "done", f"{sum(len(g['phrases']) for g in spec['groups'])} lines")
-    ctx.trace("script", "facts", "Fact list", "done", f"{len(spec['claims'])} claims", flush=True)
+    tools = ["WebSearch", "WebFetch"]
+    check = make_spec_check(prof, fs)
+    raw = agents.call(ctx, "scriptwriter", p, schemas.SPEC, tools, timeout=1500, check=check, on_event=_say(ctx), name="script")
+    spec = validate_spec(raw, prof)
+    crit = None
+    if not parent:                           # 2. Hook Critic: independent review; one full rewrite if it is weak
+        ctx.trace("script", "write", "Scriptwriter", "done", f"{sum(len(g['phrases']) for g in spec['groups'])} lines")
+        ctx.trace("script", "facts", "Hook Critic", "run", flush=True)
+        crit = agents.call(ctx, "hook_critic", critic_text(prof, spec, fs, lane), schemas.CRITIC, [], timeout=600,
+                           grade=lambda o: o.get("total"), name="critic")
+        ctx.log(f"Hook Critic: {crit.get('total')}/100 (hook {crit.get('hook')}/10, facts {crit.get('fact_fidelity')}/10)")
+        if not crit.get("pass"):
+            ctx.log("Hook Critic sent the script back for a rewrite")
+            p2 = (p + f"\n\n## The Hook Critic reviewed your first draft: {crit.get('total')}/100. Rewrite the WHOLE script fixing these:\n"
+                  + "\n".join(f"- {x}" for x in crit.get("fixes", [])) + (f"\nBetter first line: {crit['better_hook']}" if crit.get("better_hook") else "")
+                  + "\n\nYour first draft:\n" + json.dumps(raw, ensure_ascii=False)[:12000])
+            raw2 = agents.call(ctx, "scriptwriter", p2, schemas.SPEC, tools, timeout=1500, check=check, on_event=_say(ctx), name="script")
+            spec2 = validate_spec(raw2, prof)
+            crit2 = agents.call(ctx, "hook_critic", critic_text(prof, spec2, fs, lane), schemas.CRITIC, [], timeout=600,
+                                grade=lambda o: o.get("total"), name="critic")
+            ctx.log(f"Hook Critic on the rewrite: {crit2.get('total')}/100")
+            if (crit2.get("total") or 0) >= (crit.get("total") or 0):
+                spec, crit = spec2, crit2
+    spec["lane"] = lane
+    ctx.trace("script", "write", "Scriptwriter", "done", f"{sum(len(g['phrases']) for g in spec['groups'])} lines")
+    ctx.trace("script", "facts", "Hook Critic", "done", f"{crit.get('total')}/100" if crit else "revision", flush=True)
     ctx.path("spec.json").write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
     if parent:   # reuse recorded takes for every narration part whose words did not change
         old = json.loads((parent / "spec.json").read_text(encoding="utf-8")); reused = 0
@@ -157,12 +266,17 @@ def stage_script(ctx, prog):
                 for f in (parent / "vo").glob(f"{ogid}_s*.wav"):
                     shutil.copy(f, ctx.dir / "vo" / f.name.replace(f"{ogid}_s", f"{g['id']}_s", 1)); reused += 1
         ctx.log(f"reusing {reused} voice takes from the previous version")
-    ctx.merge_output({"title": spec["title"], "claims": spec["claims"]})
+    out = {"title": spec["title"], "claims": spec["claims"], "lane": lane}
+    if crit:
+        out["critic"] = {k: crit.get(k) for k in schemas.CRITIC_KEYS + ["total", "pass", "summary"]}
+    if fs:
+        out["factsheet"] = {"facts": len(fs.get("facts", [])), "sources": sorted({f.get("source_url") for f in fs.get("facts", [])})[:12]}
+    ctx.merge_output(out)
     ctx.log(f"script ready: {spec['title']} ({sum(len(g['phrases']) for g in spec['groups'])} phrases, {len(spec['shots'])} shots)")
 
 
 def stage_voice(ctx, prog):
-    prof = _brand(ctx); hinglish = brandmod.legacy(prof)
+    prof = _brand(ctx); hinglish = brandmod.legacy(prof) or brandmod.hinglish(prof)     # Hindi voice + pronunciation dictionary
     spec = _spec(ctx); E = _lexicon_entries() if hinglish else []; groups = []; unknown = set()
     for g in spec["groups"]:
         says = [lexicon.apply(p["say"], E) if hinglish else p["say"] for p in g["phrases"]]
@@ -240,6 +354,11 @@ def _vo_map(ctx):
             for gid, v in json.loads(ctx.path("voice_out.json").read_text(encoding="utf-8")).items()}
 
 
+def _pick(ctx, text, work):
+    """Footage Picker agent: reads the contact sheets in the footage folder."""
+    return agents.call(ctx, "footage_picker", text, schemas.FOOTAGE, ["Read"], timeout=900, on_event=_say(ctx), name="footage", cwd=work)["picks"]
+
+
 def stage_footage(ctx, prog):
     spec = _spec(ctx); TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx), ctx.db)))
     need = {s["id"]: s["need"] for s in TL["shots"]}
@@ -278,7 +397,7 @@ def stage_footage(ctx, prog):
         prof = _brand(ctx); vs = prof.get("visual_style") or {}
         look = "" if brandmod.legacy(prof) else "\n".join(["This account's look and rules (follow them strictly; a clip that breaks one is never the pick):",
             f"- Look: {vs.get('look', '')}", *[f"- {r}" for r in vs.get("footage_rules", [])], *[f"- Never: {r}" for r in vs.get("avoid", [])]])
-        picks = brain.ask("footage", brain.prompt("footage", shots=desc, niche=prof.get("niche", "aviation"), look=look), schemas.FOOTAGE, ["Read"], work, timeout=900, on_event=_say(ctx))["picks"]
+        picks = _pick(ctx, brain.prompt("footage", shots=desc, niche=prof.get("niche", "aviation"), look=look), work)
         # no clip fits: search once more with Claude's better query and pick again (never fill the slot with a clip that contradicts the line)
         retry = {p["shot_id"]: p["new_query"].strip() for p in picks if str(p.get("candidate")).lower() == "none" and str(p.get("new_query") or "").strip()}
         retry = {sid: q for sid, q in retry.items() if sid in {s["id"] for s in shots}}
@@ -289,7 +408,7 @@ def stage_footage(ctx, prog):
                 cands[s["id"]] = footage.search(s["query"], per_source=6)[:12] or cands[s["id"]]
             footage.contact_sheets(again, {s["id"]: cands[s["id"]] for s in again if cands[s["id"]]}, work, _font_file())
             desc2 = "\n".join(f"- {s['id']}: \"{s['query']}\" – {s.get('note', '')} – needs {need[s['id']]:.1f}s" for s in again if cands[s["id"]])
-            more = brain.ask("footage", brain.prompt("footage", shots=desc2, niche=prof.get("niche", "aviation"), look=look), schemas.FOOTAGE, ["Read"], work, timeout=900, on_event=_say(ctx))["picks"]
+            more = _pick(ctx, brain.prompt("footage", shots=desc2, niche=prof.get("niche", "aviation"), look=look), work)
             picks = [p for p in picks if p["shot_id"] not in retry] + more
         ctx.trace("footage", "pick", "Claude chooses clips", "done")
     prog(0.35)
@@ -384,7 +503,8 @@ def stage_qc(ctx, prog):
     prog(0.2)
     ctx.trace("qc", "auto", "Loudness, size, length", "done" if all(auto.values()) else "fail")
     ctx.trace("qc", "watch", "Claude watches the reel", "run", flush=True)
-    qc = brain.ask("qc", brain.prompt("qc", brand_name=_brand(ctx)["name"]), schemas.QC, ["Read"], qdir, timeout=600, on_event=_say(ctx))
+    qc = agents.call(ctx, "quality_inspector", brain.prompt("qc", brand_name=_brand(ctx)["name"]), schemas.QC, ["Read"], timeout=600, on_event=_say(ctx), name="qc", cwd=qdir,
+                     grade=lambda o: 10 * float(o.get("score") or 0))
     ctx.trace("qc", "watch", "Claude watches the reel", "done", f"score {qc['score']}/10", flush=True)
     repick = [i for i in qc["issues"] if i.get("fix") == "repick_shot" and i.get("shot_id")]
     if repick and not ctx.data.get("qc_repaired"):

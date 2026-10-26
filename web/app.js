@@ -51,7 +51,7 @@ const ICON = {
   home: "M4 11.5 12 4l8 7.5M6.5 9.5V20h11V9.5M10 20v-5h4v5", ext: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
   plane: "M21 11.2 13.6 10 9.8 3H8.2l1.6 7.1-4.7.4-1.7-2.3H2.2l1 3.8-1 3.8h1.2l1.7-2.3 4.7.4L8.2 21h1.6l3.8-7 7.4-1.2c.6-.1 1-.4 1-.8s-.4-.7-1-.8Z",
   create: "M12 4v16M4 12h16", route: "M5 18c3-9 11-3 14-12M5 18a2 2 0 1 0 0 .1M19 6a2 2 0 1 0 0 .1",
-  library: "M4 4h6v7H4zM14 4h6v4h-6zM14 12h6v8h-6zM4 15h6v5H4z", check: "M5 12.5l4.5 4.5L19 7.5", x: "M6 6l12 12M18 6 6 18",
+  library: "M4 4h6v7H4zM14 4h6v4h-6zM14 12h6v8h-6zM4 15h6v5H4z", agents: "M12 3v3M8.5 8h7a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3zM9.5 13h.01M14.5 13h.01M3 13h2.5M18.5 13H21", check: "M5 12.5l4.5 4.5L19 7.5", x: "M6 6l12 12M18 6 6 18",
   play: "M8 5v14l11-7z", down: "M12 4v12m0 0-5-5m5 5 5-5M5 20h14", bell: "M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20a2 2 0 0 0 4 0",
 };
 function icon(name, size = 18, fill = false) {
@@ -92,7 +92,7 @@ const mine = (j) => (j.brand || "weone") === S.brand;
 const isLive = (id = S.brand) => brandOf(id).status === "live";
 function setBrand(id) { S.brand = id; S.lastSuggest = null; S.picked = null; S.concept = null; try { localStorage.setItem("rs_brand", id); } catch { /* */ } }
 async function loadBrands() {
-  const { data, error } = await sb.from("brands").select("id,name,tagline,website,logo,color,instagram,status,sort,logo_asset,logo_updated_at").order("sort");
+  const { data, error } = await sb.from("brands").select("id,name,tagline,website,logo,color,instagram,status,sort,logo_asset,logo_updated_at,intel_at").order("sort");
   if (!error && data?.length) { S.brands = data; if (!data.some((b) => b.id === S.brand)) setBrand("weone"); }
   return S.brands;
 }
@@ -210,7 +210,7 @@ function shell(content, { nav = true } = {}) {
   const reviewN = S.reels.filter((j) => j.status === "review" && mine(j)).length;
   const activeN = S.reels.filter((j) => ACTIVE.includes(j.status) && mine(j)).length;
   const badgeN = reviewN || activeN;
-  const items = [["home", "Dashboard", "home"], ["create", "Create", "create"], ["production", "Production", "route"], ["library", "Library", "library"]];
+  const items = [["home", "Dashboard", "home"], ["create", "Create", "create"], ["production", "Production", "route"], ["library", "Library", "library"], ["agents", "Agents", "agents"]];
   const navBtn = ([k, label, ic], mobile) => h("button", { "aria-current": S.route === k ? "page" : null, onclick: () => go(k) },
     mobile ? icon(ic, 22) : null, label, k === "production" && badgeN ? h("span", { cls: "badge", "aria-label": `${badgeN} reels` }, badgeN) : null);
   const lamps = S.session ? h("button", { cls: "status", onclick: () => go("check"), title: "Run the pre-flight check" },
@@ -254,8 +254,8 @@ function render() {
   // the pre-flight page shows once per session; later it only returns if the Mac or Claude actually reports a problem
   const fresh = Date.now() - S.checkedAt < 30 * 60e3 || (S.checkedAt > 0 && macAlive() && S.worker?.claude_ok !== false);
   if (r === "check" || !fresh) return viewPreflight(r === "check" ? "home" : (r || "home"));
-  S.route = ["home", "create", "production", "library"].includes(r) ? r : "home";
-  ({ home: viewDashboard, create: viewCreate, production: viewProduction, library: viewLibrary })[S.route]();
+  S.route = ["home", "create", "production", "library", "agents"].includes(r) ? r : "home";
+  ({ home: viewDashboard, create: viewCreate, production: viewProduction, library: viewLibrary, agents: viewAgents })[S.route]();
 }
 
 // ---------------------------------------------------------------- login
@@ -399,7 +399,7 @@ async function viewDashboard() {
         h("img", { src: PLAT_IMG[k], alt: "", width: 24, height: 24 }));
       return h("span", { cls: "minis" }, dot("ig", ig, "Instagram"), dot("fb", fb, "Facebook"), dot("li", li, "LinkedIn"));
     };
-    grid.replaceChildren(...(S.brands || BRANDS_FALLBACK).map((b) => {
+    grid.replaceChildren(...[...(S.brands || BRANDS_FALLBACK).map((b) => {
       const list = st(b.id); const live = b.status === "live";
       const nums = [["In production", list.filter((j) => ACTIVE.includes(j.status)).length], ["To review", list.filter((j) => j.status === "review").length], ["Posted · 7 days", postedWeek(list)]];
       const open = () => { setBrand(b.id); go(live && list.some((j) => j.status === "review" || ACTIVE.includes(j.status)) ? "production" : "create"); };
@@ -414,7 +414,9 @@ async function viewDashboard() {
           safeUrl(b.website) ? h("a", { cls: "acct-web", href: b.website, target: "_blank", rel: "noopener noreferrer" }, h("img", { src: PLAT_IMG.web, alt: "", width: 16, height: 16 }), host(b.website)) : null,
           h("button", { cls: "btn quiet", onclick: () => assetsDialog(b, paint), "aria-label": `Assets of ${b.name}` }, "Assets"),
           h("button", { cls: "btn " + (live ? "primary" : "quiet"), onclick: open }, "Open")));
-    }));
+    }), h("button", { cls: "acct add-acct", onclick: () => addAccountDialog(paint), "aria-label": "Add an account" },
+      h("span", { cls: "add-plus", "aria-hidden": "true" }, "+"), h("b", {}, "Add account"),
+      h("span", { cls: "small muted" }, "Account Intelligence studies its website, socials, competitors and market, then writes its strategy."))]);
   };
   await paint().catch(() => {});
   S.timers.push(setInterval(() => paint().catch(() => {}), 15000));
@@ -460,14 +462,101 @@ function assetsDialog(b, after) {
     h("div", { cls: "dlg-foot" }, h("span"), h("button", { cls: "btn quiet", onclick: () => d.close() }, "Close")));
   d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal();
 }
+// ---------------------------------------------------------------- Add account: Account Intelligence starts studying it at once
+function addAccountDialog(after) {
+  const f = (name, label, ph, type = "text") => h("label", { cls: "fld" }, h("span", {}, label), h("input", { name, type, placeholder: ph, maxlength: "200", autocomplete: "off" }));
+  const msg = h("p", { cls: "small", role: "status" });
+  const form = h("form", { onsubmit: async (e) => {
+    e.preventDefault(); const v = Object.fromEntries(new FormData(form)); btn.disabled = true; btn.textContent = "Adding…"; msg.textContent = "";
+    try {
+      let web = String(v.website || "").trim(); if (web && !/^https?:\/\//i.test(web)) web = "https://" + web;
+      const r = await rpc("add_brand", { p_name: v.name, p_website: web, p_instagram: v.instagram || null, p_linkedin: v.linkedin || null, p_facebook: v.facebook || null });
+      await loadBrands(); d.close(); toast(`${v.name} added. Account Intelligence is studying it now (about 15-30 min); it opens for reels when the study is done.`, { ms: 10000 });
+      after?.(); return r;
+    } catch (err) { msg.textContent = errText(err); btn.disabled = false; btn.textContent = "Add and study"; }
+  } },
+    f("name", "Business name", "e.g. Flying Star Aviator"), f("website", "Website", "https://…"),
+    f("instagram", "Instagram (optional)", "@handle or link"), f("linkedin", "LinkedIn (optional)", "https://www.linkedin.com/company/…"),
+    f("facebook", "Facebook (optional)", "https://www.facebook.com/…"), msg);
+  const btn = h("button", { cls: "btn primary", type: "submit" }, "Add and study"); form.append(btn);
+  const d = h("dialog", { "aria-label": "Add account", cls: "connect plat-dlg" },
+    h("div", { style: "padding:18px 18px 4px" }, h("h3", { style: "margin:0 0 4px" }, "Add an account"),
+      h("p", { cls: "small muted", style: "margin:0 0 12px" }, "Everything stays separate from your other accounts: its knowledge, reels, lessons and posting."), form),
+    h("div", { cls: "dlg-foot" }, h("span"), h("button", { cls: "btn quiet", onclick: () => d.close() }, "Close")));
+  d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal(); form.querySelector("input").focus();
+}
+
+// ---------------------------------------------------------------- Agents: the team, its health and what it has learned
+const TEAMS = [["intelligence", "Intelligence"], ["strategy", "Strategy"], ["production", "Production"], ["quality", "Quality"], ["learning", "Learning"], ["control", "Control"]];
+const LESSON_STATE = { active: ["Testing", "wait"], proven: ["Proven", "ok"], rolled_back: ["Rolled back", "bad"], retired: ["Retired", ""] };
+async function viewAgents() {
+  const body = h("div", {}, h("div", { cls: "skeleton", style: "height:240px" }));
+  shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Agents"),
+    h("p", {}, `The AI team behind ${brandOf().name}'s reels: who does what, how well it is working, and what it has learned. Lessons apply automatically and roll back on their own if results drop.`))), body));
+  const openA = S.agentOpen || (S.agentOpen = {});
+  const paint = async () => {
+    if (!body.isConnected) return;
+    const since = new Date(Date.now() - 14 * 86400e3).toISOString(); const b = S.brand;
+    const [ag, runs, les, lrn, onb] = await Promise.all([
+      sb.from("agents").select("id,name,role,team,sort").order("sort"),
+      sb.from("agent_runs").select("agent,ok,grade,ms,brand,created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(2000),
+      sb.from("agent_lessons").select("id,agent,brand,lesson,why,metric,baseline,status,result,created_by,created_at").or(`brand.is.null,brand.eq.${b}`).order("created_at", { ascending: false }).limit(200),
+      sb.from("jobs").select("output,created_at,status").eq("kind", "learn").eq("brand", b).order("created_at", { ascending: false }).limit(1),
+      sb.from("jobs").select("id,status,output,created_at,updated_at,error").eq("kind", "onboard").eq("brand", b).order("created_at", { ascending: false }).limit(1),
+      loadBrands().catch(() => {})]);
+    if (ag.error) { body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(ag.error)))); return; }
+    const R = (runs.data || []).filter((r) => !r.brand || r.brand === b); const L = les.data || [];
+    const br = brandOf(); const study = onb.data?.[0]; const learnRun = lrn.data?.[0]?.output?.learn;
+    const studying = study && ["queued", "running", "waiting_quota"].includes(study.status);
+    const intel = h("section", { cls: "panel agent-intel" },
+      h("div", { cls: "ai-head" }, brandLogo(br, 44), h("div", {}, h("h3", {}, "Account Intelligence"),
+        h("p", { cls: "small muted" }, studying ? "Studying this account now: website, socials, competitors, market and industry rules…"
+          : br.intel_at ? `Last studied ${ago(br.intel_at)}. Re-studied automatically every 30 days.` : "Not studied yet.")),
+        h("button", { cls: "btn quiet", disabled: studying, onclick: async (e) => { e.currentTarget.disabled = true;
+          try { await rpc("run_onboard", { p_brand: b }); toast(`Account Intelligence will re-study ${br.name} now (about 15-30 min).`); } catch (err) { toast(errText(err), { err: true }); }
+          paint(); } }, studying ? "Studying…" : "Re-study now")),
+      study?.output?.study ? h("div", { cls: "ai-sum" },
+        h("p", {}, study.output.study.strategy || ""),
+        h("div", { cls: "chips" }, h("span", { cls: "pill" }, `${study.output.study.topics} topics researched`), h("span", { cls: "pill" }, `Profile v${study.output.study.version}`),
+          (study.output.study.competitors || []).length ? h("span", { cls: "pill" }, `Competitors: ${study.output.study.competitors.slice(0, 4).join(", ")}`) : null)) : null,
+      study?.status === "failed" ? h("p", { cls: "small err" }, study.error || "The last study failed.") : null);
+    const learnBox = learnRun ? h("section", { cls: "panel" }, h("h3", {}, "Latest learning run"),
+      learnRun.insights ? h("p", {}, learnRun.insights) : null, learnRun.usage_note ? h("p", { cls: "small muted" }, "Resources: " + learnRun.usage_note) : null,
+      (learnRun.evaluated || []).length ? h("ul", { cls: "small" }, learnRun.evaluated.map((x) => h("li", {}, x))) : null) : null;
+    const card = (a) => {
+      const rs = R.filter((r) => r.agent === a.id); const okN = rs.filter((r) => r.ok).length; const g = rs.filter((r) => r.grade != null);
+      const rate = rs.length ? okN / rs.length : null; const lamp = rate == null ? "" : rate >= 0.9 ? "ok" : rate >= 0.7 ? "wait" : "bad";
+      const mine_ = L.filter((l) => l.agent === a.id); const live = mine_.filter((l) => l.status === "active" || l.status === "proven");
+      const stats = rs.length ? [`${rs.length} runs`, `${Math.round(100 * rate)}% ok`, g.length ? `grade ${Math.round(g.reduce((x, r) => x + Number(r.grade), 0) / g.length)}` : null,
+        `last ${ago(rs[0].created_at)}`].filter(Boolean).join(" · ") : "No runs in the last 14 days";
+      const det = openA[a.id] ? h("div", { cls: "lessons" }, mine_.length ? mine_.map((l) => { const [w, c] = LESSON_STATE[l.status] || [l.status, ""];
+        return h("div", { cls: "lesson" }, h("span", { cls: `lstate ${c}` }, w), h("div", {}, h("p", {}, l.lesson),
+          h("p", { cls: "small muted" }, [l.why, l.brand ? null : "all accounts", `${l.created_by.replace("_", " ")} · ${ago(l.created_at)}`,
+            l.result ? `${l.metric}: ${l.result.baseline} → ${l.result.after} (${l.result.n} results)` : `measured on ${l.metric}`].filter(Boolean).join(" · "))));
+      }) : h("p", { cls: "small muted" }, "No lessons yet. They appear after the first learning runs.")) : null;
+      return h("article", { cls: "agent" }, h("button", { cls: "agent-main", "aria-expanded": String(!!openA[a.id]), onclick: () => { openA[a.id] = !openA[a.id]; paint(); } },
+        h("div", { cls: "agent-top" }, h("i", { cls: "lamp " + lamp }), h("b", {}, a.name), live.length ? h("span", { cls: "pill" }, `${live.length} lesson${live.length > 1 ? "s" : ""}`) : null),
+        h("p", { cls: "small" }, a.role), h("p", { cls: "small muted" }, stats)), det);
+    };
+    const groups = TEAMS.map(([k, label]) => { const as = (ag.data || []).filter((a) => a.team === k); return as.length ? h("section", { cls: "team" }, h("h3", {}, label), h("div", { cls: "agents" }, as.map(card))) : null; });
+    if (body.isConnected) body.replaceChildren(intel, learnBox || "", ...groups.filter(Boolean));
+  };
+  await paint().catch((e) => body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(e)))));
+  S.timers.push(setInterval(() => paint().catch(() => {}), 20000));
+}
+
 function setupCard() {
   const b = brandOf();
   const steps = [["Content plan", "Topics, audience and what a viral reel looks like for " + b.name + "."], ["Voice & style", "Narrator voice, Hinglish mix, captions and the call to action."],
     ["Watermark", "Logo placement on every reel."], ["Instagram", b.instagram ? `Connect @${b.instagram} for automatic posting.` : "Connect its Instagram account for automatic posting."]];
+  steps[0] = ["Account Intelligence study", "Its website, socials, services, competitors, market trends and industry rules become its knowledge profile and strategy."];
   return h("section", { cls: "panel setupcard" }, h("div", { style: "display:flex;gap:14px;align-items:center" }, brandLogo(b, 56),
-      h("div", {}, h("h3", {}, `${b.name} is being set up`), h("p", { cls: "small muted" }, "Same studio and process; reels open here once these are decided."))),
+      h("div", {}, h("h3", {}, `${b.name} is being set up`), h("p", { cls: "small muted" }, "Account Intelligence studies it first; reels open here as soon as the study is done (about 15-30 min)."))),
     h("ol", { cls: "steps", style: "margin-top:14px" }, steps.map(([t, x]) => h("li", {}, h("b", {}, t), h("span", {}, x)))),
-    h("button", { cls: "btn quiet", style: "margin-top:6px", onclick: () => go("home") }, "Back to Dashboard"));
+    h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;margin-top:6px" },
+      h("button", { cls: "btn primary", onclick: async (e) => { e.currentTarget.disabled = true; try { await rpc("run_onboard", { p_brand: b.id }); toast(`Account Intelligence is studying ${b.name}.`); } catch (err) { toast(errText(err), { err: true }); } } }, "Study it now"),
+      h("button", { cls: "btn quiet", onclick: () => go("agents") }, "See the agents"),
+      h("button", { cls: "btn quiet", onclick: () => go("home") }, "Back to Dashboard")));
 }
 
 // ---------------------------------------------------------------- Autopilot: one viral-ready reel a day, no taps
@@ -555,17 +644,18 @@ function viewCreate() {
     const steer = h("input", { placeholder: "Optional: steer the ideas, e.g. cockpit secrets, famous landings", "aria-label": "Steer the ideas", value: S.steer, oninput: (e) => { S.steer = e.target.value; } });
     const genBtn = h("button", { cls: "btn primary", onclick: () => gen() }, "Generate suggestions");
     const list = h("div", { cls: "topics", role: "radiogroup", "aria-label": "Suggested topics" });
-    const head = h("div", { cls: "panel", style: "margin-bottom:14px" }, h("h3", {}, "Five trending, verifiable topics"),
-      h("p", { cls: "muted small", style: "margin:4px 0 14px" }, "Claude checks what's being talked about and only suggests topics it can back with sources."),
+    const head = h("div", { cls: "panel", style: "margin-bottom:14px" }, h("h3", {}, "Researched topics for " + brandOf().name),
+      h("p", { cls: "muted small", style: "margin:4px 0 14px" }, "Half from this account's own expertise, half from what its audience talks about now. Every topic is backed by sources."),
       h("div", { style: "display:flex;gap:10px;flex-wrap:wrap" }, h("div", { style: "flex:1 1 260px" }, steer), genBtn));
     left.replaceChildren(head, list);
     const show = (j, when) => {
-      const topics = j.output?.topics || [];
-      list.replaceChildren(h("p", { cls: "faint small", style: "margin:0 4px" }, `Suggested ${ago(when)}`), ...topics.map((t) => {
+      const topics = j.output?.topics || []; const ln = j.output?.lane_names || { core: "Core", trending: "Trending" }; const mx = j.output?.mix;
+      const mixLine = mx && mx.window ? ` · last ${mx.window} reels: ${mx.core} ${ln.core.toLowerCase()}, ${mx.trending} trending, next: ${(ln[mx.next] || mx.next).toLowerCase()}` : "";
+      list.replaceChildren(h("p", { cls: "faint small", style: "margin:0 4px" }, `Suggested ${ago(when)}${mixLine}`), ...topics.map((t) => {
         // compact by default: title + hook; tapping a topic picks it and opens its details (one open at a time)
         const b = h("div", { cls: "topic compact", role: "radio", tabindex: "0", "aria-checked": String(S.picked === t), "aria-expanded": String(S.picked === t),
             onclick: () => pick(t), onkeydown: (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); pick(t); } } },
-          h("span", { cls: "radio", "aria-hidden": "true" }), h("h3", {}, t.title), h("p", { cls: "hook" }, t.hook),
+          h("span", { cls: "radio", "aria-hidden": "true" }), t.lane ? h("span", { cls: "lane " + t.lane }, ln[t.lane] || t.lane) : null, h("h3", {}, t.title), h("p", { cls: "hook" }, t.hook),
           h("div", { cls: "topic-more", onclick: (e) => { if (e.target.closest("a, summary")) e.stopPropagation(); } },
             h("div", { cls: "kv" }, t.angle ? h("span", {}, h("b", {}, "Angle"), t.angle) : null, t.why_viral ? h("span", {}, h("b", {}, "Why it travels"), t.why_viral) : null,
               Number(t.est_seconds) > 0 ? h("span", {}, h("b", {}, "Length"), `${t.est_seconds} s`) : null),
