@@ -11,7 +11,8 @@ Confirmed concept:
 * 3–5 `groups` of 1–5 `phrases`; each phrase is one breath (3–9 words). Total spoken words 80–100. Group 1 is the hook (≤ 3 s, ends with a question or cliff-hanger). The last group ends with exactly one CTA phrase: say `follow करें We One Aviation।`, caption `follow karein *We One Aviation*` (write it once, never repeat it).
 * `say` = what the voice speaks: **Hindi in Devanagari**, English technical words in **English letters**. Numbers and years as **English words** (`nineteen seventy-five`, `one thousand`). Use the pronunciation dictionary below: write its `say` form for any listed word. Avoid tongue-twisters and rare Hindi words (use करीब not लगभग). Prefer Hindi words over English words that are not in the dictionary.
 * `caption` = the same phrase in **Roman Hinglish** for on-screen captions; wrap 1–2 key words in `*asterisks*` for highlight; digits are fine in captions (`*1,000 flight hours*`).
-* `gap_after` (seconds) on each group: 0.45–0.6.
+* Write for the ear, like a real presenter talking to one person: direct address, everyday words, short punchy phrases mixed with slightly longer ones. The key word of each phrase goes at its end, where the voice naturally lands and stresses it. A real question ends with `?` so the voice lifts.
+* `gap_after` (seconds) follows the meaning, never the same value everywhere: 0.65–0.8 after the hook or a question (let it land), 0.3–0.4 between groups of one thought, 0.5–0.6 between ideas, 0.7 before the group with the call to action.
 
 Pronunciation dictionary (term → say):
 {{lexicon}}

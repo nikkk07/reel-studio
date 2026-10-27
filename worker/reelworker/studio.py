@@ -6,8 +6,11 @@ from . import config
 
 ENV_NAMES = {"PEXELS_API_KEY": "pexels", "PIXABAY_API_KEY": "pixabay"}
 _lock = threading.Lock()
-_state = {"db": None, "at": 0.0, "keys": {}, "cap": None, "voice": {}}
-VOICE_MODELS = ("v2", "v3", "hi")
+_state = {"db": None, "at": 0.0, "keys": {}, "cap": None, "voice": {}, "style": {}}
+VOICE_MODELS = ("v2", "v3", "hi")     # 'hi' (V3 Hindi pack) for English = English read with a natural Indian accent
+# delivery: (exaggeration, cfg_weight). Expressive = Chatterbox's own advice for more emotion: exaggeration ~0.7 with cfg ~0.3
+# (lower cfg keeps the pace calm when exaggeration rises).
+STYLES = {"natural": (0.5, 0.5), "expressive": (0.7, 0.3)}
 
 
 def bind(db):
@@ -28,8 +31,8 @@ def refresh(force=False):
             cap = (ws[0]["value"] if ws else {}).get("daily_cap")
             _state["cap"] = int(cap) if cap and 1 <= int(cap) <= 10 else None
             v = ws[0]["value"] if ws else {}
-            _state["voice"] = {k: v.get(f"voice_{k}") for k in ("hi", "en")
-                               if v.get(f"voice_{k}") in (VOICE_MODELS if k == "hi" else ("v2", "v3"))}   # the Hindi pack is for Hindi only
+            _state["voice"] = {k: v.get(f"voice_{k}") for k in ("hi", "en") if v.get(f"voice_{k}") in VOICE_MODELS}
+            _state["style"] = {k: v.get(f"style_{k}") for k in ("hi", "en") if v.get(f"style_{k}") in STYLES}
         except Exception:  # noqa: BLE001  (keep the last good values)
             pass
         _state["at"] = time.time()
@@ -59,6 +62,12 @@ def voice_model(lang):
     refresh()
     v = _state["voice"].get("hi" if lang == "hi" else "en")
     return v or (config.VOICE_HI if lang == "hi" else config.VOICE_EN)
+
+
+def voice_style(lang):
+    """(exaggeration, cfg_weight) of the Hinglish or English voice: chosen in Studio Settings, else natural."""
+    refresh()
+    return STYLES[_state.get("style", {}).get("hi" if lang == "hi" else "en") or "natural"]
 
 
 def sources():

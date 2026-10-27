@@ -539,7 +539,7 @@
    "match": [
     "SIGMET"
    ],
-   "say": "सिग मेट",
+   "say": "सिग्मेट",
    "en": "sig met",
    "accounts": [
     "weone",
@@ -547,7 +547,7 @@
     "bookmycharter"
    ],
    "kind": "word",
-   "note": "said 'SIG-met'; two parts read clearly; as one word heard 'sigmint' (test 2026-10-27)"
+   "note": "said 'SIG-met'. On the Hindi pack सिग्मेट came out the same 3 times out of 3; 'सिग-मेट' was heard as 'seat meet' (test 2026-10-27)"
   },
   {
    "term": "TEMPO",
@@ -913,7 +913,7 @@
    "match": [
     "windshear"
    ],
-   "say": "विंड शियर",
+   "say": "विंड शीयर",
    "en": "windshear",
    "accounts": [
     "weone",
@@ -921,7 +921,7 @@
     "bookmycharter"
    ],
    "kind": "word",
-   "note": "split into two words: read as one word it came out 'rinsher' (ear test 2026-10-27)"
+   "note": "two words: 'विंड शीयर' read as 'wind shear' 2 times out of 3 on the Hindi pack; as one word it came out 'rinsher' (tests 2026-10-27)"
   },
   {
    "term": "icing",

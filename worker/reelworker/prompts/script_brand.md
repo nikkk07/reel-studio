@@ -15,7 +15,9 @@ Confirmed concept:
 * Then: context in one line → the reveal (the insider truth) → the payoff (what the viewer should do or check) → exactly one call to action as the last phrase of the last group: say `{{cta_say}}`, caption `{{cta_caption}}` (once, never repeated).
 {{say_rules}}
 * `caption` = the same phrase for on-screen captions; digits and units are fine ("*541 km*"); wrap 1–2 key words in `*asterisks*` for the gold highlight.
-* `gap_after` (seconds) on each group: 0.4–0.55. `voice`: "female". `mood`: "calm" or "curious" (never "dramatic" or "tense" for this account).
+* Write for the ear, like a real presenter talking to one person: direct address, everyday words, short punchy phrases mixed with slightly longer ones. The key word of each phrase goes at its end, where the voice naturally lands and stresses it. A real question ends with `?` so the voice lifts.
+* `gap_after` (seconds) follows the meaning, never the same value everywhere: 0.65–0.8 after the hook or a question (let it land), 0.3–0.4 between groups of one thought, 0.5–0.6 between ideas, 0.7 before the group with the call to action.
+* `voice`: "female". `mood`: "calm" or "curious" (never "dramatic" or "tense" for this account).
 
 ## 3. Shots
 5–12 `shots`, each starting at a phrase (`at_group`, `at_phrase`). `query` = a short English stock-footage search (Pexels/Pixabay), concrete and cinematic, in the account's visual style (see footage ideas above). The first shot must be the most striking image for the hook. Change shot every 2–4 s. Stock footage is representative; never claim it is a real aircraft of the business.

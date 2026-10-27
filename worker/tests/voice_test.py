@@ -101,4 +101,8 @@ brandmod._CACHE.clear(); RUNS.clear(); db = DB()
 b = Brain(inspector=[bad, bad, bad, bad]); reel.brain = agents.brain = b; c = ctx_for(db); reel.stage_voice(c, lambda f: None)
 ok(len(RUNS) == 4 and c.job["output"]["hold"] is True and "लेजिस्ट्रेश्ट्रेश्ण" in c.job["output"]["hold_reason"], "still mispronounced after 3 retries -> held, with the word named")
 
+# 5. natural delivery: every phrase is one breath (comma), each part ends like a spoken sentence
+ok(reel.breath_join(["Pilot banna hai?", "Toh suniye", "ek trick"]) == "Pilot banna hai? Toh suniye, ek trick.", "phrases get a breath pause; the part ends with a full stop")
+ok(reel.breath_join(["आज सुनिए", "डी जी सी ए"]) == "आज सुनिए, डी जी सी ए।", "Hindi parts end with ।")
+
 bad_ = [n for k, n in R if not k]; print(f"{len(R) - len(bad_)}/{len(R)} pronunciation checks passed" + (" | FAILED: " + "; ".join(bad_) if bad_ else "")); sys.exit(1 if bad_ else 0)
