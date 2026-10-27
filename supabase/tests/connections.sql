@@ -94,3 +94,13 @@ select pg_temp.ok(pg_temp.err($$select public.update_brand('nope', '{}')$$) like
 select pg_temp.ok((public.set_worker_settings(4))->>'daily_cap' = '4', 'daily reel limit set from the site');
 select pg_temp.ok(pg_temp.err($$select public.set_worker_settings(50)$$) like 'Choose between%', 'limit kept sane');
 reset role;
+
+-- voice model per language (owner only, known models only, Hindi pack only for the Hinglish voice)
+select set_config('request.jwt.claims','{"email":"weoneaviation8@gmail.com"}',false);
+set role authenticated;
+select pg_temp.ok((public.set_voice_models('hi', 'v3'))->>'voice_hi' = 'hi', 'voice models saved');
+select pg_temp.ok(pg_temp.err($$select public.set_voice_models('hi', 'hi')$$) like 'Unknown English voice model%', 'Hindi pack refused for the English voice');
+select pg_temp.ok(pg_temp.err($$select public.set_voice_models('x', 'v3')$$) like 'Unknown Hinglish voice model%', 'unknown model refused');
+select set_config('request.jwt.claims','{"email":"editor@x.com"}',false);
+select pg_temp.ok(pg_temp.err($$select public.set_voice_models('v2', 'v2')$$) like 'Only the studio owner%', 'members cannot change the voice model');
+reset role;

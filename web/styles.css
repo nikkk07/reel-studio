@@ -507,7 +507,7 @@ main, .panel, .topic, .strip, dialog { overflow-wrap: anywhere; }
 .svc-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .svc-logo.wide { width: 104px; padding: 10px 12px; background: #fff; border: 1px solid var(--rule); }
 .svc-ico { width: 44px; height: 44px; flex: none; }
-.svc input { font: inherit; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink); width: 100%; margin-top: 4px; }
+.svc input, .svc select { font: inherit; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink); width: 100%; margin-top: 4px; }
 .svc-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
 .svc code { font-size: 12.5px; background: var(--sunk); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
 .svc .slot-edit { margin-top: 4px; }

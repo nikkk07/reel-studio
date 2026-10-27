@@ -53,6 +53,7 @@ const ICON = {
   create: "M12 4v16M4 12h16", route: "M5 18c3-9 11-3 14-12M5 18a2 2 0 1 0 0 .1M19 6a2 2 0 1 0 0 .1",
   library: "M4 4h6v7H4zM14 4h6v4h-6zM14 12h6v8h-6zM4 15h6v5H4z", agents: "M12 3v3M8.5 8h7a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3zM9.5 13h.01M14.5 13h.01M3 13h2.5M18.5 13H21", check: "M5 12.5l4.5 4.5L19 7.5", x: "M6 6l12 12M18 6 6 18",
   gear: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
+  mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3M8 21h8",
   play: "M8 5v14l11-7z", down: "M12 4v12m0 0-5-5m5 5 5-5M5 20h14", bell: "M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20a2 2 0 0 0 4 0",
 };
 function icon(name, size = 18, fill = false) {
@@ -1254,6 +1255,25 @@ function liAppCard(refresh) {
       catch (e) { msg.textContent = errText(e); } } }, app.client_id ? "Replace" : "Save"),
       h("a", { cls: "btn quiet", href: "https://www.linkedin.com/developers/apps", target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "LinkedIn apps")), msg] : null);
 }
+const VOICE_OPTS = { hi: [["hi", "Chatterbox V3 Hindi pack (recommended)"], ["v3", "Chatterbox V3"], ["v2", "Chatterbox V2 (previous)"]],
+  en: [["v3", "Chatterbox V3 (recommended)"], ["v2", "Chatterbox V2 (previous)"]] };
+function voiceCard(refresh) {
+  const ws = S.settings?.worker_settings || {}; const msg = statusMsg();
+  const sel = (k, val) => h("select", { "aria-label": k === "hi" ? "Hinglish voice model" : "English voice model", style: "width:100%;margin-top:4px" },
+    VOICE_OPTS[k].map(([v, label]) => h("option", { value: v, selected: v === val ? true : null }, label)));
+  const cur = S.worker?.info?.voices || {};
+  const hi = sel("hi", ws.voice_hi || cur.hi || "hi"), en = sel("en", ws.voice_en || cur.en || "v3");
+  return h("article", { cls: "svc ok" },
+    h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, icon("mic", 24)),
+      h("div", {}, h("h3", {}, "Voice model"), h("p", { cls: "small" }, h("i", { cls: "lamp ok" }), ws.voice_at ? `Changed ${ago(ws.voice_at)}` : "Studio default",
+        cur.ready ? ` · on the Mac: ${cur.ready.join(", ")}` : ""))),
+    h("label", { cls: "small", style: "font-weight:600;margin-top:6px" }, "Hinglish accounts (We One Aviation, Flying Star Aviator)"), hi,
+    h("label", { cls: "small", style: "font-weight:600;margin-top:8px" }, "English accounts (Book My Charter, Legal Group)"), en,
+    h("p", { cls: "tiny faint" }, "The Mac uses the new choice from the next reel's voice step. Every take is still checked word by word."),
+    S.owner ? h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: async () => {
+      try { await rpc("set_voice_models", { p_hi: hi.value, p_en: en.value }); await loadSettings(); toast("Voice model saved."); refresh(); }
+      catch (e) { msg.textContent = errText(e); } } }, "Save"), msg) : null);
+}
 function infoCard({ img, name, state, word, lines, links, mono }) {
   return h("article", { cls: `svc ${state}` },
     h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" + (mono ? " mono" : "") }, h("img", { src: img, alt: "" })), h("div", {}, h("h3", {}, name),
@@ -1285,6 +1305,7 @@ async function viewSettings() {
       sect("Posting", null, h("article", { cls: "svc" }, h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, icon("route", 26)), h("div", {}, h("h3", {}, "Auto-post"),
           h("p", { cls: "small" }, sch.auto === false ? "Off: approved reels post only when you tap Post." : `On: ${sch.review_minutes ?? 5} min after a reel is ready it posts to that account's own connected pages, unless you act.`))),
         S.editSlots ? slotEditor(sch, rr) : h("div", { cls: "svc-btns" }, h("button", { cls: "btn quiet", onclick: () => { S.editSlots = { minutes: sch.review_minutes ?? 5, auto: sch.auto !== false }; rr(); } }, "Change")))),
+      sect("Voice", "The voice model that reads every reel, for the Hinglish accounts and the English accounts. Free, open models running on the Mac; switch back any time if one sounds worse.", voiceCard(rr)),
       sect("Studio Mac & Claude", "The Mac makes the reels; Claude Code on it writes and checks them.",
         h("article", { cls: `svc ${macAlive() ? "ok" : "warn"}` }, h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo mono" }, h("img", { src: SVC_IMG.apple, alt: "" })), h("div", {}, h("h3", {}, "Studio Mac"),
             h("p", { cls: "small" }, h("i", { cls: "lamp " + (macAlive() ? "ok" : "bad") }), macAlive() ? "Online" : `Offline${w ? " · last heard " + ago(w.last_seen) : ""}`))),

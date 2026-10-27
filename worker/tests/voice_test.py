@@ -77,7 +77,9 @@ ok(RUNS[0][3][0] == "एक ईमेल लिंक, ट्वेंटी फ
 ok("Rules for `tts`" in b.asks[0][1] and "डी जी सी ए" in b.asks[0][1] and "सी पी एल" in b.asks[0][1], "the editor gets the rules and both dictionaries (studio + this account's)")
 ok(SPEC["groups"][0]["phrases"][0]["caption"] == "Ek email link", "captions are never changed")
 ok(not c.job["output"].get("hold") and c.job["output"]["voice_issues"] == {}, "all words right -> no hold")
-ok({t["term"] for t in db.prof["lexicon"]} >= {"DGCA", "registration", "Flying Star Aviator"}, "new spellings are saved in the account's own dictionary for next time")
+terms = {t["term"] for t in db.prof["lexicon"]}
+ok("registration" in terms and "Flying Star Aviator" not in terms, "new spellings are saved in the account's own dictionary; terms in the studio dictionary are not duplicated")
+ok("एफ़ आर टी ओ एल" in b.asks[0][1] and "नैव" in b.asks[0][1], "the curated studio dictionary (FRTOL, NAV ...) is given to the editor")
 
 # 2. the Supervisor rejects Latin letters / digits left in the spoken form
 brandmod._CACHE.clear(); RUNS.clear(); db = DB(); b = Brain(latin_first=True); reel.brain = agents.brain = b; c = ctx_for(db); reel.stage_voice(c, lambda f: None)

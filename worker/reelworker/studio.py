@@ -6,7 +6,8 @@ from . import config
 
 ENV_NAMES = {"PEXELS_API_KEY": "pexels", "PIXABAY_API_KEY": "pixabay"}
 _lock = threading.Lock()
-_state = {"db": None, "at": 0.0, "keys": {}, "cap": None}
+_state = {"db": None, "at": 0.0, "keys": {}, "cap": None, "voice": {}}
+VOICE_MODELS = ("v2", "v3", "hi")
 
 
 def bind(db):
@@ -26,6 +27,9 @@ def refresh(force=False):
             ws = db.select("settings", "select=value&key=eq.worker_settings")
             cap = (ws[0]["value"] if ws else {}).get("daily_cap")
             _state["cap"] = int(cap) if cap and 1 <= int(cap) <= 10 else None
+            v = ws[0]["value"] if ws else {}
+            _state["voice"] = {k: v.get(f"voice_{k}") for k in ("hi", "en")
+                               if v.get(f"voice_{k}") in (VOICE_MODELS if k == "hi" else ("v2", "v3"))}   # the Hindi pack is for Hindi only
         except Exception:  # noqa: BLE001  (keep the last good values)
             pass
         _state["at"] = time.time()
@@ -48,6 +52,13 @@ def get(env_name):
 def daily_cap():
     refresh()
     return _state["cap"] or config.DAILY_REEL_CAP
+
+
+def voice_model(lang):
+    """Voice model for the Hinglish ('hi') or English ('en') voice: chosen in Studio Settings, else the studio default."""
+    refresh()
+    v = _state["voice"].get("hi" if lang == "hi" else "en")
+    return v or (config.VOICE_HI if lang == "hi" else config.VOICE_EN)
 
 
 def sources():

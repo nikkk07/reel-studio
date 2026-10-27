@@ -1,0 +1,1830 @@
+{
+ "_about": "Curated studio pronunciation dictionary. 'say' = Hinglish voice (Devanagari spoken form); 'en' = English voice. Applied before the Pronunciation Editor and overrides learned entries. accounts: 'all' or a list of account ids. kind 'letters' = said letter by letter.",
+ "entries": [
+  {
+   "term": "DGCA",
+   "match": [
+    "DGCA"
+   ],
+   "say": "डी जी सी ए",
+   "en": "D G C A",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Directorate General of Civil Aviation"
+  },
+  {
+   "term": "CPL",
+   "match": [
+    "CPL"
+   ],
+   "say": "सी पी एल",
+   "en": "C P L",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Commercial Pilot Licence"
+  },
+  {
+   "term": "ATPL",
+   "match": [
+    "ATPL"
+   ],
+   "say": "ए टी पी एल",
+   "en": "A T P L",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Airline Transport Pilot Licence"
+  },
+  {
+   "term": "PPL",
+   "match": [
+    "PPL"
+   ],
+   "say": "पी पी एल",
+   "en": "P P L",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Private Pilot Licence"
+  },
+  {
+   "term": "SPL",
+   "match": [
+    "SPL"
+   ],
+   "say": "एस पी एल",
+   "en": "S P L",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Student Pilot Licence"
+  },
+  {
+   "term": "FRTOL",
+   "match": [
+    "FRTOL"
+   ],
+   "say": "एफ़ आर टी ओ एल",
+   "en": "F R T O L",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Flight Radio Telephone Operator Licence"
+  },
+  {
+   "term": "RTR",
+   "match": [
+    "RTR"
+   ],
+   "say": "आर टी आर",
+   "en": "R T R",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Radio Telephony Restricted"
+  },
+  {
+   "term": "ATC",
+   "match": [
+    "ATC"
+   ],
+   "say": "ए टी सी",
+   "en": "A T C",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Air Traffic Control"
+  },
+  {
+   "term": "FAQ",
+   "match": [
+    "FAQ"
+   ],
+   "say": "एफ़ ए क्यू",
+   "en": "F A Q",
+   "accounts": "all",
+   "kind": "letters",
+   "note": "Frequently Asked Questions"
+  },
+  {
+   "term": "PDF",
+   "match": [
+    "PDF"
+   ],
+   "say": "पी डी एफ़",
+   "en": "P D F",
+   "accounts": "all",
+   "kind": "letters",
+   "note": ""
+  },
+  {
+   "term": "JPG",
+   "match": [
+    "JPG"
+   ],
+   "say": "जे पी जी",
+   "en": "J P G",
+   "accounts": "all",
+   "kind": "letters",
+   "note": ""
+  },
+  {
+   "term": "BVC",
+   "match": [
+    "BVC"
+   ],
+   "say": "बी वी सी",
+   "en": "B V C",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Background Verification Certificate"
+  },
+  {
+   "term": "IFR",
+   "match": [
+    "IFR"
+   ],
+   "say": "आई एफ़ आर",
+   "en": "I F R",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Instrument Flight Rules"
+  },
+  {
+   "term": "VFR",
+   "match": [
+    "VFR"
+   ],
+   "say": "वी एफ़ आर",
+   "en": "V F R",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Visual Flight Rules"
+  },
+  {
+   "term": "QNH",
+   "match": [
+    "QNH"
+   ],
+   "say": "क्यू एन एच",
+   "en": "Q N H",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "altimeter setting to sea level"
+  },
+  {
+   "term": "QFE",
+   "match": [
+    "QFE"
+   ],
+   "say": "क्यू एफ़ ई",
+   "en": "Q F E",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "altimeter setting to field elevation"
+  },
+  {
+   "term": "VOR",
+   "match": [
+    "VOR"
+   ],
+   "say": "वी ओ आर",
+   "en": "V O R",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "VHF Omnidirectional Range"
+  },
+  {
+   "term": "NDB",
+   "match": [
+    "NDB"
+   ],
+   "say": "एन डी बी",
+   "en": "N D B",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Non-Directional Beacon"
+  },
+  {
+   "term": "DME",
+   "match": [
+    "DME"
+   ],
+   "say": "डी एम ई",
+   "en": "D M E",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Distance Measuring Equipment"
+  },
+  {
+   "term": "ILS",
+   "match": [
+    "ILS"
+   ],
+   "say": "आई एल एस",
+   "en": "I L S",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Instrument Landing System"
+  },
+  {
+   "term": "ATR",
+   "match": [
+    "ATR"
+   ],
+   "say": "ए टी आर",
+   "en": "A T R",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": ""
+  },
+  {
+   "term": "CB",
+   "match": [
+    "CB"
+   ],
+   "say": "सी बी",
+   "en": "C B",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "cumulonimbus cloud"
+  },
+  {
+   "term": "GPS",
+   "match": [
+    "GPS"
+   ],
+   "say": "जी पी एस",
+   "en": "G P S",
+   "accounts": "all",
+   "kind": "letters",
+   "note": ""
+  },
+  {
+   "term": "AME",
+   "match": [
+    "AME"
+   ],
+   "say": "ए एम ई",
+   "en": "A M E",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Aircraft Maintenance Engineer"
+  },
+  {
+   "term": "MRO",
+   "match": [
+    "MRO"
+   ],
+   "say": "एम आर ओ",
+   "en": "M R O",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Maintenance, Repair and Overhaul"
+  },
+  {
+   "term": "NSOP",
+   "match": [
+    "NSOP"
+   ],
+   "say": "एन एस ओ पी",
+   "en": "N S O P",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Non-Scheduled Operator Permit"
+  },
+  {
+   "term": "IGST",
+   "match": [
+    "IGST"
+   ],
+   "say": "आई जी एस टी",
+   "en": "I G S T",
+   "accounts": "all",
+   "kind": "letters",
+   "note": ""
+  },
+  {
+   "term": "GST",
+   "match": [
+    "GST"
+   ],
+   "say": "जी एस टी",
+   "en": "G S T",
+   "accounts": "all",
+   "kind": "letters",
+   "note": ""
+  },
+  {
+   "term": "XLS",
+   "match": [
+    "XLS"
+   ],
+   "say": "एक्स एल एस",
+   "en": "X L S",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Citation XLS"
+  },
+  {
+   "term": "FMS",
+   "match": [
+    "FMS"
+   ],
+   "say": "एफ़ एम एस",
+   "en": "F M S",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Flight Management System"
+  },
+  {
+   "term": "ADF",
+   "match": [
+    "ADF"
+   ],
+   "say": "ए डी एफ़",
+   "en": "A D F",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "letters",
+   "note": "Automatic Direction Finder"
+  },
+  {
+   "term": "eGCA",
+   "match": [
+    "eGCA",
+    "EGCA",
+    "e-GCA"
+   ],
+   "say": "ई जी सी ए",
+   "en": "e G C A",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "DGCA's online portal"
+  },
+  {
+   "term": "ICAO",
+   "match": [
+    "ICAO"
+   ],
+   "say": "आई केओ",
+   "en": "eye kay oh",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "International Civil Aviation Organization; said 'eye-KAY-oh'"
+  },
+  {
+   "term": "TCAS",
+   "match": [
+    "TCAS"
+   ],
+   "say": "टीकैस",
+   "en": "tee cas",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "said as a word: 'TEE-kas'"
+  },
+  {
+   "term": "METAR",
+   "match": [
+    "METAR"
+   ],
+   "say": "मीटार",
+   "en": "mee tar",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "weather report, said 'MEE-tar'"
+  },
+  {
+   "term": "TAF",
+   "match": [
+    "TAF"
+   ],
+   "say": "टैफ़",
+   "en": "taff",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "forecast, said 'taff'"
+  },
+  {
+   "term": "NOTAM",
+   "match": [
+    "NOTAM"
+   ],
+   "say": "नोटैम",
+   "en": "no tam",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "said 'NO-tam'"
+  },
+  {
+   "term": "SIGMET",
+   "match": [
+    "SIGMET"
+   ],
+   "say": "सिगमेट",
+   "en": "sig met",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "said 'SIG-met'"
+  },
+  {
+   "term": "TEMPO",
+   "match": [
+    "TEMPO"
+   ],
+   "say": "टेम्पो",
+   "en": "tempo",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Air NAV",
+   "match": [
+    "Air NAV"
+   ],
+   "say": "एयर नैव",
+   "en": "air nav",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": "Air Navigation subject"
+  },
+  {
+   "term": "NAV",
+   "match": [
+    "NAV"
+   ],
+   "say": "नैव",
+   "en": "nav",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": "Air Navigation subject; rhymes with 'have'"
+  },
+  {
+   "term": "Air Regs",
+   "match": [
+    "Air Regs"
+   ],
+   "say": "एयर रेग्स",
+   "en": "air regs",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": "Air Regulations subject"
+  },
+  {
+   "term": "MET",
+   "match": [
+    "MET"
+   ],
+   "say": "मेट",
+   "en": "met",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": "Aviation Meteorology subject"
+  },
+  {
+   "term": "Regs",
+   "match": [
+    "Regs"
+   ],
+   "say": "रेग्स",
+   "en": "regs",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": "Air Regulations subject"
+  },
+  {
+   "term": "Tech General",
+   "match": [
+    "Tech General"
+   ],
+   "say": "टेक जनरल",
+   "en": "tech general",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": "Technical General subject"
+  },
+  {
+   "term": "Tech Specific",
+   "match": [
+    "Tech Specific"
+   ],
+   "say": "टेक स्पेसिफ़िक",
+   "en": "tech specific",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": "Technical Specific subject"
+  },
+  {
+   "term": "Technical General",
+   "match": [
+    "Technical General"
+   ],
+   "say": "टेक्निकल जनरल",
+   "en": "technical general",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Technical Specific",
+   "match": [
+    "Technical Specific"
+   ],
+   "say": "टेक्निकल स्पेसिफ़िक",
+   "en": "technical specific",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Air Navigation",
+   "match": [
+    "Air Navigation"
+   ],
+   "say": "एयर नेविगेशन",
+   "en": "air navigation",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Air Regulations",
+   "match": [
+    "Air Regulations"
+   ],
+   "say": "एयर रेगुलेशन्स",
+   "en": "air regulations",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Aviation Meteorology",
+   "match": [
+    "Aviation Meteorology"
+   ],
+   "say": "एविएशन मीटियोरोलॉजी",
+   "en": "aviation meteorology",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "meteorology",
+   "match": [
+    "meteorology"
+   ],
+   "say": "मीटियोरोलॉजी",
+   "en": "meteorology",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "navigation",
+   "match": [
+    "navigation"
+   ],
+   "say": "नेविगेशन",
+   "en": "navigation",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "aviation",
+   "match": [
+    "aviation"
+   ],
+   "say": "एविएशन",
+   "en": "aviation",
+   "accounts": "all",
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "altimeter",
+   "match": [
+    "altimeter"
+   ],
+   "say": "ऑल्टीमीटर",
+   "en": "altimeter",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "height instrument"
+  },
+  {
+   "term": "airspeed",
+   "match": [
+    "airspeed"
+   ],
+   "say": "एयरस्पीड",
+   "en": "airspeed",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "attitude indicator",
+   "match": [
+    "attitude indicator"
+   ],
+   "say": "ऐटिट्यूड इंडिकेटर",
+   "en": "attitude indicator",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "transponder",
+   "match": [
+    "transponder"
+   ],
+   "say": "ट्रांसपोंडर",
+   "en": "transponder",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "squawk",
+   "match": [
+    "squawk"
+   ],
+   "say": "स्क्वॉक",
+   "en": "squawk",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Mayday",
+   "match": [
+    "Mayday"
+   ],
+   "say": "मेडे",
+   "en": "mayday",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Pan-Pan",
+   "match": [
+    "Pan-Pan"
+   ],
+   "say": "पैन पैन",
+   "en": "pan pan",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "cumulonimbus",
+   "match": [
+    "cumulonimbus"
+   ],
+   "say": "क्यूम्युलोनिम्बस",
+   "en": "cumulonimbus",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "thunderstorm cloud"
+  },
+  {
+   "term": "turbulence",
+   "match": [
+    "turbulence"
+   ],
+   "say": "टर्ब्युलेंस",
+   "en": "turbulence",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "windshear",
+   "match": [
+    "windshear"
+   ],
+   "say": "विंडशियर",
+   "en": "windshear",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "icing",
+   "match": [
+    "icing"
+   ],
+   "say": "आइसिंग",
+   "en": "icing",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "hypoxia",
+   "match": [
+    "hypoxia"
+   ],
+   "say": "हाइपॉक्सिया",
+   "en": "hypoxia",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Bernoulli",
+   "match": [
+    "Bernoulli"
+   ],
+   "say": "बर्नूली",
+   "en": "Bernoulli",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "thrust",
+   "match": [
+    "thrust"
+   ],
+   "say": "थ्रस्ट",
+   "en": "thrust",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "drag",
+   "match": [
+    "drag"
+   ],
+   "say": "ड्रैग",
+   "en": "drag",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "lift",
+   "match": [
+    "lift"
+   ],
+   "say": "लिफ़्ट",
+   "en": "lift",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "runway",
+   "match": [
+    "runway"
+   ],
+   "say": "रनवे",
+   "en": "runway",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "cockpit",
+   "match": [
+    "cockpit"
+   ],
+   "say": "कॉकपिट",
+   "en": "cockpit",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "simulator",
+   "match": [
+    "simulator"
+   ],
+   "say": "सिम्युलेटर",
+   "en": "simulator",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Computer Number",
+   "match": [
+    "Computer Number"
+   ],
+   "say": "कंप्यूटर नंबर",
+   "en": "computer number",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Class 2 medical",
+   "match": [
+    "Class 2 medical"
+   ],
+   "say": "क्लास टू मेडिकल",
+   "en": "class two medical",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Class 1 medical",
+   "match": [
+    "Class 1 medical"
+   ],
+   "say": "क्लास वन मेडिकल",
+   "en": "class one medical",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Pariksha",
+   "match": [
+    "Pariksha"
+   ],
+   "say": "परीक्षा",
+   "en": "Pariksha",
+   "accounts": [
+    "weone",
+    "flystar"
+   ],
+   "kind": "word",
+   "note": "DGCA exam portal"
+  },
+  {
+   "term": "cadet",
+   "match": [
+    "cadet"
+   ],
+   "say": "कैडेट",
+   "en": "cadet",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "helipad",
+   "match": [
+    "helipad"
+   ],
+   "say": "हेलिपैड",
+   "en": "helipad",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "hangar",
+   "match": [
+    "hangar"
+   ],
+   "say": "हैंगर",
+   "en": "hangar",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "turboprop",
+   "match": [
+    "turboprop"
+   ],
+   "say": "टर्बोप्रॉप",
+   "en": "turboprop",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "empty leg",
+   "match": [
+    "empty leg"
+   ],
+   "say": "एम्प्टी लेग",
+   "en": "empty leg",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "positioning",
+   "match": [
+    "positioning"
+   ],
+   "say": "पोज़िशनिंग",
+   "en": "positioning",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "block time",
+   "match": [
+    "block time"
+   ],
+   "say": "ब्लॉक टाइम",
+   "en": "block time",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Pilatus",
+   "match": [
+    "Pilatus"
+   ],
+   "say": "पिलाटस",
+   "en": "Pilatus",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "said 'pi-LAH-tus'"
+  },
+  {
+   "term": "PC-12",
+   "match": [
+    "PC-12"
+   ],
+   "say": "पी सी ट्वेल्व",
+   "en": "P C twelve",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "Pilatus turboprop"
+  },
+  {
+   "term": "King Air",
+   "match": [
+    "King Air"
+   ],
+   "say": "किंग एयर",
+   "en": "King Air",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "B200",
+   "match": [
+    "B200"
+   ],
+   "say": "बी टू हंड्रेड",
+   "en": "B two hundred",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Gulfstream",
+   "match": [
+    "Gulfstream"
+   ],
+   "say": "गल्फ़स्ट्रीम",
+   "en": "Gulfstream",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "G550",
+   "match": [
+    "G550"
+   ],
+   "say": "जी फ़ाइव फ़िफ़्टी",
+   "en": "G five fifty",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "Gulfstream jet"
+  },
+  {
+   "term": "Cessna",
+   "match": [
+    "Cessna"
+   ],
+   "say": "सेसना",
+   "en": "Cessna",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "said 'SESS-nuh'"
+  },
+  {
+   "term": "Citation",
+   "match": [
+    "Citation"
+   ],
+   "say": "साइटेशन",
+   "en": "Citation",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Agusta",
+   "match": [
+    "Agusta"
+   ],
+   "say": "अगुस्टा",
+   "en": "Agusta",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "said 'ah-GOO-sta'"
+  },
+  {
+   "term": "Embraer",
+   "match": [
+    "Embraer"
+   ],
+   "say": "एम्ब्रेयर",
+   "en": "Embraer",
+   "accounts": [
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": "said 'em-bra-AIR'"
+  },
+  {
+   "term": "Airbus",
+   "match": [
+    "Airbus"
+   ],
+   "say": "एयरबस",
+   "en": "Airbus",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Boeing",
+   "match": [
+    "Boeing"
+   ],
+   "say": "बोइंग",
+   "en": "Boeing",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Kedarnath",
+   "match": [
+    "Kedarnath"
+   ],
+   "say": "केदारनाथ",
+   "en": "Kedarnath",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Udaipur",
+   "match": [
+    "Udaipur"
+   ],
+   "say": "उदयपुर",
+   "en": "Udaipur",
+   "accounts": [
+    "weone",
+    "flystar",
+    "bookmycharter"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Dwarka",
+   "match": [
+    "Dwarka"
+   ],
+   "say": "द्वारका",
+   "en": "Dwarka",
+   "accounts": "all",
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "We One Aviation",
+   "match": [
+    "We One Aviation"
+   ],
+   "say": "वी वन एविएशन",
+   "en": "We One Aviation",
+   "accounts": "all",
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Flying Star Aviator",
+   "match": [
+    "Flying Star Aviator"
+   ],
+   "say": "फ़्लाइंग स्टार एविएटर",
+   "en": "Flying Star Aviator",
+   "accounts": "all",
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Book My Charter",
+   "match": [
+    "Book My Charter"
+   ],
+   "say": "बुक माय चार्टर",
+   "en": "Book My Charter",
+   "accounts": "all",
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Legal Group",
+   "match": [
+    "Legal Group"
+   ],
+   "say": "लीगल ग्रुप",
+   "en": "Legal Group",
+   "accounts": "all",
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "FIR",
+   "match": [
+    "FIR"
+   ],
+   "say": "एफ़ आई आर",
+   "en": "F I R",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "First Information Report"
+  },
+  {
+   "term": "IPC",
+   "match": [
+    "IPC"
+   ],
+   "say": "आई पी सी",
+   "en": "I P C",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "Indian Penal Code (replaced by BNS)"
+  },
+  {
+   "term": "BNS",
+   "match": [
+    "BNS"
+   ],
+   "say": "बी एन एस",
+   "en": "B N S",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "Bharatiya Nyaya Sanhita"
+  },
+  {
+   "term": "BNSS",
+   "match": [
+    "BNSS"
+   ],
+   "say": "बी एन एस एस",
+   "en": "B N S S",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "Bharatiya Nagarik Suraksha Sanhita"
+  },
+  {
+   "term": "BSA",
+   "match": [
+    "BSA"
+   ],
+   "say": "बी एस ए",
+   "en": "B S A",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "Bharatiya Sakshya Adhiniyam"
+  },
+  {
+   "term": "NDPS",
+   "match": [
+    "NDPS"
+   ],
+   "say": "एन डी पी एस",
+   "en": "N D P S",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "Narcotic Drugs and Psychotropic Substances Act"
+  },
+  {
+   "term": "PIL",
+   "match": [
+    "PIL"
+   ],
+   "say": "पी आई एल",
+   "en": "P I L",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "Public Interest Litigation"
+  },
+  {
+   "term": "RTI",
+   "match": [
+    "RTI"
+   ],
+   "say": "आर टी आई",
+   "en": "R T I",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "Right to Information"
+  },
+  {
+   "term": "NCLT",
+   "match": [
+    "NCLT"
+   ],
+   "say": "एन सी एल टी",
+   "en": "N C L T",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "National Company Law Tribunal"
+  },
+  {
+   "term": "NOC",
+   "match": [
+    "NOC"
+   ],
+   "say": "एन ओ सी",
+   "en": "N O C",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "No Objection Certificate"
+  },
+  {
+   "term": "SLP",
+   "match": [
+    "SLP"
+   ],
+   "say": "एस एल पी",
+   "en": "S L P",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "Special Leave Petition"
+  },
+  {
+   "term": "CPC",
+   "match": [
+    "CPC"
+   ],
+   "say": "सी पी सी",
+   "en": "C P C",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "letters",
+   "note": "Code of Civil Procedure"
+  },
+  {
+   "term": "CrPC",
+   "match": [
+    "CrPC",
+    "CRPC",
+    "Cr.P.C."
+   ],
+   "say": "सी आर पी सी",
+   "en": "C R P C",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": "Code of Criminal Procedure (replaced by BNSS)"
+  },
+  {
+   "term": "RERA",
+   "match": [
+    "RERA"
+   ],
+   "say": "रेरा",
+   "en": "Rera",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": "said as a word"
+  },
+  {
+   "term": "POCSO",
+   "match": [
+    "POCSO"
+   ],
+   "say": "पॉक्सो",
+   "en": "Pocso",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": "said as a word"
+  },
+  {
+   "term": "habeas corpus",
+   "match": [
+    "habeas corpus"
+   ],
+   "say": "हेबियस कॉर्पस",
+   "en": "habeas corpus",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": "petition to produce a detained person"
+  },
+  {
+   "term": "sub judice",
+   "match": [
+    "sub judice"
+   ],
+   "say": "सब ज्यूडिसी",
+   "en": "sub judice",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "suo motu",
+   "match": [
+    "suo motu"
+   ],
+   "say": "सुओ मोटू",
+   "en": "suo motu",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": "on the court's own motion"
+  },
+  {
+   "term": "prima facie",
+   "match": [
+    "prima facie"
+   ],
+   "say": "प्राइमा फ़ेशी",
+   "en": "prima facie",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": "at first sight"
+  },
+  {
+   "term": "res judicata",
+   "match": [
+    "res judicata"
+   ],
+   "say": "रेस ज्यूडिकाटा",
+   "en": "res judicata",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "bona fide",
+   "match": [
+    "bona fide"
+   ],
+   "say": "बोना फ़ाइड",
+   "en": "bona fide",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "affidavit",
+   "match": [
+    "affidavit"
+   ],
+   "say": "एफ़िडेविट",
+   "en": "affidavit",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "vakalatnama",
+   "match": [
+    "vakalatnama"
+   ],
+   "say": "वकालतनामा",
+   "en": "vakalatnama",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": "document that authorises a lawyer"
+  },
+  {
+   "term": "anticipatory bail",
+   "match": [
+    "anticipatory bail"
+   ],
+   "say": "एंटिसिपेटरी बेल",
+   "en": "anticipatory bail",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Lok Adalat",
+   "match": [
+    "Lok Adalat"
+   ],
+   "say": "लोक अदालत",
+   "en": "Lok Adalat",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "Bharatiya Nyaya Sanhita",
+   "match": [
+    "Bharatiya Nyaya Sanhita"
+   ],
+   "say": "भारतीय न्याय संहिता",
+   "en": "Bharatiya Nyaya Sanhita",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "caveat",
+   "match": [
+    "caveat"
+   ],
+   "say": "कैवियट",
+   "en": "caveat",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": ""
+  },
+  {
+   "term": "mens rea",
+   "match": [
+    "mens rea"
+   ],
+   "say": "मेन्स रिया",
+   "en": "mens rea",
+   "accounts": [
+    "legalgroup"
+   ],
+   "kind": "word",
+   "note": ""
+  }
+ ]
+}

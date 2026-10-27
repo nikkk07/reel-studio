@@ -1,4 +1,5 @@
 """Narration: Chatterbox multilingual (cloned reference voice), best-of-N takes, Whisper + UTMOS scoring, phrase alignment.
+The model (V2, V3 or the V3 Hindi pack) is chosen per language in Studio Settings; see MODELS.
 
 Runs in its own process so the models' memory is released afterwards:
     python -m reelworker.media.voice <job_dir>      (reads voice_in.json, writes voice_out.json)
@@ -15,15 +16,78 @@ def pick_device(pref: str):
     return "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else "cpu"
 
 
+# Voice models (all Chatterbox, MIT licence, run locally). name -> (Hugging Face repo of the text model, text model, speech decoder)
+#   v2 - Chatterbox Multilingual V2 (the original studio voice)
+#   v3 - Chatterbox Multilingual V3 (June 2026): more training data, better voice match and fewer slips
+#   hi - V3 Hindi Language Pack: a Hindi-only finetune of V3 (best for the Hinglish accounts)
+MODELS = {
+    "v2": ("ResembleAI/chatterbox", "t3_mtl23ls_v2.safetensors", "s3gen.pt"),
+    "v3": ("ResembleAI/chatterbox", "t3_mtl23ls_v3.safetensors", "s3gen_v3.safetensors"),
+    "hi": ("ResembleAI/Chatterbox-Multilingual-hi", "t3_hi.safetensors", "s3gen_v3.safetensors"),
+}
+BASE_REPO = "ResembleAI/chatterbox"
+BASE_FILES = ["ve.pt", "grapheme_mtl_merged_expanded_v1.json", "conds.pt"]
+
+
+def model_files(name: str) -> dict:
+    """Local paths of every file the model needs (downloaded once from Hugging Face, then cached)."""
+    from huggingface_hub import hf_hub_download
+    repo, t3, s3 = MODELS[name]
+    files = {f: hf_hub_download(BASE_REPO, f) for f in BASE_FILES}
+    files["t3"] = hf_hub_download(repo, t3)
+    files["s3gen"] = hf_hub_download(BASE_REPO, s3)
+    return files
+
+
+def build_model(files: dict, device: str):
+    """ChatterboxMultilingualTTS from explicit files (the library's own loader always pairs a text model with the V2 decoder)."""
+    import torch
+    from safetensors.torch import load_file
+    from chatterbox.mtl_tts import ChatterboxMultilingualTTS, Conditionals
+    from chatterbox.models.t3 import T3
+    from chatterbox.models.t3.modules.t3_config import T3Config
+    from chatterbox.models.s3gen import S3Gen
+    from chatterbox.models.tokenizers import MTLTokenizer
+    from chatterbox.models.voice_encoder import VoiceEncoder
+    cpu = torch.device("cpu")
+    ve = VoiceEncoder(); ve.load_state_dict(torch.load(files["ve.pt"], map_location=cpu, weights_only=True)); ve.to(device).eval()
+    t3 = T3(T3Config.multilingual()); st = load_file(files["t3"])
+    if "model" in st:
+        st = st["model"][0]
+    t3.load_state_dict(st); t3.to(device).eval()
+    s3 = S3Gen(); p = str(files["s3gen"])
+    sd = load_file(p) if p.endswith(".safetensors") else torch.load(p, map_location=cpu, weights_only=True)
+    miss, extra = s3.load_state_dict(sd, strict=False)         # .safetensors leaves out two fixed buffers (mel filters, window)
+    bad = [k for k in miss if k not in ("tokenizer._mel_filters", "tokenizer.window")] + list(extra)
+    if bad:
+        raise RuntimeError(f"speech decoder does not fit the model: {bad[:4]}")
+    s3.to(device).eval()
+    tok = MTLTokenizer(str(files["grapheme_mtl_merged_expanded_v1.json"]))
+    conds = Conditionals.load(files["conds.pt"], map_location=cpu).to(device)
+    return ChatterboxMultilingualTTS(t3, s3, ve, tok, device, conds=conds)
+
+
+def load_model(name: str, device: str, log=print):
+    if name not in MODELS:
+        log(f"unknown voice model '{name}', using v2"); name = "v2"
+    try:
+        files = model_files(name)
+    except Exception as e:  # noqa: BLE001  (offline / download failed: the original model is always cached)
+        if name == "v2":
+            raise
+        log(f"voice model {name} not available ({str(e)[:120]}); using v2"); name = "v2"; files = model_files(name)
+    return build_model(files, device), name
+
+
 def generate(job: Path, cfg: dict, log):
     import torch, torchaudio as ta
-    from chatterbox.mtl_tts import ChatterboxMultilingualTTS
-    dev = pick_device(cfg.get("device", "auto"))
+    dev = pick_device(cfg.get("device", "auto")); want = cfg.get("model", "v2")
     try:
-        m = ChatterboxMultilingualTTS.from_pretrained(device=dev)
+        m, used = load_model(want, dev, log)
     except Exception as e:  # noqa: BLE001
         log(f"voice model on {dev} failed ({e}); falling back to cpu"); dev = "cpu"
-        m = ChatterboxMultilingualTTS.from_pretrained(device="cpu")
+        m, used = load_model(want, "cpu", log)
+    log(f"voice model {used} on {dev}"); cfg["model_used"] = used
     out = {}
     for g in cfg["groups"]:
         files = []
@@ -38,7 +102,7 @@ def generate(job: Path, cfg: dict, log):
                 except Exception as e:  # noqa: BLE001  (an op unsupported on Apple GPU) -> finish on CPU
                     if dev == "cpu": raise
                     log(f"generation on {dev} failed ({e}); switching to cpu")
-                    del m; gc.collect(); dev = "cpu"; m = ChatterboxMultilingualTTS.from_pretrained(device="cpu")
+                    del m; gc.collect(); dev = "cpu"; m, used = load_model(used, "cpu", log)
                     torch.manual_seed(s); w = m.generate(g["text"], **kw)
                 ta.save(str(f), w.cpu(), m.sr); log(f"take {f.name} {time.time() - t0:.0f}s")
             files.append(str(f))
@@ -67,6 +131,20 @@ def phrase_spans(words, phrases_say):
     return [[words[edges[k]][0], words[edges[k + 1] - 1][1]] for k in range(len(ch))]
 
 
+def _norm(s: str) -> str:
+    import re, unicodedata
+    s = unicodedata.normalize("NFC", s).replace("\u093c", "")          # फ़ = फ (Whisper is inconsistent with the nukta)
+    s = re.sub("[\u0901\u0902]", "\u0902", s.lower())
+    return re.sub(r"[^\u0900-\u097fa-z0-9]", "", s)
+
+
+def text_match(expected: str, heard: str) -> float:
+    """0-1: how closely the transcript follows the text the voice was given (spaces and punctuation ignored)."""
+    import difflib
+    a, b = _norm(expected), _norm(heard)
+    return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() if a else 1.0
+
+
 def score_and_align(job: Path, cfg: dict, takes: dict, log):
     import librosa, torch
     from faster_whisper import WhisperModel
@@ -88,19 +166,20 @@ def score_and_align(job: Path, cfg: dict, takes: dict, log):
             wprob = float(np.mean([w[3] for w in words])) if words else 0.0
             cover = len(words) / max(1, expected_words)
             u = float(utmos(torch.from_numpy(a16).unsqueeze(0), 16000).item()) if utmos else 4.0
-            sc = (1 - wprob) * 3 + abs(1 - min(cover, 1.3)) * 2 + max(0.0, 4.5 - u) * 0.5
+            match = text_match(g["text"], " ".join(w[2] for w in words))     # did it say the words it was given?
+            sc = (1 - wprob) * 3 + abs(1 - min(cover, 1.3)) * 2 + max(0.0, 4.5 - u) * 0.5 + (1 - match) * 3
             _, (i0, i1) = librosa.effects.trim(a, top_db=38)
             s0 = max(0.0, min(i0 / sr, words[0][0] if words else 0) - 0.04)
             e0 = min(len(a) / sr, max(i1 / sr, words[-1][1] if words else len(a) / sr) + 0.06)
             spans = phrase_spans([(w[0], w[1], w[2]) for w in words], g["phrases_say"])
-            rec = {"file": f, "score": round(sc, 3), "word_prob": round(wprob, 3), "coverage": round(cover, 2), "utmos": round(u, 2),
+            rec = {"file": f, "score": round(sc, 3), "word_prob": round(wprob, 3), "coverage": round(cover, 2), "utmos": round(u, 2), "match": round(match, 3),
                    "transcript": " ".join(w[2] for w in words), "weak_words": [w[2] for w in words if w[3] < 0.4],
                    "text": g["text"], "trim": [round(s0, 3), round(e0, 3)], "spans": [[round(x, 3), round(y, 3)] for x, y in spans]}
             report.append(rec)
             if best is None or sc < best["score"]:
                 best = rec
         result[g["id"]] = {"file": best["file"], "trim": best["trim"], "spans": best["spans"], "chosen": best, "takes": report}
-        log(f"{g['id']}: chose {Path(rec['file']).name} prob {rec['word_prob']} utmos {rec['utmos']}")
+        log(f"{g['id']}: chose {Path(best['file']).name} prob {best['word_prob']} match {best.get('match')} utmos {best['utmos']}")
     return result
 
 

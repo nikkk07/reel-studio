@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import json, re, shutil, subprocess, sys, time
 from pathlib import Path
 from .. import brain, config, schemas
-from .. import agents, lanes
+from .. import agents, lanes, studio
 from .. import brand as brandmod
 from ..runner import run_stages, TransientError
 from ..media import footage, lexicon, mix, render, timeline
@@ -62,6 +62,25 @@ def _lexicon_entries():
         return lexicon.load(str(config.LEXICON))
     except Exception:  # noqa: BLE001
         return []
+
+
+CURATED = Path(__file__).resolve().parents[1] / "data" / "pronunciations.json"
+
+
+def curated_entries(brand_id, lang):
+    """The studio's curated pronunciation dictionary for one account: 'say' is the Devanagari form (Hinglish voice) or the
+    spoken English form (English voice). It always wins over what the Pronunciation Editor learned."""
+    try:
+        doc = json.loads(CURATED.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for e in doc.get("entries", []):
+        acc = e.get("accounts", "all")
+        if acc != "all" and brand_id not in acc:
+            continue
+        out.append({"term": e["term"], "match": e["match"], "say": e["say"] if lang == "hi" else e["en"], "curated": True})
+    return out
 
 LEAK = re.compile(r"((?i:https?://|www\.|\bpromo ?code\b|\bwhatsapp\b|\btelegram\b)|\b[\w-]+\.(?:com|in|net|org|io|ly|co|xyz|link|me)\b|@\w{3,}|\b[\w.+-]+@[\w-]+\.\w+)")
 PHONE = re.compile(r"(?<![\d+])(?:\+\d{1,3}[\s-]?\d[\d\s-]{7,}\d|(?:0|91[\s-]?)?[6-9]\d{4}[\s-]?\d{5})(?!\d)")
@@ -315,8 +334,9 @@ def _save_terms(ctx, terms):
         row = (ctx.db.select("brands", f"select=profile&id=eq.{bid}") or [{}])[0]
         prof = row.get("profile") or {}
         lex = {e["term"].lower(): e for e in prof.get("lexicon", [])}
+        cur = {e["term"].lower() for e in curated_entries(bid, "hi")}
         for t in terms:
-            if t.get("term") and t.get("say") and len(lex) < 400:
+            if t.get("term") and t.get("say") and len(lex) < 400 and t["term"].lower() not in cur:
                 lex.setdefault(t["term"].lower(), {"term": t["term"], "say": t["say"]})
         if len(lex) != len(prof.get("lexicon", [])):
             ctx.db.update("brands", f"id=eq.{bid}", {"profile": {**prof, "lexicon": list(lex.values())}})
@@ -329,7 +349,8 @@ def prepare_tts(ctx, prof, spec, lang, E):
     """Pronunciation Editor: every phrase in a form the voice model reads correctly (captions are untouched)."""
     if "tts" in ctx.data:
         return ctx.data["tts"]
-    lex = [{"term": m, "say": e["say"]} for e in E for m in e["match"][:1]] + list(prof.get("lexicon", []))
+    cur = {e["term"].lower() for e in E if e.get("curated")}
+    lex = [{"term": m, "say": e["say"]} for e in E for m in e["match"][:1]] + [e for e in prof.get("lexicon", []) if e.get("term", "").lower() not in cur]
     phrases = [{"group": g["id"], "index": i, "say": lexicon.apply(p["say"], E) if E else p["say"], "caption": p.get("caption", "")}
                for g in spec["groups"] for i, p in enumerate(g["phrases"])]
     text = brain.prompt("pronounce", brand_name=prof["name"], mode="Hindi (Devanagari) with Indian English words" if lang == "hi" else "English",
@@ -413,7 +434,8 @@ def _inspect(ctx, prof, out):
 def stage_voice(ctx, prog):
     prof = _brand(ctx); hinglish = brandmod.legacy(prof) or brandmod.hinglish(prof)     # Hindi voice + pronunciation dictionary
     lang = "hi" if hinglish else prof.get("tts_lang", "en")
-    spec = _spec(ctx); E = _lexicon_entries() if hinglish else []
+    bid = ctx.job.get("brand") or "weone"
+    spec = _spec(ctx); E = curated_entries(bid, "hi" if hinglish else "en") + (_lexicon_entries() if hinglish else [])
     unknown = set()
     if hinglish:
         for g in spec["groups"]:
@@ -430,10 +452,12 @@ def stage_voice(ctx, prog):
     ctx.trace("voice", "pron", "Pronunciation Editor", "done", f"{sum(len(v) for v in tts.values())} lines")
     groups = [{"id": g["id"], "text": " ".join(tts[g["id"]]), "phrases_say": tts[g["id"]]} for g in spec["groups"]]
     seeds = [11, 23, 37, 51, 63][:max(1, config.TAKES_PER_GROUP)]
-    ref = config.VOICE_DIR / "refs" / f"{spec.get('voice', 'female')}.wav"
-    if not ref.exists():
-        ref = config.VOICE_DIR / "refs" / "female.wav"
-    base = {"ref": str(ref), "device": config.DEVICE, "utmos_ckpt": str(config.UTMOS_CKPT), "tts_lang": lang,
+    # reference voice: a recording in the same language as the reel clones best (refs/female_hi.wav, refs/female_en.wav),
+    # else the general one. Only its first 6 s (delivery) and 10 s (timbre) are used, so those seconds must be clean speech.
+    v = spec.get("voice", "female")
+    ref = next((p for p in (config.VOICE_DIR / "refs" / f"{v}_{lang}.wav", config.VOICE_DIR / "refs" / f"{v}.wav",
+                            config.VOICE_DIR / "refs" / "female.wav") if p.exists()), config.VOICE_DIR / "refs" / "female.wav")
+    base = {"ref": str(ref), "device": config.DEVICE, "utmos_ckpt": str(config.UTMOS_CKPT), "tts_lang": lang, "model": studio.voice_model(lang),
             "asr_lang": "hi" if hinglish else prof.get("asr_lang", "en"), "whisper": config.get("REELSTUDIO_WHISPER", "medium"), "threads": 4}
     label = {g["id"]: f"Part {i + 1}" for i, g in enumerate(groups)}
     for g in groups:

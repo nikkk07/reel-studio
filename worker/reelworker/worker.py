@@ -76,7 +76,8 @@ def heartbeat_loop(db: Supabase):
                 "claude_checked_at": now_iso(datetime.fromtimestamp(STATUS["claude_checked"], timezone.utc)) if STATUS["claude_checked"] else None,
                 "info": {"disk_free_gb": round(disk.free / 1e9, 1), "current": CURRENT, "reels_today": reels_today(),
                          "daily_cap": studio.daily_cap(), "blocked": STATUS.get("blocked"), "selftest": STATUS.get("selftest"),
-                         "cap_hit": reels_today() >= studio.daily_cap(), "keys": studio.sources()},
+                         "cap_hit": reels_today() >= studio.daily_cap(), "keys": studio.sources(),
+                         "voices": {"hi": studio.voice_model("hi"), "en": studio.voice_model("en"), "ready": STATUS.get("voices")}},
             }, upsert=True)
             if time.time() - last_prune > 86400:
                 prune(db); last_prune = time.time()
@@ -104,6 +105,20 @@ def prune(db: Supabase):
         log.info("prune done (%d old reels in cloud, %d local job folders)", len(old), n)
     except Exception as e:  # noqa: BLE001
         log.warning("prune failed: %s", e)
+
+
+def prefetch_voices():
+    """Download the chosen voice models in the background (once, ~3 GB), so a reel never waits for it; re-checked hourly."""
+    while not STOP.is_set():
+        try:
+            from .media import voice
+            names = sorted({studio.voice_model("hi"), studio.voice_model("en")})
+            for n in names:
+                voice.model_files(n)
+            STATUS["voices"] = names
+        except Exception as e:  # noqa: BLE001
+            log.warning("voice model download: %s", str(e)[:160])
+        STOP.wait(3600)
 
 
 def ping_loop(db: Supabase):
@@ -254,6 +269,7 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: STOP.set())
     threads = [threading.Thread(target=heartbeat_loop, args=(db,), name="heartbeat", daemon=True),
                threading.Thread(target=ping_loop, args=(db,), name="ping", daemon=True),
+               threading.Thread(target=prefetch_voices, name="voices", daemon=True),
                threading.Thread(target=lane_loop, args=(db, "A", ["suggest", "optimize", "onboard", "learn"]), name="laneA", daemon=True),
                threading.Thread(target=lane_loop, args=(db, "B", ["reel"]), name="laneB", daemon=True),
                threading.Thread(target=instagram.loop, args=(db, STOP), name="instagram", daemon=True)]

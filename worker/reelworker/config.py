@@ -46,6 +46,8 @@ UTMOS_CKPT = MODELS_DIR / "utmos22_strong_step7459_v1.pt"
 
 DAILY_REEL_CAP = int(get("REELSTUDIO_DAILY_REEL_CAP", "3"))
 TAKES_PER_GROUP = int(get("REELSTUDIO_TAKES", "3"))
+VOICE_HI = get("REELSTUDIO_VOICE_HI", "v2")                         # v2 | v3 | hi  (media/voice.py MODELS; changeable in Studio Settings)
+VOICE_EN = get("REELSTUDIO_VOICE_EN", "v2")
 CLAUDE_BIN = get("REELSTUDIO_CLAUDE_BIN", "claude")
 CLAUDE_MODEL = get("REELSTUDIO_CLAUDE_MODEL", "")                  # empty = Claude Code default
 BRAIN_MODE = get("REELSTUDIO_BRAIN", "claude")                      # claude | mock (tests)
