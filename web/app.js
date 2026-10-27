@@ -399,20 +399,24 @@ async function viewDashboard() {
     const [, { data: rows }, , { data: ap }] = await Promise.all([loadBrands(),
       sb.from("jobs").select("id,brand,status,created_at,updated_at,ig:output->ig->>state,posted:output->ig->>posted_at").eq("kind", "reel").gte("created_at", since).limit(500),
       loadSettings().catch(() => {}),
-      sb.from("jobs").select("status,brand,output->autopilot").eq("kind", "suggest").eq("input->>autopilot", "true").order("created_at", { ascending: false }).limit(1)]);
+      sb.from("jobs").select("status,brand,input").eq("kind", "suggest").eq("input->>autopilot", "true").order("created_at", { ascending: false }).limit(40)]);
     const all = rows || []; const st = (b) => all.filter((j) => (j.brand || "weone") === b);
     const postedWeek = (list) => list.filter((j) => j.ig === "posted" && j.posted && Date.parse(j.posted) > week).length;
-    const apSet = S.settings?.autopilot || {};
+    const apLast = (bid) => (ap || []).find((j) => (j.brand || "weone") === bid);
+    const apOn = (S.brands || BRANDS_FALLBACK).filter((b) => b.status === "live" && apOf(b.id).on).length;
     strip.replaceChildren(...[
       h("span", { cls: "pill" }, h("i", { cls: "lamp " + (macAlive() ? "ok" : "bad") }), macAlive() ? "Studio Mac online" : "Studio Mac offline"),
       macAlive() ? h("span", { cls: "pill" }, h("i", { cls: "lamp " + (S.worker?.claude_ok ? "ok" : "bad") }), S.worker?.claude_ok ? "Claude ready" : "Claude not ready") : null,
       h("span", { cls: "pill" }, `${postedWeek(all)} posted this week`),
-      apSet.on ? h("span", { cls: "pill" }, `Autopilot daily ${slotLabel(apSet.time || "13:30")}`) : null].filter(Boolean));
+      h("span", { cls: "pill" }, apOn ? `Autopilot on for ${apOn} account${apOn > 1 ? "s" : ""}` : "Autopilot off")].filter(Boolean));
     const plat = (b) => {
-      const dot = (k, label) => { const state = platState(k, b.id);
-        return h("span", { cls: `mini ${k} ${state === "connected" ? "ok" : state === "not_connected" ? "no" : "warn"}`, title: `${label}: ${state.replace("_", " ")}`, role: "img", "aria-label": `${label}: ${state.replace("_", " ")}` },
+      const dot = (k, label) => { const v = k === "web" ? stOf("website_status", b.id) : stOf(PST[k], b.id); const state = v.state || "not_connected";
+        const word = k === "web" && state === "connected" ? "online" : state.replace("_", " ");
+        const tip = `${label}: ${word}${v.note && state !== "connected" ? ". " + v.note : ""}`;
+        return h("span", { cls: `mini ${k} ${state === "connected" ? "ok" : state === "not_connected" ? "no" : "warn"}`, title: tip, role: "img", "aria-label": tip },
           h("img", { src: PLAT_IMG[k], alt: "", width: 24, height: 24 })); };
-      return h("button", { cls: "minis linkless", onclick: () => { setBrand(b.id); go("account"); }, "aria-label": `${b.name} connections` }, dot("ig", "Instagram"), dot("fb", "Facebook"), dot("li", "LinkedIn"));
+      return h("button", { cls: "minis linkless", onclick: () => { setBrand(b.id); go("account"); }, "aria-label": `${b.name} connections` },
+        dot("ig", "Instagram"), dot("fb", "Facebook"), dot("li", "LinkedIn"), safeUrl(b.website) ? dot("web", "Website") : null);
     };
     grid.replaceChildren(...[...(S.brands || BRANDS_FALLBACK).map((b) => {
       const list = st(b.id); const live = b.status === "live";
@@ -425,6 +429,10 @@ async function viewDashboard() {
             h("span", { cls: "acct-state " + (live ? "live" : "setup") }, live ? "Live" : "Setting up"))),
         live ? h("div", { cls: "acct-nums" }, nums.map(([k, v]) => h("div", {}, h("b", { cls: "num" }, v), h("span", {}, k))))
              : h("p", { cls: "acct-next small" }, "Next: content plan, voice and watermark, then its Instagram."),
+        live ? (() => { const a = apOf(b.id); const run = apLast(b.id); const busy = run && ACTIVE.includes(run.status);
+          return h("div", { cls: "acct-ap" }, apSwitch(b, () => paint().catch(() => {})),
+            h("span", { cls: "small muted" }, busy ? "Running now…" : a.on ? `Daily ${slotLabel(a.time || "13:30")} · next ${tzClock(nextRun(a, run))}` : "Off · tap to choose a daily time"),
+            a.on && !anyPosting(b.id) ? h("span", { cls: "tiny", style: "color:#6E4300" }, "Nothing connected: reels wait for you") : null); })() : null,
         h("div", { cls: "acct-foot" }, plat(b),
           safeUrl(b.website) ? h("a", { cls: "acct-web", href: b.website, target: "_blank", rel: "noopener noreferrer" }, h("img", { src: PLAT_IMG.web, alt: "", width: 16, height: 16 }), host(b.website)) : null,
           h("button", { cls: "btn quiet", onclick: () => { setBrand(b.id); go("account"); }, "aria-label": `Settings of ${b.name}` }, icon("gear", 16), "Settings"),
@@ -575,23 +583,64 @@ function setupCard() {
 }
 
 // ---------------------------------------------------------------- Autopilot: one viral-ready reel a day, no taps
-function nextRun(ap) {
+function nextRun(ap, last = S.apLast) {
   const [hh, mm] = String(ap.time || "13:30").split(":").map(Number);
   const nowIst = new Date(Date.now() + 330 * 60e3); const t = new Date(Date.UTC(nowIst.getUTCFullYear(), nowIst.getUTCMonth(), nowIst.getUTCDate(), hh, mm) - 330 * 60e3);
-  return t.getTime() + 3 * 3600e3 < Date.now() || (S.apLast?.input?.day === nowIst.toISOString().slice(0, 10) && S.apLast?.input?.trigger === "schedule") ? new Date(t.getTime() + 86400e3) : t;
+  return t.getTime() + 3 * 3600e3 < Date.now() || (last?.input?.day === nowIst.toISOString().slice(0, 10) && last?.input?.trigger === "schedule") ? new Date(t.getTime() + 86400e3) : t;
 }
+// each account has its own Autopilot ('autopilot' for We One Aviation, 'autopilot@<account>' for the others; off until switched on)
+// an example that fits each account (the box steers the topic research)
+const STEER_EX = { weone: "DGCA exam tips, cockpit secrets", flystar: "CPL ground subjects, ATPL exam tips",
+  bookmycharter: "Char Dham by helicopter, private jet costs", legalgroup: "tenant rights, property disputes" };
+const apOf = (b = S.brand) => S.settings?.[bkey("autopilot", b)] || { on: false, time: "" };
+const AP_SLOTS = ["13:30", "15:30", "17:30", "19:30", "11:30", "21:00"];
+function apSuggest(bid) {             // a free slot, at least 90 min from the other accounts' runs, so the Mac makes one reel at a time
+  const mins = (t) => { const [h_, m_] = t.split(":").map(Number); return h_ * 60 + m_; };
+  const used = (S.brands || BRANDS_FALLBACK).filter((x) => x.id !== bid && apOf(x.id).on).map((x) => mins(apOf(x.id).time || "13:30"));
+  return AP_SLOTS.find((t) => used.every((u) => Math.abs(u - mins(t)) >= 90)) || "13:30";
+}
+// switch Autopilot on: always asks for the daily time first
+function apDialog(b, after) {
+  const ap = apOf(b.id); const time = h("input", { type: "time", value: ap.time || apSuggest(b.id), "aria-label": "Daily time (India)", style: "width:150px;margin-top:6px" });
+  const msg = statusMsg(); const posts = anyPosting(b.id);
+  const go_ = h("button", { cls: "btn primary", onclick: async () => {
+    if (!/^\d\d:\d\d$/.test(time.value)) { time.focus(); return; }
+    go_.disabled = true; msg.textContent = "Saving…";
+    try { await rpc("set_autopilot", { p_on: true, p_time: time.value, p_brand: b.id }); await loadSettings();
+      toast(`Autopilot on for ${b.name}: every day at ${slotLabel(time.value)}.`); d.close(); after?.(); }
+    catch (e) { msg.textContent = errText(e); go_.disabled = false; } } }, "Turn on");
+  const d = h("dialog", { "aria-label": `Autopilot for ${b.name}`, cls: "connect" }, h("div", { style: "padding:20px 20px 4px" },
+    h("h2", { style: "font-size:22px" }, `Autopilot for ${b.name}`),
+    h("p", { cls: "small muted", style: "margin:6px 0 12px" }, "Every day at this time it researches what is trending, picks the topic most likely to perform, makes the reel and posts it. Nobody has to tap anything."),
+    h("label", { cls: "fld" }, h("span", {}, "Daily time (India)"), time),
+    h("p", { cls: "tiny faint", style: "margin-top:6px" }, "Suggested: a time at least 90 minutes away from the other accounts, so the Mac makes one reel at a time."),
+    posts ? null : h("p", { cls: "small", style: "margin-top:10px;color:#6E4300" }, "Nothing is connected for this account yet, so its reels will wait in Production for you to post. Connect Instagram, Facebook or LinkedIn in its Settings to post automatically."),
+    msg), h("div", { cls: "dlg-foot" }, h("button", { cls: "btn quiet", onclick: () => d.close() }, "Cancel"), go_));
+  d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal(); time.focus();
+}
+async function apToggle(b, on, after) {
+  if (on) return apDialog(b, after);
+  try { await rpc("set_autopilot", { p_on: false, p_time: apOf(b.id).time || "13:30", p_brand: b.id }); await loadSettings(); toast(`Autopilot off for ${b.name}.`); }
+  catch (e) { toast(errText(e), { err: true }); }
+  after?.();
+}
+const apSwitch = (b, after, label = "Autopilot") => { const ap = apOf(b.id);
+  return h("button", { cls: "switch" + (ap.on ? " on" : ""), role: "switch", "aria-checked": String(!!ap.on), "aria-label": `${label} for ${b.name}`,
+    onclick: (e) => { e.stopPropagation(); apToggle(b, !ap.on, after); } }, h("i", { "aria-hidden": "true" }), h("span", {}, label)); };
 function autopilotPanel() {
   const box = h("section", { cls: "panel ap", "aria-label": "Autopilot" });
   const paint = async () => {
     if (!box.isConnected && box._painted) return;
-    const [{ data }] = await Promise.all([sb.from("jobs").select("id,status,input,output,error,updated_at,created_at").eq("kind", "suggest").eq("input->>autopilot", "true").order("created_at", { ascending: false }).limit(1), loadSettings().catch(() => {})]);
+    const bid = S.brand; const b = brandOf();
+    const [{ data }] = await Promise.all([sb.from("jobs").select("id,status,input,output,error,updated_at,created_at").eq("kind", "suggest").eq("brand", bid).eq("input->>autopilot", "true").order("created_at", { ascending: false }).limit(1), loadSettings().catch(() => {})]);
+    if (bid !== S.brand) return;
     const j = (data || [])[0]; S.apLast = j; box._painted = true;
-    const ap = S.settings?.autopilot || { on: false, time: "13:30" }; const ins = S.settings?.instagram_insights;
+    const ap = apOf(bid); const ins = S.settings?.[bkey("instagram_insights", bid)];
     const ed = S.apEdit; const o = j?.output || {}; const pick = o.autopilot;
     let lastLine = null, ev = null;
     if (j && ACTIVE.includes(j.status)) { ev = (await events(j.id, 1).catch(() => []))[0];
       lastLine = h("p", { cls: "small", style: "margin-top:8px" }, h("i", { cls: "lamp wait" }), j.status === "queued" ? (macAlive() ? "Starting…" : "Queued. It starts when the Mac is online.") : j.status === "waiting_quota" ? `Claude usage limit; continues ${j.not_before ? "at " + clock(j.not_before) : "later"}.` : (ev?.message || "Researching today's trends…")); }
-    else if (j && j.status === "done" && pick?.skipped) lastLine = h("p", { cls: "small muted", style: "margin-top:8px" }, `The ${pick.day} run was skipped: the Mac was offline all afternoon.`);
+    else if (j && j.status === "done" && pick?.skipped) lastLine = h("p", { cls: "small muted", style: "margin-top:8px" }, pick.skipped === "off" ? `The ${pick.day} run was skipped: Autopilot was switched off.` : `The ${pick.day} run was skipped: the Mac was offline at that time.`);
     else if (j && j.status === "done" && pick) lastLine = h("div", { cls: "ap-pick" },
       h("p", { cls: "tiny faint" }, `Last pick, ${ago(j.updated_at)} · score ${pick.score}/100 · ${String(pick.category || "").replace("_", " ")}`),
       h("h3", {}, pick.title), h("p", { cls: "hook" }, pick.hook), pick.why ? h("p", { cls: "small muted" }, pick.why) : null,
@@ -600,7 +649,7 @@ function autopilotPanel() {
           h("li", {}, h("b", { cls: "num" }, t.score == null ? (t.repeat ? "repeat" : "unsafe") : `${t.score}`), " ", t.title, t.editor_note ? h("span", { cls: "tiny faint" }, ` · ${t.editor_note}`) : null)))) : null));
     else if (j && ["failed", "cancelled"].includes(j.status)) lastLine = h("p", { cls: "small", style: "margin-top:8px;color:#7D1C26" }, `Last run ${j.status === "failed" ? "failed" : "was stopped"}: ${j.error || ""}`);
     const timeIn = h("input", { type: "time", value: ed?.time || ap.time || "13:30", "aria-label": "Daily time (India)", style: "width:130px", oninput: (e) => { S.apEdit = { ...(S.apEdit || ap), time: e.target.value }; } });
-    const save = async (on, time) => { try { await rpc("set_autopilot", { p_on: on, p_time: time }); S.apEdit = null; toast(on ? `Autopilot on: every day at ${slotLabel(time)}.` : "Autopilot off."); } catch (e) { toast(errText(e), { err: true }); } paint(); };
+    const save = async (on, time) => { try { await rpc("set_autopilot", { p_on: on, p_time: time, p_brand: bid }); await loadSettings(); S.apEdit = null; toast(on ? `Autopilot on: every day at ${slotLabel(time)}.` : "Autopilot off."); } catch (e) { toast(errText(e), { err: true }); } paint(); };
     const running = j && ACTIVE.includes(j.status);
     box.replaceChildren(
       h("div", { cls: "igp-head" },
@@ -609,10 +658,10 @@ function autopilotPanel() {
           ap.on && !running ? h("p", { cls: "tiny faint", style: "margin-top:4px" }, `Next run ${tzClock(nextRun(ap))}.`) : null,
           ins && ins.ok === false ? h("p", { cls: "tiny", style: "margin-top:4px;color:#6E4300" }, "Learning uses likes and comments only. Add the instagram_business_manage_insights permission to the Instagram token for views, sends and saves.") : null),
         h("div", { cls: "igp-btns" },
-          ed ? [timeIn, h("button", { cls: "btn primary", onclick: () => save(true, timeIn.value || "13:30") }, "Save"), h("button", { cls: "btn quiet", onclick: () => { S.apEdit = null; paint(); } }, "Cancel")]
-             : [h("button", { cls: "btn primary", disabled: !!running, onclick: async (e) => { e.currentTarget.disabled = true; try { await rpc("run_autopilot_now", {}); toast("Autopilot started. It picks a topic in a few minutes, then makes the reel."); } catch (err) { toast(errText(err), { err: true }); } paint(); } }, running ? "Running…" : "Run now"),
-                h("button", { cls: "btn quiet", onclick: () => { S.apEdit = { ...ap }; paint(); } }, "Change time"),
-                h("button", { cls: "btn quiet", onclick: () => save(!ap.on, ap.time || "13:30") }, ap.on ? "Turn off" : "Turn on")])),
+          ed ? [timeIn, h("button", { cls: "btn primary", onclick: () => save(ap.on, timeIn.value || "13:30") }, "Save"), h("button", { cls: "btn quiet", onclick: () => { S.apEdit = null; paint(); } }, "Cancel")]
+             : [h("button", { cls: "btn primary", disabled: !!running, onclick: async (e) => { e.currentTarget.disabled = true; try { await rpc("run_autopilot_now", { p_brand: bid }); toast("Autopilot started. It picks a topic in a few minutes, then makes the reel."); } catch (err) { toast(errText(err), { err: true }); } paint(); } }, running ? "Running…" : "Run now"),
+                ap.on ? h("button", { cls: "btn quiet", onclick: () => { S.apEdit = { ...ap }; paint(); } }, "Change time") : null,
+                apSwitch(b, () => paint().catch(() => {}))])),
       lastLine || "");
   };
   paint().catch(() => {});
@@ -627,7 +676,7 @@ function viewCreate() {
   const left = h("div"); const plan = h("aside", { cls: "panel plan", "aria-label": "Flight plan" });
   shell(h("div", { cls: "with-plan" },
     h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Create a reel"), h("p", {}, "Choose a topic. You'll see when the reel will be ready before anything starts.")), seg),
-    S.brand === "weone" ? autopilotPanel() : null,
+    isLive() ? autopilotPanel() : null,
     h("div", { cls: "create" }, left, plan)));
   if (!isLive()) { $app.querySelector(".create").replaceChildren(setupCard()); $app.querySelector(".page-head .seg")?.remove(); return; }
   const paintPlan = () => {
@@ -639,7 +688,7 @@ function viewCreate() {
         S.picked = null; S.concept = null; go("production", j.id); }
       catch (err) { toast(errText(err), { err: true }); ev.currentTarget.disabled = false; }
     } }, "Create reel");
-    if (!t) { plan.replaceChildren(h("h3", {}, "Flight plan"), h("p", { cls: "plan-empty small" }, "Pick a topic to see when it will be ready."), h("div", { cls: "plan-row" }, h("span", { cls: "faint small" }, `Typical reel: ${mins(totalSec())}`), go_)); return; }
+    if (!t) { plan.replaceChildren(h("h3", {}, S.brand === "legalgroup" ? "Reel plan" : "Flight plan"), h("p", { cls: "plan-empty small" }, "Pick a topic to see when it will be ready."), h("div", { cls: "plan-row" }, h("span", { cls: "faint small" }, `Typical reel: ${mins(totalSec())}`), go_)); return; }
     plan.replaceChildren(
       h("h3", {}, t.title),
       h("div", { cls: "plan-row" }, h("div", {}, h("div", { cls: "tiny muted" }, "Ready around"), h("div", { cls: "eta num" }, clock(e.at), h("small", {}, mins(e.left)))), go_),
@@ -656,7 +705,7 @@ function viewCreate() {
   paintPlan();
 
   if (S.mode === "suggest") {
-    const steer = h("input", { placeholder: "Optional: steer the ideas, e.g. cockpit secrets, famous landings", "aria-label": "Steer the ideas", value: S.steer, oninput: (e) => { S.steer = e.target.value; } });
+    const steer = h("input", { placeholder: `Optional: steer the ideas, e.g. ${STEER_EX[S.brand] || "a service, a season or a current event"}`, "aria-label": "Steer the ideas", value: S.steer, oninput: (e) => { S.steer = e.target.value; } });
     const genBtn = h("button", { cls: "btn primary", onclick: () => gen() }, "Generate suggestions");
     const list = h("div", { cls: "topics", role: "radiogroup", "aria-label": "Suggested topics" });
     const head = h("div", { cls: "panel", style: "margin-bottom:14px" }, h("h3", {}, "Researched topics for " + brandOf().name),
@@ -1037,7 +1086,7 @@ function connCard(k, b, refresh) {
   const days = k === "li" && st.expires_at ? Math.floor((Date.parse(st.expires_at) - Date.now()) / 86400e3) : null;
   const kind = state === "connected" ? (days != null && days < 7 ? "warn" : "ok") : state === "not_connected" ? "no" : state === "checking" ? "wait" : "warn";
   const who = state === "connected" ? (k === "ig" ? `@${st.username}` : k === "fb" ? st.page_name : st.org_name) : "";
-  const word = { ok: `Connected${who ? ": " + who : ""}`, no: "Not connected", wait: "Checking with Instagram…", warn: state === "duplicate" ? "Belongs to another account" : state === "expired" ? "Connection expired" : days != null && days < 7 ? `Reconnect by ${dateShort(st.expires_at)}` : "Needs attention" }[kind];
+  const word = { ok: `Connected${who ? ": " + who : ""}`, no: "Not connected", wait: `Checking with ${PLAT[k]}…`, warn: state === "duplicate" ? "Belongs to another account" : state === "expired" ? "Connection expired" : days != null && days < 7 ? `Reconnect by ${dateShort(st.expires_at)}` : "Needs attention" }[kind];
   const owner = S.owner;
   const connect = () => (k === "ig" ? igDialog(b, refresh) : k === "fb" ? fbDialog(b, refresh) : liDialog(b, refresh));
   const disconnect = (e) => armed(e, "Tap again to disconnect", async () => {
@@ -1050,11 +1099,42 @@ function connCard(k, b, refresh) {
     h("div", { cls: "svc-head" }, h("span", { cls: "plat-tile svc-ico" }, h("img", { src: PLAT_IMG[k], alt: "" }), h("span", { cls: `plat-badge ${kind}`, "aria-hidden": "true" }, kind === "ok" ? "✓" : kind === "no" ? "✕" : kind === "wait" ? "…" : "!")),
       h("div", {}, h("h3", {}, PLAT[k]), h("p", { cls: `small plat-state ${kind}` }, word))),
     note ? h("p", { cls: "small muted" }, note) : null,
-    owner ? h("div", { cls: "svc-btns" },
+    st.checked_at && state !== "not_connected" ? h("p", { cls: "tiny faint" }, `Last checked ${ago(st.checked_at)}`) : null,
+    !owner && state !== "not_connected" ? h("div", { cls: "svc-btns" }, recheckBtn(k, b, refresh)) : null,
+    owner ? h("div", { cls: "svc-btns" }, state !== "not_connected" ? recheckBtn(k, b, refresh) : null,
       k === "li" && app.client_id && state !== "not_connected" ? h("button", { cls: kind === "ok" ? "btn quiet" : "btn primary", onclick: () => liSignIn(app.client_id, b.id) }, "Reconnect") : null,
       !(k === "li" && app.client_id && state !== "not_connected") ? h("button", { cls: kind === "ok" ? "btn quiet" : "btn primary", onclick: connect }, state === "not_connected" ? `Connect ${PLAT[k]}` : "Reconnect") : null,
       state !== "not_connected" ? h("button", { cls: "btn quiet danger", onclick: disconnect }, "Disconnect") : null)
       : h("p", { cls: "tiny faint" }, "Only the studio owner can connect or disconnect."));
+}
+// "Re-check": the cloud checks the connection within a minute (works while the Mac is offline) and the card updates by itself
+const CHECK_LABEL = { ig: "Instagram", fb: "Facebook", li: "LinkedIn", web: "Website" };
+function recheckBtn(k, b, refresh) {
+  const base = k === "web" ? "website_status" : PST[k];
+  const pending = () => { const v = stOf(base, b.id); return v.recheck_at && Date.now() - Date.parse(v.recheck_at) < 3 * 60e3; };
+  return h("button", { cls: "btn quiet", disabled: !!pending(), title: "Ask the cloud to check this connection now", onclick: async (e) => {
+    const btn = e.currentTarget; btn.disabled = true; btn.textContent = "Checking…";
+    try {
+      await rpc("request_recheck", { p_brand: b.id, p_platform: k }); await loadSettings();
+      const t0 = Date.now(); let done = false;
+      while (Date.now() - t0 < 100e3 && btn.isConnected) { await sleep(4000); await loadSettings().catch(() => {}); if (!stOf(base, b.id).recheck_at) { done = true; break; } }
+      const v = stOf(base, b.id); const s_ = v.state || "not_connected";
+      toast(!done ? `${CHECK_LABEL[k]}: still checking. The card updates by itself.`
+        : s_ === "connected" ? `${CHECK_LABEL[k]} of ${b.name}: ${k === "web" ? "online" : "connected and working"}.`
+        : `${CHECK_LABEL[k]} of ${b.name}: ${v.note || s_.replace("_", " ")}`, { err: done && s_ !== "connected" && s_ !== "not_connected" });
+    } catch (err) { toast(errText(err), { err: true }); }
+    refresh();
+  } }, pending() ? "Checking…" : "Re-check");
+}
+function webCard(b, refresh) {
+  const web = safeUrl(b.website); const v = stOf("website_status", b.id); const s_ = web ? v.state : "not_connected";
+  const kind = !web ? "no" : s_ === "connected" ? "ok" : s_ === "error" ? "warn" : "wait";
+  const word = !web ? "Not set" : s_ === "connected" ? `Online${v.ms ? ` · answered in ${(v.ms / 1000).toFixed(1)} s` : ""}` : s_ === "error" ? "Not reachable" : `${host(web)} · not checked yet`;
+  return h("article", { cls: `svc conn ${kind}` }, h("div", { cls: "svc-head" }, h("span", { cls: "plat-tile svc-ico" }, h("img", { src: PLAT_IMG.web, alt: "" }),
+      h("span", { cls: `plat-badge ${kind}`, "aria-hidden": "true" }, kind === "ok" ? "✓" : kind === "no" ? "✕" : kind === "wait" ? "…" : "!")),
+    h("div", {}, h("h3", {}, "Website"), h("p", { cls: `small plat-state ${kind}` }, word))),
+    h("p", { cls: "small muted" }, v.note && web ? v.note : web ? `${host(web)} · checked ${v.checked_at ? ago(v.checked_at) : "soon"}. Studied by Account Intelligence; never shown as a link inside reels.` : "Add the website in the profile above."),
+    web ? h("div", { cls: "svc-btns" }, recheckBtn("web", b, refresh), h("a", { cls: "btn quiet", href: web, target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "Open")) : null);
 }
 function stepsDlg(label, title, sub, steps, fields, msg, go_) {
   const d = h("dialog", { "aria-label": label, cls: "connect" }, h("div", { style: "padding:20px 20px 4px" },
@@ -1159,7 +1239,7 @@ async function viewAccount() {
   const paint = async (force) => {
     if (!body.isConnected) return;
     await Promise.all([loadSettings().catch(() => {}), loadBrands().catch(() => {}), loadOwner()]);
-    const b = brandOf(); const nowSig = JSON.stringify([b, ["ig", "fb", "li"].map((k) => stOf(PST[k])), S.settings?.linkedin_app, S.settings?.meta_app]);
+    const b = brandOf(); const nowSig = JSON.stringify([b, ["ig", "fb", "li"].map((k) => stOf(PST[k])), stOf("website_status"), S.settings?.linkedin_app, S.settings?.meta_app]);
     if (!force && nowSig === sig) return; sig = nowSig;
     if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;     // never wipe a half-typed field
     const L = b.links || {};
@@ -1188,11 +1268,7 @@ async function viewAccount() {
       logo,
       h("section", { cls: "panel" }, h("h3", {}, "Connections"),
         h("p", { cls: "small muted", style: "margin:4px 0 14px" }, `Reels of ${b.name} post only to the pages connected here. A page connected to another account can't be connected here too.`),
-        h("div", { cls: "svc-grid" }, ["ig", "fb", "li"].map((k) => connCard(k, b, () => paint(true))),
-          h("article", { cls: `svc conn ${web ? "ok" : "no"}` }, h("div", { cls: "svc-head" }, h("span", { cls: "plat-tile svc-ico" }, h("img", { src: PLAT_IMG.web, alt: "" })),
-            h("div", {}, h("h3", {}, "Website"), h("p", { cls: "small plat-state " + (web ? "ok" : "no") }, web ? host(web) : "Not set"))),
-            h("p", { cls: "small muted" }, "Studied by Account Intelligence; never shown as a link inside reels."),
-            web ? h("div", { cls: "svc-btns" }, h("a", { cls: "btn quiet", href: web, target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "Open")) : null))));
+        h("div", { cls: "svc-grid" }, ["ig", "fb", "li"].map((k) => connCard(k, b, () => paint(true))), webCard(b, () => paint(true)))));
   };
   await paint(true).catch((e) => body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(e)))));
   S.timers.push(setInterval(() => paint(false).catch(() => {}), 8000));
@@ -1255,23 +1331,28 @@ function liAppCard(refresh) {
       catch (e) { msg.textContent = errText(e); } } }, app.client_id ? "Replace" : "Save"),
       h("a", { cls: "btn quiet", href: "https://www.linkedin.com/developers/apps", target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "LinkedIn apps")), msg] : null);
 }
-const VOICE_OPTS = { hi: [["v2", "Chatterbox V2 (current, best in our test)"], ["hi", "Chatterbox V3 Hindi pack"], ["v3", "Chatterbox V3"]],
-  en: [["v2", "Chatterbox V2 (current, best in our test)"], ["v3", "Chatterbox V3"]] };
+const VOICE_OPTS = { hi: [["hi", "Chatterbox V3 Hindi pack (best for Hinglish)"], ["v2", "Chatterbox V2"], ["v3", "Chatterbox V3"]],
+  en: [["hi", "Hindi pack: Indian English accent"], ["v2", "Chatterbox V2"], ["v3", "Chatterbox V3"]] };
+const STYLE_OPTS = [["natural", "Natural: balanced, steady"], ["expressive", "Expressive: more emotion, calmer pace"]];
 function voiceCard(refresh) {
   const ws = S.settings?.worker_settings || {}; const msg = statusMsg();
   const sel = (k, val) => h("select", { "aria-label": k === "hi" ? "Hinglish voice model" : "English voice model", style: "width:100%;margin-top:4px" },
     VOICE_OPTS[k].map(([v, label]) => h("option", { value: v, selected: v === val ? true : null }, label)));
   const cur = S.worker?.info?.voices || {};
   const hi = sel("hi", ws.voice_hi || cur.hi || "v2"), en = sel("en", ws.voice_en || cur.en || "v2");
+  const sty = (k, val) => h("select", { "aria-label": k === "hi" ? "Hinglish delivery" : "English delivery", style: "width:100%;margin-top:4px" },
+    STYLE_OPTS.map(([v, label]) => h("option", { value: v, selected: v === val ? true : null }, label)));
+  const shi = sty("hi", ws.style_hi || "natural"), sen = sty("en", ws.style_en || "natural");
   return h("article", { cls: "svc ok" },
     h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, icon("mic", 24)),
       h("div", {}, h("h3", {}, "Voice model"), h("p", { cls: "small" }, h("i", { cls: "lamp ok" }), ws.voice_at ? `Changed ${ago(ws.voice_at)}` : "Studio default",
         cur.ready ? ` · on the Mac: ${cur.ready.join(", ")}` : ""))),
-    h("label", { cls: "small", style: "font-weight:600;margin-top:6px" }, "Hinglish accounts (We One Aviation, Flying Star Aviator)"), hi,
-    h("label", { cls: "small", style: "font-weight:600;margin-top:8px" }, "English accounts (Book My Charter, Legal Group)"), en,
+    h("label", { cls: "small", style: "font-weight:600;margin-top:6px" }, "Hinglish accounts (We One Aviation, Flying Star Aviator)"), hi, shi,
+    h("label", { cls: "small", style: "font-weight:600;margin-top:8px" }, "English accounts (Book My Charter, Legal Group)"), en, sen,
     h("p", { cls: "tiny faint" }, "The Mac uses the new choice from the next reel's voice step. Every take is still checked word by word."),
     S.owner ? h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: async () => {
-      try { await rpc("set_voice_models", { p_hi: hi.value, p_en: en.value }); await loadSettings(); toast("Voice model saved."); refresh(); }
+      try { await rpc("set_voice_models", { p_hi: hi.value, p_en: en.value }); await rpc("set_voice_style", { p_hi: shi.value, p_en: sen.value });
+        await loadSettings(); toast("Voice saved."); refresh(); }
       catch (e) { msg.textContent = errText(e); } } }, "Save"), msg) : null);
 }
 function infoCard({ img, name, state, word, lines, links, mono }) {

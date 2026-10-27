@@ -49,7 +49,7 @@ class Brain:   # scripted Claude: scout from the fixture, judge scores by title
     def ask(self, name, text, schema, tools, cwd, timeout=0, on_event=None):
         self.calls.append((name, tools))
         if name == "autopilot_scout": return json.loads((Path(__file__).parent / "fixtures/autopilot_scout.json").read_text())
-        cands = json.loads(self.vars["autopilot_judge"]["candidates"])
+        cands = json.loads((self.vars.get("autopilot_judge") or self.vars["autopilot_judge_brand"])["candidates"])
         return {"summary": "s", "scores": [{"index": c["index"], "safe": c["title"] not in self.unsafe, "note": f"n-{c['title'][:10]}",
                 **{k: self.jt.get(c["title"], 5) for k in schemas.CRITERIA}} for c in cands]}
 
@@ -164,6 +164,24 @@ r = [x for x in db.rows.values() if x["kind"] == "reel" and x["input"].get("auto
 ok(ctx.job["output"]["autopilot"]["lane"] == "core" and r["input"]["concept"]["lane"] == "core", "after trending reels, Autopilot makes a core (academy) reel and tags it")
 ok("Academy lane" in b.vars["autopilot_scout"]["lane_rules"] and "DGCA" in b.vars["autopilot_scout"]["brand_brief"] and b.vars["autopilot_judge"]["lane"] == "Academy", "the scout and the judge are both told today's lane and the academy's own facts")
 runs = [r for t, r in db.__dict__.get("other", []) if t == "agent_runs"]
+# ---- Autopilot for another account: its own profile and prompts, its own switch, and the reel stays in that account
+BP = json.load(open(Path(__file__).resolve().parents[2] / "brands/bookmycharter/profile.json"))
+_sel2 = DB.select
+def sel_bmc(self, t, q=""):
+    if t == "brands" and "id=eq.bookmycharter" in q:
+        return [{"id": "bookmycharter", "name": "Book My Charter", "website": "https://bookmycharter.in", "instagram": "book_my_charter", "logo_asset": None, "profile": BP}]
+    if t == "settings":
+        self.__dict__.setdefault("keys", []).append(q); return [{"value": {"on": True}}]
+    return _sel2(self, t, q)
+DB.select = sel_bmc
+db2 = DB(); b2 = Brain(); autopilot.brain = agents.brain = b2
+bctx = job(db2, {"autopilot": True, "day": today, "trigger": "schedule", "brand": "bookmycharter"}, brand="bookmycharter"); suggest.run(bctx)
+DB.select = _sel2
+br = [x for x in db2.rows.values() if x["kind"] == "reel" and x["input"].get("autopilot") == bctx.id]
+ok(br and br[0]["input"].get("brand") == "bookmycharter", "an Autopilot reel for Book My Charter is made in Book My Charter (never in We One Aviation)")
+ok("autopilot_scout_brand" in b2.vars and "autopilot_judge_brand" in b2.vars and "Book My Charter" in b2.vars["autopilot_scout_brand"]["brand_name"]
+   and "autopilot_scout" not in b2.vars, "other accounts use their own profile prompts, not the aviation academy's")
+ok(any("autopilot@bookmycharter" in q for q in db2.__dict__.get("keys", [])), "the scheduled run checks that account's own Autopilot switch")
 ok({r["agent"] for r in runs} >= {"trend_scout", "viral_editor"} and all(r["ok"] for r in runs), "every agent call is logged for the learning loop")
 
 bad_ = [n for k, n in R if not k]

@@ -110,12 +110,49 @@ async function fbBrand(b: Brand): Promise<Json> {
       await setPart(r, "fb", { ...r.output.fb, error: "Waiting for Facebook to be connected." }, "scheduled");
     return { connected: false, due: due.length };
   }
-  const log: Json = {};
+  const log: Json = {}; let worked = false;
   for (const r of due.slice(0, 3)) {
-    try { log[r.id] = await step(r, tok, st.page_id, b); }
+    try { log[r.id] = await step(r, tok, st.page_id, b); worked = true; }
     catch (e) { const err = e instanceof FBError ? e : new FBError(String((e as Error).message ?? e)); await fail(r, err, b.id); log[r.id] = `error: ${err.message}`; }
   }
+  if (worked && st.state !== "connected") {       // Facebook just accepted a call with this token: the connection works
+    const cur = await setting(bk("facebook_status", b.id));
+    if (cur.state !== "connected") await setSetting(bk("facebook_status", b.id), { ...cur, state: "connected", note: undefined, checked_at: iso(now()) });
+  }
   return { connected: true, due: due.length, log };
+}
+
+// "Re-check" on the site, and a routine check (every 6 h when connected, every 30 min when not working):
+// asks Facebook for the page with the page token. Works while the Mac is offline.
+export async function fbCheck(b: Brand): Promise<string | null> {
+  const SK = bk("facebook_status", b.id); const st = await setting(SK);
+  const asked = !!st.recheck_at; const state = st.state ?? "not_connected"; const at = iso(now());
+  if (!asked && (state === "not_connected" || (state === "connected" && minsAgo(st.checked_at) < 360))) return null;
+  const [tok] = await secret(bk("facebook_page_token", b.id));
+  if (!tok || !st.page_id) {
+    if (!asked && ["not_connected", "duplicate"].includes(state)) return null;
+    await setSetting(SK, state === "duplicate" ? { ...st, recheck_at: undefined, checked_at: at } : { state: "not_connected", checked_at: at });
+    return state === "duplicate" ? "duplicate" : "not_connected";
+  }
+  const age = minsAgo(st.checked_at);
+  if (!asked && (state === "connected" ? age < 360 : age < 30)) return null;
+  try {
+    const p = await fb("GET", `${FB}/${st.page_id}`, tok, { fields: "id,name" });
+    await setSetting(SK, { ...st, state: "connected", page_name: p.name ?? st.page_name, note: undefined, recheck_at: undefined, checked_at: at });
+    return "connected";
+  } catch (e) {
+    const err = e as FBError;
+    if (err.auth) {
+      await setSetting(SK, { ...st, state: "expired", note: "Facebook connection stopped working (password change or removed access). Connect Facebook again in this account's Settings.", recheck_at: undefined, checked_at: at });
+      return "expired";
+    }
+    if (asked || state !== "connected") {
+      await setSetting(SK, { ...st, state: "error", note: `Facebook could not be checked right now: ${err.message}`, recheck_at: undefined, checked_at: at });
+      return "error";
+    }
+    await setSetting(SK, { ...st, checked_at: at });      // one network blip on a routine check never raises a false alarm
+    return "kept";
+  }
 }
 export async function fbTick(list: Brand[]): Promise<Json> {
   const res: Json = {};

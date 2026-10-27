@@ -31,6 +31,39 @@ set role authenticated;
 select pg_temp.ok(pg_temp.err($$select public.run_autopilot_now()$$) like '%members list%', 'non-members cannot start it');
 reset role;
 select set_config('request.jwt.claims','{}',false);
+-- every account has its own Autopilot (off until switched on; its own time; its own requests)
+delete from jobs where kind='suggest' and input ? 'autopilot';
+update brands set status = 'live' where id in ('flystar', 'bookmycharter');
+delete from settings where key in ('autopilot@flystar', 'autopilot@bookmycharter');
+update settings set value = value || '{"on": false}' where key='autopilot';
+select pg_temp.ok(public.autopilot_tick() is null, 'other accounts are off until switched on');
+select set_config('request.jwt.claims','{"email":"weoneaviation8@gmail.com"}',false);
+set role authenticated;
+select pg_temp.ok((public.set_autopilot(true, to_char((now() at time zone 'Asia/Kolkata') - interval '2 min', 'HH24:MI'), 'flystar')) ->> 'on' = 'true', 'Autopilot switched on for Flying Star');
+select pg_temp.ok(pg_temp.err($$select public.set_autopilot(true, '13:30', 'nope')$$) like 'Unknown account%', 'unknown account refused');
+reset role;
+select pg_temp.ok((select value->>'on' from settings where key='autopilot') = 'false', 'We One''s own switch untouched');
+select public.autopilot_tick();
+select pg_temp.ok((select count(*) from jobs where kind='suggest' and input->>'autopilot'='true' and brand='flystar' and input->>'trigger'='schedule') = 1
+               and (select count(*) from jobs where kind='suggest' and input->>'autopilot'='true' and brand<>'flystar') = 0, 'the tick queues Flying Star only, as its own request');
+select public.autopilot_tick();
+select pg_temp.ok((select count(*) from jobs where kind='suggest' and input->>'autopilot'='true' and brand='flystar') = 1, 'one scheduled run a day per account');
+set role authenticated;
+select pg_temp.ok((select (public.run_autopilot_now('bookmycharter')).brand) = 'bookmycharter', 'Run now for Book My Charter makes its own request');
+select pg_temp.ok((select (public.run_autopilot_now('bookmycharter')).id) = (select (public.run_autopilot_now('bookmycharter')).id), 'Run now twice -> one request per account');
+select pg_temp.ok((select (public.run_autopilot_now()).brand) = 'weone', 'the old Run now still means We One Aviation');
+select pg_temp.ok((public.set_autopilot(false, '15:30', 'flystar')) ->> 'on' = 'false', 'switched off again');
+reset role;
+delete from jobs where kind='suggest' and input ? 'autopilot'; delete from settings where key in ('autopilot@flystar', 'autopilot@bookmycharter');
+-- Re-check a connection: only a flag for the cloud poster; works for every account, never for unknown platforms
+set role authenticated;
+select public.request_recheck('bookmycharter', 'fb');
+select pg_temp.ok(pg_temp.err($$select public.request_recheck('bookmycharter', 'x')$$) like 'Unknown connection%', 'unknown platform refused');
+select public.request_recheck('flystar', 'web');
+reset role;
+select pg_temp.ok((select value ? 'recheck_at' from settings where key='facebook_status@bookmycharter'), 'Re-check flag set for Book My Charter''s Facebook');
+select pg_temp.ok((select value ? 'recheck_at' from settings where key='website_status@flystar'), 'Re-check flag set for Flying Star''s website');
+delete from settings where key in ('facebook_status@bookmycharter', 'website_status@flystar');
 -- daily cap: autopilot reels still start, manual ones wait
 insert into jobs(id,kind,status,input,created_at) values
  ('eeeeeeee-0000-0000-0000-000000000001','reel','queued','{"concept":{"title":"manual"}}', now()-interval '2 min'),

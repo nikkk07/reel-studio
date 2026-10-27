@@ -69,7 +69,7 @@ class Brain:
     def __init__(self): self.asks = []
     def prompt(self, name, **v): return name + json.dumps(v)[:20000]
     def ask(self, name, text, schema, tools, cwd, timeout=0, on_event=None):
-        self.asks.append(name)
+        self.asks.append(name); self.__dict__.setdefault("texts", {})[name] = text
         if name == "analyst":
             return {"insights": "Core reels with a number in the hook got more sends.", "retire": [],
                     "lessons": [{"agent": "scriptwriter", "lesson": "Open core reels with the exact rule as a number.", "why": "3 of 3 did 2x"}]}
@@ -94,7 +94,17 @@ def ctx_for(db, kind, brand, inp):
 # 1. Analyst waits for enough real results
 db = DB(); seed(db, [5, 5]); b = Brain(); learn.brain = agents.brain = b; agents._CACHE.clear(); brandmod._CACHE.clear()
 c = ctx_for(db, "learn", "weone", {"brand": "weone", "day": "d"}); learn.run(c)
-ok("analyst" not in b.asks and "Only 2 reels" in c.job["output"]["learn"]["insights"], "with only 2 measured reels the Analyst writes no lessons (no guessing)")
+ok("analyst" not in b.asks and "Only 2 posts" in c.job["output"]["learn"]["insights"], "with only 2 measured reels the Analyst writes no lessons (no guessing)")
+
+# 1b. the account's other Instagram posts (past content, also made outside the studio) count as evidence and reach the Analyst
+db = DB(); seed(db, [5, 5]); b = Brain(); learn.brain = agents.brain = b; agents._CACHE.clear(); brandmod._CACHE.clear()
+db.t["settings"] = [{"key": "ig_library", "value": {"at": iso(NOW), "posts": [
+    {"id": "m1", "at": iso(NOW - timedelta(days=9)), "type": "REELS", "caption": "Why pilots say Roger. Save this", "reach": 900, "views": 1200, "likes": 40, "comments": 6, "shares": 12, "saved": 9},
+    {"id": "m2", "at": iso(NOW - timedelta(days=12)), "type": "REELS", "caption": "Old timetable post", "reach": 800, "views": 900, "likes": 5, "comments": 0, "shares": 0, "saved": 0}]}}]
+c = ctx_for(db, "learn", "weone", {"brand": "weone", "day": "d"}); learn.run(c)
+rep = c.job["output"]["learn"]
+ok("analyst" in b.asks and rep["past_posts"] == 2 and rep["past_measured"] == 2, "2 reels + 2 measured past posts: the Analyst starts and reads the past posts")
+ok("Why pilots say Roger" in b.texts.get("analyst", ""), "the Analyst sees the account's past captions with their results")
 
 # 2. enough results: lessons are created with a baseline from the reels before them
 db = DB(); seed(db, [5, 5, 6, 4, 5]); b = Brain(); learn.brain = agents.brain = b; agents._CACHE.clear(); brandmod._CACHE.clear()

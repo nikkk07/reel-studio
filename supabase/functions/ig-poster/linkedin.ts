@@ -158,13 +158,31 @@ async function liBrand(b: Brand): Promise<Json> {
       await setPart(r, "li", { ...r.output.li, error: "Waiting for LinkedIn to be connected." }, "scheduled");
     return { connected: false, due: due.length };
   }
-  const log: Json = {};
+  const log: Json = {}; let worked = false;
   for (const r of due.slice(0, 2)) {
-    try { log[r.id] = await step(r, tok, st, b); }
+    try { log[r.id] = await step(r, tok, st, b); worked = true; }
     catch (e) { const err = e instanceof LIError ? e : new LIError(String((e as Error).message ?? e)); await fail(r, err, b.id); log[r.id] = `error: ${err.message}`; }
+  }
+  if (worked && st.state !== "connected") {       // LinkedIn just accepted a call with this sign-in
+    const cur = await setting(bk("linkedin_status", b.id));
+    if (cur.state !== "connected") await setSetting(bk("linkedin_status", b.id), { ...cur, state: "connected", note: undefined, checked_at: iso(now()) });
   }
   return { connected: true, due: due.length, log };
 }
+// "Re-check" on the site: the saved sign-in is checked (present, not past LinkedIn's 60-day limit, renewed when possible).
+// A failing post also marks it expired; a successful post proves it.
+export async function liCheck(b: Brand): Promise<string | null> {
+  const SK = bk("linkedin_status", b.id); const st = await setting(SK);
+  if (!st.recheck_at) return null;
+  const [tok, cur] = await connection(b.id);
+  const v: Json = { ...cur, recheck_at: undefined, checked_at: iso(now()) };
+  if (!tok) v.state = cur.state === "expired" ? "expired" : "not_connected";
+  else if (!cur.org_urn) Object.assign(v, { state: "error", note: "Signed in, but no LinkedIn Company Page is chosen. Tap Reconnect LinkedIn and pick the page." });
+  else Object.assign(v, { state: "connected", note: undefined });
+  await setSetting(SK, v);
+  return v.state;
+}
+
 export async function liTick(list: Brand[]): Promise<Json> {
   const res: Json = {};
   for (const b of list) { try { const r = await liBrand(b); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }

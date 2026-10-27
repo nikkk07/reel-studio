@@ -14,8 +14,8 @@ export async function rest(method: string, path: string, body?: unknown, prefer 
 }
 // one account's own settings/secrets: We One Aviation keeps the original keys, every other account gets "<key>@<account>"
 export const bk = (base: string, brand?: string) => (!brand || brand === "weone" ? base : `${base}@${brand}`);
-export type Brand = { id: string; name: string; links?: Json };
-export async function brands(): Promise<Brand[]> { return (await rest("GET", "brands?select=id,name,links&order=sort")) ?? []; }
+export type Brand = { id: string; name: string; links?: Json; website?: string | null };
+export async function brands(): Promise<Brand[]> { return (await rest("GET", "brands?select=id,name,links,website&order=sort")) ?? []; }
 export async function setting(key: string): Promise<Json> { const r = await rest("GET", `settings?select=value&key=eq.${encodeURIComponent(key)}`); return r?.[0]?.value ?? {}; }
 export const setSetting = (key: string, value: Json) => rest("POST", "settings", { key, value, updated_at: iso(now()) }, "resolution=merge-duplicates,return=minimal");
 export async function secret(key: string): Promise<[string | null, string | null]> {

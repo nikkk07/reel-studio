@@ -447,8 +447,19 @@ main, .panel, .topic, .strip, dialog { overflow-wrap: anywhere; }
 .setupcard { max-width: 640px; }
 @media (max-width: 420px) { .accts { grid-template-columns: 1fr; } .brand.acct span { display: none; } }
 
+.brand.acct { flex-shrink: 0; }
 .brand.acct > div { min-width: 0; max-width: 220px; }
-.brand.acct b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 17px; }
+.brand.acct b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 17px; }
+@media (max-width: 900px) { .brand.acct { flex-shrink: 1; min-width: 0; } }
+/* Autopilot switch (Dashboard cards and the Create page) */
+.acct-ap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; background: #F3F6F9; border-radius: 12px; }
+.switch { appearance: none; border: 0; background: none; font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 2px; font-weight: 600; font-size: 14px; }
+.switch i { position: relative; width: 40px; height: 24px; border-radius: 999px; background: #C9D2DC; transition: background .15s; flex: none; }
+.switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.switch.on i { background: #12A150; }
+.switch.on i::after { transform: translateX(16px); }
+.switch:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 8px; }
+@media (prefers-reduced-motion: reduce) { .switch i, .switch i::after { transition: none; } }
 .mini svg { width: 15px; height: 15px; }
 @media (max-width: 420px) { .brand.acct > div { max-width: 130px; } }
 .brand.plain { gap: 0; }

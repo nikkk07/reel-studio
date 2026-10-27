@@ -1,6 +1,6 @@
 from .. import agents, brain, lanes, schemas
 from .. import brand as brandmod
-from .autopilot import check_topics, history
+from .autopilot import check_topics, history, library, performance_text
 
 
 def recent_titles(db, n=25, brand="weone"):
@@ -23,11 +23,13 @@ def run(ctx):
     bid = ctx.job.get("brand") or "weone"; prof = brandmod.load(ctx.db, bid)
     recent = ", ".join(recent_titles(ctx.db, brand=bid)) or "none"
     try:                                     # this account's own reels only
-        mix = lanes.mix_status(history(ctx.db, brand=bid, prof=prof))
+        hist = history(ctx.db, brand=bid, prof=prof)
+        mix = lanes.mix_status(hist)
+        perf = performance_text(hist, library(ctx.db, bid, hist))      # what this account's real audience responded to
     except Exception:  # noqa: BLE001
-        mix = {"text": "unknown", "next": "core"}
+        mix = {"text": "unknown", "next": "core"}; perf = "not available"
     common = dict(recent_titles=recent, user_note=note or "none", lane_core=lanes.rules(prof, "core"), lane_trending=lanes.rules(prof, "trending"),
-                  mix=mix["text"], topic_bank=lanes.core_bank(prof), playbook=brain.prompt("ig_playbook"))
+                  mix=mix["text"], topic_bank=lanes.core_bank(prof), playbook=brain.prompt("ig_playbook"), performance=perf)
     if brandmod.legacy(prof):            # We One: Hinglish hooks, the academy's own knowledge
         p = brain.prompt("suggest", brand_brief=brandmod.brief(prof, full=False), **common)
     else:

@@ -65,6 +65,10 @@ SCOUT_TOPIC = {"type": "object", "required": TOPIC["required"] + ["category", "t
                               "trend_signal": S, "viral_score": I}}
 SCOUT = {"type": "object", "required": ["topics"],
          "properties": {"topics": {"type": "array", "minItems": 4, "maxItems": 6, "items": SCOUT_TOPIC}}}
+# every other account: its own content pillars name the category (free text)
+SCOUT_BRAND = {"type": "object", "required": ["topics"],
+               "properties": {"topics": {"type": "array", "minItems": 4, "maxItems": 6, "items": {
+                   **SCOUT_TOPIC, "properties": {**SCOUT_TOPIC["properties"], "category": S}}}}}
 CRITERIA = ["hook", "curiosity", "shareability", "saveability", "timeliness", "audience_fit", "visual_fit", "verifiability", "novelty", "account_fit"]
 JUDGE = {"type": "object", "required": ["scores", "summary"],
          "properties": {"summary": S, "scores": {"type": "array", "items": {

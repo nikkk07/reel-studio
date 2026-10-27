@@ -9,6 +9,7 @@ import { SB, H, type Json, type Brand, now, iso, minsAgo, rest, setting, setSett
 import { liTick } from "./linkedin.ts";
 import { fbTick } from "./facebook.ts";
 import { keysTick } from "./keys.ts";
+import { checksTick } from "./checks.ts";
 const API = Deno.env.get("IG_API") ?? "https://graph.instagram.com/v26.0";
 const REFRESH_URL = Deno.env.get("IG_REFRESH_URL") ?? "https://graph.instagram.com/refresh_access_token";
 const MAX_ATTEMPTS = 5;
@@ -65,7 +66,11 @@ async function ownedElsewhere(brand: string, uid: string): Promise<string | null
 async function connection(brand: string, force: boolean): Promise<[string | null, string | null]> {
   const SK = bk("instagram_status", brand), TK = bk("instagram_token", brand);
   let [tok, savedAt] = await token(brand); const st = await setting(SK);
-  if (!tok) { if ((st.state ?? "not_connected") !== "not_connected" && st.state !== "duplicate") await setSetting(SK, { state: "not_connected" }); return [null, null]; }
+  if (!tok) {
+    if (((st.state ?? "not_connected") !== "not_connected" && st.state !== "duplicate") || st.recheck_at)
+      await setSetting(SK, st.state === "duplicate" ? { ...st, recheck_at: undefined, checked_at: iso(now()) } : { state: "not_connected", checked_at: iso(now()) });
+    return [null, null];
+  }
   if (!force && st.state === "connected" && minsAgo(st.checked_at) < 360) return [tok, st.user_id];
   try {
     if (minsAgo(savedAt!) > 3 * 1440) {                     // keep the 60-day token alive (allowed after 24 h)
@@ -165,8 +170,8 @@ async function tickBrand(b: Brand): Promise<Json> {
   const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&brand=eq.${b.id}&status=eq.done&output->ig->>state=in.(queued,scheduled,posting)&order=updated_at.asc&limit=50`);
   const due = reels.filter((r) => r.output.ig.state === "posting" || r.output.ig.state === "queued" || Date.parse(r.output.ig.at ?? 0) <= Date.now());
   const st = await setting(bk("instagram_status", b.id));
-  if (!due.length && (st.state ?? "not_connected") === "not_connected") return { connected: false };
-  const [tok, uid] = await connection(b.id, st.state === "checking" || due.length > 0);
+  if (!due.length && !st.recheck_at && (st.state ?? "not_connected") === "not_connected") return { connected: false };
+  const [tok, uid] = await connection(b.id, st.state === "checking" || !!st.recheck_at || due.length > 0);       // "Re-check" on the site forces a fresh check
   const log: Json = {};
   if (!tok) {
     for (const r of due) if (r.output.ig.state !== "posting" && !r.output.ig.error) await setIg(r, { ...r.output.ig, error: "Waiting for Instagram to be connected again." }, r.output.ig.state);
@@ -201,6 +206,7 @@ async function statsBrand(b: Brand): Promise<Json> {
   const cap = await setting(bk("instagram_insights", b.id));
   let full = !(cap.ok === false && minsAgo(cap.checked_at) < 720) && cap.metrics !== "core";
   let insights = !(cap.ok === false && minsAgo(cap.checked_at) < 720);
+  let comments = !(cap.comments === false && minsAgo(cap.checked_at) < 720);
   const done: Json = {};
   for (const r of due) {
     const mid = r.output.ig.media_id; const s: Json = { at: iso(now()), hours_since_post: Math.round(minsAgo(r.output.ig.posted_at) / 6) / 10 };
@@ -232,11 +238,53 @@ async function statsBrand(b: Brand): Promise<Json> {
           note: "Instagram results need the instagram_business_manage_insights permission; using likes and comments only." });
         delete s.no_perm;
       }
+      if (comments) {        // what the audience actually said: the most-liked comments feed the learning loop
+        try {
+          const c = await ig("GET", `${API}/${mid}/comments`, tok, { fields: "text,like_count,timestamp", limit: "25" });
+          s.top_comments = (c.data ?? []).filter((x: Json) => x.text).sort((a: Json, b: Json) => (b.like_count ?? 0) - (a.like_count ?? 0))
+            .slice(0, 5).map((x: Json) => String(x.text).replace(/\s+/g, " ").slice(0, 160));
+        } catch (e) {
+          if ((e as IGError).auth) throw e;
+          comments = false; await setSetting(bk("instagram_insights", b.id), { ...cap, comments: false, checked_at: iso(now()) });
+        }
+      }
       await rest("POST", "rpc/set_reel_stats", { p_job: r.id, p_stats: s }, "return=minimal");
       done[r.id] = s.source;
     } catch (e) { done[r.id] = `error: ${String((e as Error).message ?? e).slice(0, 120)}`; }
   }
   return { due: due.length, done };
+}
+
+// ---------------------------------------------------------------- the account's past posts (also those made outside the studio): once a day
+// The learning loop reads them, so it learns from everything the audience has already responded to, not only studio reels.
+async function libraryBrand(b: Brand): Promise<Json> {
+  const LK = bk("ig_library", b.id); const lib = await setting(LK);
+  if (minsAgo(lib.at) < 24 * 60) return { due: 0 };
+  const st = await setting(bk("instagram_status", b.id));
+  if (st.state !== "connected") return { connected: false };
+  const [tok, uid] = await connection(b.id, false);
+  if (!tok || !uid) return { connected: false };
+  const r = await ig("GET", `${API}/${uid}/media`, tok, { fields: "id,caption,media_type,media_product_type,timestamp,like_count,comments_count,permalink", limit: "50" });
+  const cap = await setting(bk("instagram_insights", b.id)); let insights = cap.ok !== false;
+  const posts: Json[] = [];
+  for (const m of r.data ?? []) {
+    const p: Json = { id: String(m.id), at: String(m.timestamp ?? "").replace(/\+0000$/, "Z"), type: m.media_product_type ?? m.media_type,
+      caption: String(m.caption ?? "").replace(/\s+/g, " ").slice(0, 220), likes: m.like_count ?? null, comments: m.comments_count ?? null, link: m.permalink ?? null };
+    if (insights && p.type === "REELS" && posts.filter((x) => x.reach != null).length < 25) {
+      try {
+        const j = await ig("GET", `${API}/${m.id}/insights`, tok, { metric: CORE });
+        for (const x of j.data ?? []) { const v = x.values?.[0]?.value ?? x.total_value?.value; if (typeof v === "number") p[x.name] = v; }
+      } catch (e) { if ((e as IGError).auth) throw e; insights = false; }
+    }
+    posts.push(p);
+  }
+  await setSetting(LK, { at: iso(now()), posts });
+  return { posts: posts.length };
+}
+export async function libraryTick(list: Brand[]): Promise<Json> {
+  const res: Json = {};
+  for (const b of list) { try { const r = await libraryBrand(b); if (r.posts) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e).slice(0, 160) }; } }
+  return res;
 }
 
 export async function statsTick(list: Brand[]): Promise<Json> {
@@ -256,5 +304,7 @@ Deno.serve(async (req) => {
   try { res.facebook = await fbTick(list); } catch (e) { res.facebook = { error: String((e as Error).message ?? e) }; }
   try { res.linkedin = await liTick(list); } catch (e) { res.linkedin = { error: String((e as Error).message ?? e) }; }
   try { res.keys = await keysTick(); } catch (e) { res.keys = { error: String((e as Error).message ?? e) }; }
+  try { res.library = await libraryTick(list); } catch (e) { res.library = { error: String((e as Error).message ?? e) }; }
+  try { res.checks = await checksTick(list); } catch (e) { res.checks = { error: String((e as Error).message ?? e) }; }
   return Response.json(res);
 });

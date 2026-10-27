@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from statistics import mean, median
 from .. import agents, brain, schemas
 from .. import brand as brandmod
-from .autopilot import history
+from .autopilot import history, library, library_text
 
 MIN_MEASURED = 3            # reels with Instagram results before the Analyst may write lessons
 MIN_AFTER = 3               # results needed after a lesson before it is judged
@@ -110,7 +110,7 @@ def add_lessons(db, items, brand, by, hist, default_metric):
 
 def reels_text(hist):
     keys = ("created", "lane", "category", "title", "hook", "posted", "hours_live", "views", "reach", "shares", "saved", "likes", "comments",
-            "avg_watch_s", "skip_rate", "eng", "critic", "qc")
+            "avg_watch_s", "skip_rate", "eng", "critic", "qc", "said")
     return "\n".join(json.dumps({k: h.get(k) for k in keys if h.get(k) is not None}, ensure_ascii=False) for h in hist[:40]) or "none"
 
 
@@ -155,21 +155,24 @@ def run(ctx):
     prof = brandmod.load(ctx.db, bid)
     ctx.progress("research", 0.05); ctx.log(f"Learning run for {prof['name']}")
     hist = history(ctx.db, brand=bid, prof=prof)
-    report = {"day": inp.get("day"), "reels": len(hist), "measured": len(_measured(hist))}
+    posts = library(ctx.db, bid, hist)          # the account's other Instagram posts: past content the audience already judged
+    past = [p for p in posts if p.get("eng") is not None and (p.get("hours_live") or 0) >= 24]
+    report = {"day": inp.get("day"), "reels": len(hist), "measured": len(_measured(hist)), "past_posts": len(posts), "past_measured": len(past)}
     report["evaluated"] = evaluate(ctx.db, bid, hist, ctx.log)
 
-    if report["measured"] >= MIN_MEASURED and "analyst" not in ctx.data:
-        ctx.progress("research", 0.3); ctx.log(f"Performance Analyst: reading {report['measured']} measured reels")
+    if report["measured"] + report["past_measured"] >= MIN_MEASURED and "analyst" not in ctx.data:
+        ctx.progress("research", 0.3); ctx.log(f"Performance Analyst: reading {report['measured']} measured reels and {len(posts)} other posts of the account")
         res = agents.call(ctx, "analyst", brain.prompt("analyst", brand_name=prof["name"], brand_brief=brandmod.brief(prof, full=False),
-                                                       reels=reels_text(hist), lessons=lessons_text(ctx.db, bid)),
+                                                       reels=reels_text(hist) + library_text(posts, 15), lessons=lessons_text(ctx.db, bid)),
                           schemas.ANALYST, [], timeout=900, name="analyst")
         ctx.data["analyst"] = res; ctx.save()
         for lid in res.get("retire", []):
             ctx.db.update("agent_lessons", f"id=eq.{int(lid)}&status=eq.active&brand=eq.{bid}", {"status": "retired"})
         made = add_lessons(ctx.db, [{**l, "metric": "engagement"} for l in res.get("lessons", [])], bid, "analyst", hist, "engagement")
         report.update(insights=res.get("insights"), new_lessons=[m.get("lesson") for m in made])
-    elif report["measured"] < MIN_MEASURED:
-        report["insights"] = f"Only {report['measured']} reels have 24 h of Instagram results; the Analyst starts writing lessons at {MIN_MEASURED}."
+    elif report["measured"] + report["past_measured"] < MIN_MEASURED:
+        report["insights"] = (f"Only {report['measured'] + report['past_measured']} posts have 24 h of Instagram results with reach; "
+                              f"the Analyst starts writing lessons at {MIN_MEASURED}.")
         ctx.log(report["insights"])
 
     if inp.get("resources") and "resources" not in ctx.data:

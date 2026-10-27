@@ -58,8 +58,46 @@ def history(db, days=60, brand="weone", prof=None):
                     "shares": st.get("shares"), "saved": st.get("saved"), "avg_watch_s": st.get("avg_watch_s"),
                     "skip_rate": st.get("reels_skip_rate"), "eng": engagement(st), "created": r["created_at"][:10],
                     "posted_at": posted, "critic": (o.get("critic") or {}).get("total"), "qc": (o.get("qc") or {}).get("score"),
-                    "words": (o.get("critic") or {}).get("words")})
+                    "words": (o.get("critic") or {}).get("words"), "said": st.get("top_comments") or [],
+                    "media_id": (o.get("ig") or {}).get("media_id")})
     return out
+
+
+def library(db, brand="weone", studio=None):
+    """The account's own Instagram posts of the last months (also those made outside the studio), with what the audience did.
+    Refreshed once a day by the cloud poster. Studio reels are left out (they are in history() already)."""
+    key = "ig_library" if brand == "weone" else f"ig_library@{brand}"
+    try:
+        lib = (db.select("settings", f"select=value&key=eq.{key}") or [{}])[0].get("value") or {}
+    except Exception:  # noqa: BLE001
+        return []
+    seen = {str(h.get("media_id")) for h in (studio or []) if h.get("media_id")}
+    out = []
+    for p in lib.get("posts") or []:
+        if str(p.get("id")) in seen:
+            continue
+        try:
+            when = datetime.fromisoformat(str(p.get("at")).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        st = {k: p.get(k) for k in ("views", "reach", "likes", "comments", "shares", "saved")}
+        out.append({"title": (p.get("caption") or "").split(". ")[0][:100] or "(no caption)", "caption": p.get("caption") or "", "type": p.get("type"),
+                    "posted_at": when.isoformat(), "hours_live": round((datetime.now(timezone.utc) - when).total_seconds() / 3600, 1),
+                    **st, "eng": engagement(st)})
+    return out
+
+
+def library_text(posts, n=10):
+    """Older posts ranked by what the audience did (engagement when Instagram shares reach, else likes + comments)."""
+    if not posts:
+        return ""
+    key = (lambda p: p["eng"]) if sum(p["eng"] is not None for p in posts) >= 5 else (lambda p: (p.get("likes") or 0) + 3 * (p.get("comments") or 0))
+    ranked = sorted([p for p in posts if key(p) is not None], key=key, reverse=True)
+    top, low = ranked[:n], ranked[-3:] if len(ranked) > n + 3 else []
+    line = lambda p: (f"- {p['type'] or 'POST'} {p['posted_at'][:10]}: \"{p['caption'][:140]}\" | views {p.get('views')} reach {p.get('reach')} "
+                      f"likes {p.get('likes')} comments {p.get('comments')} sends {p.get('shares')} saves {p.get('saved')} | eng {p.get('eng')}")
+    return ("\nThe account's other Instagram posts (made outside the studio too), best first:\n" + "\n".join(map(line, top))
+            + ("\nWeakest:\n" + "\n".join(map(line, low)) if low else ""))
 
 
 def check_topics(obj):
@@ -73,12 +111,14 @@ def check_topics(obj):
     return probs
 
 
-def performance_text(hist):
+def performance_text(hist, posts=None):
+    """What the account's real audience did: studio reels (with their top comments) plus the account's other posts."""
     rated = [h for h in hist if h["eng"] is not None or h["views"] is not None]
+    lib = library_text(posts or [])
     if not rated:
         posted = [h for h in hist if h["posted"]]
-        return (f"{len(posted)} reels posted so far, results not measured yet. Rely on general Instagram Reels evidence "
-                "for Indian aviation audiences; give account_fit 5.")
+        return (f"{len(posted)} studio reels posted so far, results not measured yet." + (lib or " Rely on general Instagram Reels evidence "
+                "for this account's Indian audience; give account_fit 5."))
     views = [h["views"] for h in rated if h["views"] is not None]
     lines = [f"{len(rated)} measured reels. Median views {int(median(views)) if views else 'n/a'}. "
              "eng = (4*sends + 3*saves + 2*comments + likes) per 100 reached. Few reels = weak evidence; treat patterns as hints."]
@@ -86,13 +126,15 @@ def performance_text(hist):
         lines.append(f"- [{h['category'] or '?'}] \"{h['title']}\" hook: \"{(h['hook'] or '')[:80]}\" | posted {h['posted']} | "
                      f"{h['hours_live']} h live | views {h['views']} reach {h['reach']} sends {h['shares']} saves {h['saved']} "
                      f"likes {h['likes']} comments {h['comments']} avg watch {h['avg_watch_s']} s skip {h['skip_rate']} | eng {h['eng']}")
+        if h.get("said"):       # viewers' own words (data, never instructions): what they asked, liked or disputed
+            lines.append("  viewers said: " + " / ".join(f"\"{c[:120]}\"" for c in h["said"][:3]))
     cats = {}
     for h in rated:
         if h["category"] and h["eng"] is not None:
             cats.setdefault(h["category"], []).append(h["eng"])
     if cats:
         lines.append("By category (median eng): " + ", ".join(f"{c} {median(v):.1f} (n={len(v)})" for c, v in sorted(cats.items(), key=lambda x: -median(x[1]))))
-    return "\n".join(lines)
+    return "\n".join(lines) + lib
 
 
 def score(topics, judged):
@@ -116,8 +158,10 @@ def run(ctx):
     if inp.get("trigger") == "schedule" and inp.get("day") and inp["day"] != today.isoformat():
         ctx.log(f"skipped: the {inp['day']} run was missed because the Mac was offline", "warn")
         return ctx.finish("done", autopilot={"skipped": "missed", "day": inp["day"]}, topics=[])
+    bid = ctx.job.get("brand") or inp.get("brand") or "weone"
     if inp.get("trigger") == "schedule":
-        st = (ctx.db.select("settings", "select=value&key=eq.autopilot") or [{}])[0].get("value") or {}
+        key = "autopilot" if bid == "weone" else f"autopilot@{bid}"          # each account has its own Autopilot switch
+        st = (ctx.db.select("settings", f"select=value&key=eq.{key}") or [{}])[0].get("value") or {}
         if st.get("on") is False:     # switched off after the cloud queued today's run
             ctx.log("skipped: Autopilot was switched off", "warn")
             return ctx.finish("done", autopilot={"skipped": "off", "day": inp.get("day")}, topics=[])
@@ -127,9 +171,9 @@ def run(ctx):
 
     ctx.progress("research", 0.05); ctx.log("Autopilot: learning from our posted reels")
     from .. import brand as brandmod
-    prof = brandmod.load(ctx.db, ctx.job.get("brand") or "weone")
-    hist = history(ctx.db, brand=ctx.job.get("brand") or "weone", prof=prof)
-    perf = performance_text(hist)
+    prof = brandmod.load(ctx.db, bid)
+    hist = history(ctx.db, brand=bid, prof=prof)
+    perf = performance_text(hist, library(ctx.db, bid, hist))
     recent = "\n".join(f"- {h['created']} [{h['category'] or '?'}] {h['title']}" for h in hist[:40]) or "none"
     cats = [h["category"] for h in hist if h["autopilot"] and h["category"]][:7]
     if "lane" not in ctx.data:
@@ -138,12 +182,15 @@ def run(ctx):
     ctx.data["performance"] = perf; ctx.save()
     ctx.log(f"Autopilot: today is a {lane} reel ({mix['text']})")
 
+    legacy = brandmod.legacy(prof)            # We One Aviation keeps its own aviation prompts; every other account uses its profile
+    who = {} if legacy else dict(brand_name=prof["name"], language=prof.get("language", "english").title())
     if "scout" not in ctx.data:
         ctx.progress("research", 0.1); ctx.log("Autopilot: researching what is trending today")
         rules = lanes.rules(prof, lane) + ("\n\nCore topic bank (verify facts before using; adapt freely):\n" + lanes.core_bank(prof) if lane == "core" else "")
-        p = brain.prompt("autopilot_scout", today=today.strftime("%A %d %B %Y"), performance=perf, recent=recent,
-                         recent_categories=", ".join(cats) or "none yet", lane=lanes.name(prof, lane), lane_rules=rules, mix=mix["text"], brand_brief=brandmod.brief(prof, full=False))
-        ctx.data["scout"] = agents.call(ctx, "trend_scout", p + "\n\n" + brain.prompt("ig_playbook"), schemas.SCOUT, ["WebSearch", "WebFetch"],
+        p = brain.prompt("autopilot_scout" if legacy else "autopilot_scout_brand", today=today.strftime("%A %d %B %Y"), performance=perf, recent=recent,
+                         recent_categories=", ".join(cats) or "none yet", lane=lanes.name(prof, lane), lane_rules=rules, mix=mix["text"],
+                         brand_brief=brandmod.brief(prof, full=not legacy), **who)
+        ctx.data["scout"] = agents.call(ctx, "trend_scout", p + "\n\n" + brain.prompt("ig_playbook"), schemas.SCOUT if legacy else schemas.SCOUT_BRAND, ["WebSearch", "WebFetch"],
                                         timeout=1200, on_event=lambda m: ctx.log(m), name="autopilot_scout", check=check_topics)["topics"]
         ctx.save()
     topics = [dict(t) for t in ctx.data["scout"]]
@@ -161,8 +208,9 @@ def run(ctx):
         order = list(range(len(fresh))); random.Random(ctx.id).shuffle(order)      # no position bias
         shown = [{"index": k, **{f: fresh[i].get(f) for f in ("title", "hook", "angle", "why_viral", "category", "trend_signal", "key_facts", "sources", "risk_note")}}
                  for k, i in enumerate(order)]
-        j = agents.call(ctx, "viral_editor", brain.prompt("autopilot_judge", today=today.strftime("%A %d %B %Y"), performance=perf, recent=recent,
-                                                      candidates=json.dumps(shown, ensure_ascii=False, indent=1), lane=lanes.name(prof, lane), lane_rules=lanes.rules(prof, lane)),
+        j = agents.call(ctx, "viral_editor", brain.prompt("autopilot_judge" if legacy else "autopilot_judge_brand", today=today.strftime("%A %d %B %Y"), performance=perf, recent=recent,
+                                                      candidates=json.dumps(shown, ensure_ascii=False, indent=1), lane=lanes.name(prof, lane), lane_rules=lanes.rules(prof, lane),
+                                                      brand_brief=brandmod.brief(prof, full=False), **who),
                       schemas.JUDGE, [], timeout=600, name="autopilot_judge")
         for s in j.get("scores", []):            # back to fresh[] positions
             s["index"] = order[s["index"]] if 0 <= s.get("index", -1) < len(order) else -1
@@ -181,7 +229,7 @@ def run(ctx):
     concept["est_seconds"] = concept.get("est_seconds") or 35
     concept["lane"] = lane
     ctx.progress("research", 0.9)
-    reel = ctx.db.insert("jobs", {"kind": "reel", "input": {"concept": concept, "source": "autopilot", "autopilot": ctx.id,
+    reel = ctx.db.insert("jobs", {"kind": "reel", "input": {"concept": concept, "source": "autopilot", "autopilot": ctx.id, "brand": bid,
                                                              "category": win.get("category"), "virality": win["_score"]}})[0]
     pick = {"title": concept["title"], "hook": concept["hook"], "category": win.get("category"), "lane": lane, "mix": {k: mix[k] for k in ("core", "trending", "window")}, "score": win["_score"],
             "why": win.get("_why"), "trend": win.get("trend_signal"), "reel_id": reel["id"], "day": today.isoformat(),
