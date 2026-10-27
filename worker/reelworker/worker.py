@@ -108,7 +108,8 @@ def prune(db: Supabase):
 
 
 def prefetch_voices():
-    """Download the chosen voice models in the background (once, ~3 GB), so a reel never waits for it; re-checked hourly."""
+    """Download the chosen voice models in the background (once, ~3 GB), so a reel never waits for it; re-checked every 5 min
+    (a model newly chosen in Studio Settings is fetched within minutes; files already downloaded are only checked)."""
     while not STOP.is_set():
         try:
             from .media import voice
@@ -118,7 +119,7 @@ def prefetch_voices():
             STATUS["voices"] = names
         except Exception as e:  # noqa: BLE001
             log.warning("voice model download: %s", str(e)[:160])
-        STOP.wait(3600)
+        STOP.wait(300)
 
 
 def ping_loop(db: Supabase):
