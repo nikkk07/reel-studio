@@ -96,7 +96,7 @@ def main():
     ap.add_argument("--ckpt", required=True); ap.add_argument("--ref", required=True); ap.add_argument("--out", required=True)
     ap.add_argument("--variants", default="v2,v3,hi"); ap.add_argument("--seeds", default="11")
     ap.add_argument("--lines", default=""); ap.add_argument("--asr", default="large-v3-turbo"); ap.add_argument("--threads", type=int, default=2)
-    ap.add_argument("--device", default="cpu")
+    ap.add_argument("--device", default="cpu"); ap.add_argument("--rescore", action="store_true")
     ap.add_argument("--temperature", type=float, default=0.8); ap.add_argument("--cfg", type=float, default=0.5); ap.add_argument("--exaggeration", type=float, default=0.5)
     a = ap.parse_args()
     import torch, torchaudio as ta, numpy as np, librosa
@@ -132,15 +132,20 @@ def main():
     ref_emb = ve.embeds_from_wavs([ref16], sample_rate=16000)[0]
     by = {l["id"]: l for l in json.loads((HERE / "testset.json").read_text())["lines"]}
     for t in res["takes"]:
-        if "cer" in t:
+        if "cer" in t and "transcript_en" in t and not a.rescore:
             continue
         l = by[t["line"]]; f = out / t["file"]
         w16, _ = librosa.load(str(f), sr=16000)
         segs, _ = asr.transcribe(w16, language=l["lang"], beam_size=5, vad_filter=False, condition_on_previous_text=False)
         hyp = " ".join(s.text.strip() for s in segs)
-        hits = {term: round(term_hit(term, hyp, l["lang"]), 2) for term in l["terms"]}
+        if l["lang"] == "hi":       # English mode prints the English terms in Latin letters, so each term can be checked as written
+            segs, _ = asr.transcribe(w16, language="en", beam_size=5, vad_filter=False, condition_on_previous_text=False)
+            hyp_en = " ".join(s.text.strip() for s in segs)
+        else:
+            hyp_en = hyp
+        hits = {term: round(term_hit(term, hyp_en, "en"), 2) for term in l.get("check", l["terms"])}
         emb = ve.embeds_from_wavs([w16], sample_rate=16000)[0]
-        t.update(transcript=hyp, cer=round(cer(l["say"], hyp, l["lang"]), 3), terms=hits,
+        t.update(transcript=hyp, transcript_en=hyp_en, cer=round(cer(l["say"], hyp, l["lang"]), 3), terms=hits,
                  term_acc=round(sum(1 for x in hits.values() if x >= 0.8) / len(hits), 3),
                  spk_sim=round(float(np.dot(emb, ref_emb) / (np.linalg.norm(emb) * np.linalg.norm(ref_emb))), 3))
         print(f"{t['variant']:6s} {t['line']} s{t['seed']} cer {t['cer']:.3f} terms {t['term_acc']:.2f} sim {t['spk_sim']:.3f}", flush=True)
