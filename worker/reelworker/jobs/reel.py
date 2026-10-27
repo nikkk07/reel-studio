@@ -297,13 +297,16 @@ def stage_script(ctx, prog):
 TTS_RULES = {
     "hi": ("- Write the WHOLE phrase in Devanagari: Hindi words as usual; every English word respelled phonetically in Devanagari the way an educated Indian presenter "
            "says it (registration -> रजिस्ट्रेशन, activation -> एक्टिवेशन, valid -> वैलिड, email -> ईमेल, start -> स्टार्ट, trap -> ट्रैप, document -> डॉक्यूमेंट).\n"
+           "- English compound words as their separate parts, each respelled (windshear -> विंड शियर, SIGMET -> सिग मेट, touchdown -> टच डाउन); "
+           "never shorten 'technical' to टेक (it is read as 'take'): Tech General -> टेक्निकल जनरल.\n"
            "- Abbreviations said letter by letter: each letter's name in Devanagari, separated by spaces (DGCA -> डी जी सी ए, PDF -> पी डी एफ़, BVC -> बी वी सी, "
            "JPG -> जे पी जी, FAQ -> एफ़ ए क्यू, CPL -> सी पी एल). Abbreviations normally said as a word stay a word (NASA -> नासा).\n"
            "- Numbers, years, times and units as spoken words in Devanagari, in the language the presenter would use (24 hours -> ट्वेंटी फ़ोर आवर्स, 70% -> सेवेंटी पर्सेंट, "
            "2026 -> ट्वेंटी ट्वेंटी सिक्स). No digits at all.\n"
            "- Names and brands respelled in Devanagari (Flying Star Aviator -> फ़्लाइंग स्टार एविएटर, Pariksha -> परीक्षा, We One Aviation -> वी वन एविएशन).\n"
            "- Punctuation: only comma, । and ? . No dashes, colons, semicolons, brackets, slashes, quotes, ellipses or symbols (% ₹ & + / @). No Latin letters at all."),
-    "en": ("- Plain spoken English. Abbreviations said letter by letter as separate capital letters with spaces (D G C A, P D F) unless normally said as a word (NASA).\n"
+    "en": ("- Plain spoken English. Abbreviations said letter by letter as separate capital letters with spaces (D G C A, P D F) unless normally said as a word (NASA). "
+           "Before a number, P and B are easily confused: write them as words (PC-12 -> Pee Cee twelve).\n"
            "- Numbers, years, times, money and units as words (twenty four hours, seventy percent, twenty twenty six). No digits.\n"
            "- Hindi or Indian words in simple Latin spelling as they are pronounced.\n"
            "- Punctuation: only commas, full stops and question marks. No dashes, colons, semicolons, brackets, slashes, quotes, ellipses or symbols (% ₹ & + / @)."),

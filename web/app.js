@@ -1255,14 +1255,14 @@ function liAppCard(refresh) {
       catch (e) { msg.textContent = errText(e); } } }, app.client_id ? "Replace" : "Save"),
       h("a", { cls: "btn quiet", href: "https://www.linkedin.com/developers/apps", target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "LinkedIn apps")), msg] : null);
 }
-const VOICE_OPTS = { hi: [["hi", "Chatterbox V3 Hindi pack (recommended)"], ["v3", "Chatterbox V3"], ["v2", "Chatterbox V2 (previous)"]],
-  en: [["v3", "Chatterbox V3 (recommended)"], ["v2", "Chatterbox V2 (previous)"]] };
+const VOICE_OPTS = { hi: [["v2", "Chatterbox V2 (current, best in our test)"], ["hi", "Chatterbox V3 Hindi pack"], ["v3", "Chatterbox V3"]],
+  en: [["v2", "Chatterbox V2 (current, best in our test)"], ["v3", "Chatterbox V3"]] };
 function voiceCard(refresh) {
   const ws = S.settings?.worker_settings || {}; const msg = statusMsg();
   const sel = (k, val) => h("select", { "aria-label": k === "hi" ? "Hinglish voice model" : "English voice model", style: "width:100%;margin-top:4px" },
     VOICE_OPTS[k].map(([v, label]) => h("option", { value: v, selected: v === val ? true : null }, label)));
   const cur = S.worker?.info?.voices || {};
-  const hi = sel("hi", ws.voice_hi || cur.hi || "hi"), en = sel("en", ws.voice_en || cur.en || "v3");
+  const hi = sel("hi", ws.voice_hi || cur.hi || "v2"), en = sel("en", ws.voice_en || cur.en || "v2");
   return h("article", { cls: "svc ok" },
     h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, icon("mic", 24)),
       h("div", {}, h("h3", {}, "Voice model"), h("p", { cls: "small" }, h("i", { cls: "lamp ok" }), ws.voice_at ? `Changed ${ago(ws.voice_at)}` : "Studio default",

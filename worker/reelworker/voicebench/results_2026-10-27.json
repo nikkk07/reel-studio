@@ -1,0 +1,953 @@
+{
+ "date": "2026-10-27",
+ "ref": "library/voice/refs/female.wav",
+ "asr": "large-v3-turbo",
+ "summary": {
+  "hi/hi": {
+   "n": 7,
+   "cer": 0.663,
+   "term_acc": 0.87,
+   "spk_sim": 0.925,
+   "rtf": 8.236
+  },
+  "v3/hi": {
+   "n": 7,
+   "cer": 0.689,
+   "term_acc": 0.89,
+   "spk_sim": 0.933,
+   "rtf": 8.111
+  },
+  "v3/en": {
+   "n": 6,
+   "cer": 0.123,
+   "term_acc": 0.876,
+   "spk_sim": 0.93,
+   "rtf": 7.807
+  },
+  "v2/hi": {
+   "n": 7,
+   "cer": 0.641,
+   "term_acc": 0.92,
+   "spk_sim": 0.935,
+   "rtf": 7.694
+  },
+  "v2/en": {
+   "n": 6,
+   "cer": 0.133,
+   "term_acc": 0.822,
+   "spk_sim": 0.933,
+   "rtf": 7.563
+  }
+ },
+ "takes": [
+  {
+   "variant": "hi",
+   "line": "we1",
+   "seed": 11,
+   "cer": 0.813,
+   "term_acc": 0.857,
+   "spk_sim": 0.945,
+   "terms": {
+    "DGCA": 1.0,
+    "CPL": 1.0,
+    "Air NAV": 1.0,
+    "MET": 1.0,
+    "Air Regs": 1.0,
+    "Tech General": 0.75,
+    "Tech Specific": 0.77,
+    "RTR": 1.0,
+    "QNH": 1.0,
+    "QFE": 1.0,
+    "VOR": 1.0,
+    "NDB": 1.0,
+    "DME": 1.0,
+    "ILS": 1.0
+   },
+   "transcript_en": "DGCA ka CPL paper, Air Nav, Met, Air Regs, Take General or Take Specific, RTR ke liye QNHQFE, VOR, NDB, DME or ILS sab ek saad binaad ke."
+  },
+  {
+   "variant": "hi",
+   "line": "we2",
+   "seed": 11,
+   "cer": 0.458,
+   "term_acc": 1.0,
+   "spk_sim": 0.9,
+   "terms": {
+    "METAR": 0.83,
+    "CB": 1.0,
+    "TAF": 1.0,
+    "TEMPO": 1.0,
+    "NOTAM": 1.0,
+    "runway closed": 1.0
+   },
+   "transcript_en": "Meetar में CB, TAF में tempo, NOTAM में runway closed Pilot पहले meetar पढ़ता है, फिर TAF, फिर NOTAM Meetar, TAF, NOTAM, तीन बार जल्दी बोलो"
+  },
+  {
+   "variant": "hi",
+   "line": "we3",
+   "seed": 11,
+   "cer": 0.842,
+   "term_acc": 1.0,
+   "spk_sim": 0.925,
+   "terms": {
+    "eGCA": 1.0,
+    "portal": 1.0,
+    "FAQ": 1.0,
+    "Computer Number": 1.0,
+    "Class 2": 1.0,
+    "Class 1": 1.0,
+    "medical": 1.0,
+    "FRTOL": 1.0,
+    "application": 1.0,
+    "reject": 1.0
+   },
+   "transcript_en": "EGCA portal ka FAQ pado, computer number, class 2 medical, class 1 medical aur FRTOL. Ek bhi galti to application reject."
+  },
+  {
+   "variant": "hi",
+   "line": "we4",
+   "seed": 11,
+   "cer": 0.938,
+   "term_acc": 0.9,
+   "spk_sim": 0.908,
+   "terms": {
+    "altimeter": 1.0,
+    "airspeed indicator": 1.0,
+    "attitude indicator": 1.0,
+    "lift": 1.0,
+    "weight": 1.0,
+    "thrust": 1.0,
+    "drag": 1.0,
+    "Bernoulli": 0.6,
+    "pressure": 1.0,
+    "speed": 1.0
+   },
+   "transcript_en": "Altimeter, Air Speed Indicator, Attitude Indicator, Lift, Weight, Thrust or Drag. Vernuli bole, Pressure kam to speed zyada."
+  },
+  {
+   "variant": "hi",
+   "line": "fs1",
+   "seed": 11,
+   "cer": 0.629,
+   "term_acc": 0.833,
+   "spk_sim": 0.926,
+   "terms": {
+    "ATPL": 1.0,
+    "CPL": 1.0,
+    "Class 2": 0.71,
+    "medical": 1.0,
+    "DGCA": 1.0,
+    "Computer Number": 1.0
+   },
+   "transcript_en": "ATPL के लिए पहले CPL, CPL के लिए पहले Class to Medical और दोनों के लिए DGCA का Computer Number. ATPL, CPL, DGCA, बोलो बिना रुके."
+  },
+  {
+   "variant": "hi",
+   "line": "fs2",
+   "seed": 11,
+   "cer": 0.103,
+   "term_acc": 0.5,
+   "spk_sim": 0.936,
+   "terms": {
+    "cumulonimbus": 1.0,
+    "turbulence": 1.0,
+    "icing": 1.0,
+    "windshear": 0.7,
+    "SIGMET": 0.71,
+    "route": 0.5,
+    "Mayday": 0.43,
+    "Pan-Pan": 1.0
+   },
+   "transcript_en": "Cumulonimbus के नीचे, Turbulence, Icing और Ringe Shear. Sigma diet, root, बदलो, मेडे नहीं, Pan-Pan भी नहीं."
+  },
+  {
+   "variant": "hi",
+   "line": "fs3",
+   "seed": 11,
+   "cer": 0.86,
+   "term_acc": 1.0,
+   "spk_sim": 0.932,
+   "terms": {
+    "squawk": 1.0,
+    "7700": 1.0,
+    "emergency": 1.0,
+    "7600": 1.0,
+    "radio fail": 1.0,
+    "7500": 1.0,
+    "hijack": 1.0,
+    "transponder": 1.0
+   },
+   "transcript_en": "Squawk 7700 Emergency 7600 Radio Fail 7500 Hijack Transponder Pe Teen Code Teeno Yaad"
+  },
+  {
+   "variant": "v3",
+   "line": "we1",
+   "seed": 11,
+   "cer": 0.805,
+   "term_acc": 0.857,
+   "spk_sim": 0.95,
+   "terms": {
+    "DGCA": 1.0,
+    "CPL": 1.0,
+    "Air NAV": 1.0,
+    "MET": 1.0,
+    "Air Regs": 0.75,
+    "Tech General": 0.75,
+    "Tech Specific": 1.0,
+    "RTR": 1.0,
+    "QNH": 1.0,
+    "QFE": 1.0,
+    "VOR": 1.0,
+    "NDB": 1.0,
+    "DME": 1.0,
+    "ILS": 1.0
+   },
+   "transcript_en": "DGCA ka CPL paper, Air NAV, MET, Air REC, State General or Tech Specific RTR ke liye QNH, QFE, VOR, NDB, DME or ILS sab ek saath bina artke"
+  },
+  {
+   "variant": "v3",
+   "line": "we2",
+   "seed": 11,
+   "cer": 0.486,
+   "term_acc": 1.0,
+   "spk_sim": 0.917,
+   "terms": {
+    "METAR": 0.83,
+    "CB": 1.0,
+    "TAF": 1.0,
+    "TEMPO": 1.0,
+    "NOTAM": 1.0,
+    "runway closed": 1.0
+   },
+   "transcript_en": "Meetar में CB, TAF में tempo, NOTAM में runway closed. Pilot पहले meetar पढ़ता है, फिर TAF, फिर NOTAM, meetar, TAF, NOTAM, तीन बार जल्दी बोलो."
+  },
+  {
+   "variant": "v3",
+   "line": "we3",
+   "seed": 11,
+   "cer": 0.851,
+   "term_acc": 1.0,
+   "spk_sim": 0.926,
+   "terms": {
+    "eGCA": 1.0,
+    "portal": 1.0,
+    "FAQ": 1.0,
+    "Computer Number": 1.0,
+    "Class 2": 1.0,
+    "Class 1": 1.0,
+    "medical": 1.0,
+    "FRTOL": 1.0,
+    "application": 1.0,
+    "reject": 1.0
+   },
+   "transcript_en": "EGCA Portal का FAQ परो, Computer Number, Class 2 Medical, Class 1 Medical और FRTOL. एक भी गलती तो Application Reject."
+  },
+  {
+   "variant": "v3",
+   "line": "we4",
+   "seed": 11,
+   "cer": 0.917,
+   "term_acc": 1.0,
+   "spk_sim": 0.941,
+   "terms": {
+    "altimeter": 1.0,
+    "airspeed indicator": 1.0,
+    "attitude indicator": 1.0,
+    "lift": 1.0,
+    "weight": 1.0,
+    "thrust": 1.0,
+    "drag": 1.0,
+    "Bernoulli": 1.0,
+    "pressure": 1.0,
+    "speed": 1.0
+   },
+   "transcript_en": "Altimeter, airspeed indicator, attitude indicator, lift, weight, thrust or drag. Bernoulli bole, pressure kam to speed zyada."
+  },
+  {
+   "variant": "v3",
+   "line": "fs1",
+   "seed": 11,
+   "cer": 0.629,
+   "term_acc": 1.0,
+   "spk_sim": 0.951,
+   "terms": {
+    "ATPL": 1.0,
+    "CPL": 1.0,
+    "Class 2": 1.0,
+    "medical": 1.0,
+    "DGCA": 1.0,
+    "Computer Number": 1.0
+   },
+   "transcript_en": "ATPL के लिए पहले CPL, CPL के लिए पहले Class2 Medical और डोनों के लिए DGCA का Computer Number ATPL, CPL, DGCA, बोलो बिना रुके"
+  },
+  {
+   "variant": "v3",
+   "line": "fs2",
+   "seed": 11,
+   "cer": 0.138,
+   "term_acc": 0.375,
+   "spk_sim": 0.921,
+   "terms": {
+    "cumulonimbus": 1.0,
+    "turbulence": 1.0,
+    "icing": 0.67,
+    "windshear": 0.7,
+    "SIGMET": 0.71,
+    "route": 0.5,
+    "Mayday": 0.57,
+    "Pan-Pan": 1.0
+   },
+   "transcript_en": "Cumulonimbus, Turbulence, Ising and Rinse Shear Sigmate, Root, Badlo, Madey, Pan Pan"
+  },
+  {
+   "variant": "v3",
+   "line": "fs3",
+   "seed": 11,
+   "cer": 1.0,
+   "term_acc": 1.0,
+   "spk_sim": 0.922,
+   "terms": {
+    "squawk": 1.0,
+    "7700": 1.0,
+    "emergency": 1.0,
+    "7600": 1.0,
+    "radio fail": 1.0,
+    "7500": 1.0,
+    "hijack": 1.0,
+    "transponder": 1.0
+   },
+   "transcript_en": "Squawk 7700 Emergency 7600 Radio Fail 7500 Hijack Transponder P3 Code 3 Yard"
+  },
+  {
+   "variant": "v3",
+   "line": "bm1",
+   "seed": 11,
+   "cer": 0.023,
+   "term_acc": 1.0,
+   "spk_sim": 0.94,
+   "terms": {
+    "positioning": 1.0,
+    "block time": 1.0,
+    "waiting time": 1.0,
+    "private jet": 1.0,
+    "per aircraft": 1.0,
+    "per seat": 1.0
+   },
+   "transcript_en": "POSITIONING PLUS BLOCK TIME PLUS WAITING TIME A PRIVATE JET QUOTE IS PRICE PER AIRCRAFT, NOT PER SEAT POSITIONING, BLOCK TIME, WAITING TIME, SAY TWICE, FAST"
+  },
+  {
+   "variant": "v3",
+   "line": "bm2",
+   "seed": 11,
+   "cer": 0.336,
+   "term_acc": 0.727,
+   "spk_sim": 0.931,
+   "terms": {
+    "Pilatus": 1.0,
+    "PC-12": 0.6,
+    "King Air": 1.0,
+    "B200": 1.0,
+    "Phenom": 0.71,
+    "300": 1.0,
+    "Gulfstream": 1.0,
+    "G550": 1.0,
+    "Udaipur": 1.0,
+    "Leh": 1.0,
+    "Kedarnath": 0.67
+   },
+   "transcript_en": "the Pilatus BC-12, the King Air B-200, the Phenon 300, and the Gulfstream G-550 fly from Delhi to Udaipur, Leh and Kiranath."
+  },
+  {
+   "variant": "v3",
+   "line": "bm3",
+   "seed": 11,
+   "cer": 0.019,
+   "term_acc": 0.923,
+   "spk_sim": 0.913,
+   "terms": {
+    "NSOP": 1.0,
+    "operator": 1.0,
+    "empty leg": 1.0,
+    "Agusta": 0.86,
+    "helicopter": 1.0,
+    "Cessna": 1.0,
+    "Citation": 1.0,
+    "XLS": 0.75,
+    "helipad": 1.0,
+    "hangar": 1.0,
+    "handling": 1.0,
+    "hot and high": 1.0,
+    "Kedarnath": 1.0
+   },
+   "transcript_en": "an NSOP operator, an empty leg, an Augusta helicopter and a Cessna Citation XLF's helipad, hangar, handling, hot and high at Kedarnath."
+  },
+  {
+   "variant": "v3",
+   "line": "lg1",
+   "seed": 11,
+   "cer": 0.276,
+   "term_acc": 1.0,
+   "spk_sim": 0.934,
+   "terms": {
+    "BNS": 1.0,
+    "BNSS": 1.0,
+    "BSA": 1.0,
+    "IPC": 1.0,
+    "CrPC": 1.0,
+    "Evidence Act": 1.0,
+    "1 July": 1.0,
+    "2024": 1.0
+   },
+   "transcript_en": "Under the BNS, the BNSS, and the BSA, the old IPCC-RPCA and Evidence Act were replaced on 1 July 2024."
+  },
+  {
+   "variant": "v3",
+   "line": "lg2",
+   "seed": 11,
+   "cer": 0.021,
+   "term_acc": 0.857,
+   "spk_sim": 0.921,
+   "terms": {
+    "habeas corpus": 1.0,
+    "sub judice": 0.7,
+    "suo motu": 1.0,
+    "prima facie": 1.0,
+    "res judicata": 1.0,
+    "bona fide": 1.0,
+    "Latin": 1.0
+   },
+   "transcript_en": "habeas corpus subjudis suomotu prima facie res judicata bona fide. Six Latin legal phrases said six times swiftly."
+  },
+  {
+   "variant": "v3",
+   "line": "lg3",
+   "seed": 11,
+   "cer": 0.065,
+   "term_acc": 0.75,
+   "spk_sim": 0.942,
+   "terms": {
+    "FIR": 1.0,
+    "anticipatory bail": 1.0,
+    "affidavit": 1.0,
+    "vakalatnama": 0.67,
+    "RERA": 1.0,
+    "POCSO": 0.5,
+    "NDPS": 1.0,
+    "lawyer": 1.0
+   },
+   "transcript_en": "file an FIR, seek anticipatory bail, swear an affidavit, sign a vehicle at NAMA, and if RERA, POXO or NDPS applies, call your lawyer first."
+  },
+  {
+   "variant": "v2",
+   "line": "we1",
+   "seed": 11,
+   "cer": 0.797,
+   "term_acc": 0.857,
+   "spk_sim": 0.94,
+   "terms": {
+    "DGCA": 1.0,
+    "CPL": 1.0,
+    "Air NAV": 0.57,
+    "MET": 1.0,
+    "Air Regs": 1.0,
+    "Tech General": 1.0,
+    "Tech Specific": 1.0,
+    "RTR": 1.0,
+    "QNH": 1.0,
+    "QFE": 1.0,
+    "VOR": 1.0,
+    "NDB": 0.5,
+    "DME": 1.0,
+    "ILS": 1.0
+   },
+   "transcript_en": "DGCA ka CPL paper, AirNow, MET, Airregs, Tech General or Tech Specific RTR ke liye QNH, QFE, VOR, NDV, DME or ILS, sab ek saath bina atke"
+  },
+  {
+   "variant": "v2",
+   "line": "we2",
+   "seed": 11,
+   "cer": 0.15,
+   "term_acc": 1.0,
+   "spk_sim": 0.924,
+   "terms": {
+    "METAR": 0.83,
+    "CB": 1.0,
+    "TAF": 1.0,
+    "TEMPO": 1.0,
+    "NOTAM": 1.0,
+    "runway closed": 1.0
+   },
+   "transcript_en": "Meetar में CB, TAF में tempo, Notam में runway closed, pilot पहले Meetar पढ़ता है, फिर TAF, फिर Notam, Meetar, TAF, Notam, तीन बार जल्दी बोलो."
+  },
+  {
+   "variant": "v2",
+   "line": "we3",
+   "seed": 11,
+   "cer": 0.871,
+   "term_acc": 1.0,
+   "spk_sim": 0.939,
+   "terms": {
+    "eGCA": 1.0,
+    "portal": 1.0,
+    "FAQ": 1.0,
+    "Computer Number": 1.0,
+    "Class 2": 1.0,
+    "Class 1": 1.0,
+    "medical": 1.0,
+    "FRTOL": 1.0,
+    "application": 1.0,
+    "reject": 1.0
+   },
+   "transcript_en": "EGCA Portal का FAQ पढ़ो, Computer Number, Class 2 Medical, Class 1 Medical और FRTOL एक भी गस्दी तो Application Reject."
+  },
+  {
+   "variant": "v2",
+   "line": "we4",
+   "seed": 11,
+   "cer": 1.062,
+   "term_acc": 1.0,
+   "spk_sim": 0.932,
+   "terms": {
+    "altimeter": 1.0,
+    "airspeed indicator": 1.0,
+    "attitude indicator": 1.0,
+    "lift": 1.0,
+    "weight": 1.0,
+    "thrust": 1.0,
+    "drag": 1.0,
+    "Bernoulli": 1.0,
+    "pressure": 1.0,
+    "speed": 1.0
+   },
+   "transcript_en": "Altimeter, Air Speed Indicator, Attitude Indicator, Lift Weight, Thrust or Drag, Bernoulli Bole, Pressure Kam To Speed Zyada"
+  },
+  {
+   "variant": "v2",
+   "line": "fs1",
+   "seed": 11,
+   "cer": 0.629,
+   "term_acc": 0.833,
+   "spk_sim": 0.937,
+   "terms": {
+    "ATPL": 1.0,
+    "CPL": 1.0,
+    "Class 2": 0.71,
+    "medical": 1.0,
+    "DGCA": 1.0,
+    "Computer Number": 1.0
+   },
+   "transcript_en": "ATPL के लिए पहले CPL, CPL के लिए पहले Class to Medical और दोनों के लिए DGCA का Computer Number, ATPL, CPL, DGCA बोलो बिना रुके."
+  },
+  {
+   "variant": "v2",
+   "line": "fs2",
+   "seed": 11,
+   "cer": 0.115,
+   "term_acc": 0.75,
+   "spk_sim": 0.935,
+   "terms": {
+    "cumulonimbus": 1.0,
+    "turbulence": 1.0,
+    "icing": 1.0,
+    "windshear": 1.0,
+    "SIGMET": 1.0,
+    "route": 0.5,
+    "Mayday": 0.33,
+    "Pan-Pan": 1.0
+   },
+   "transcript_en": "Cumulonimbus के नीचे Turbulence, Icing और Windshear. Sigmet आये तो Root बदलो, मेडे नहीं, Pan-Pan भी नहीं."
+  },
+  {
+   "variant": "v2",
+   "line": "fs3",
+   "seed": 11,
+   "cer": 0.86,
+   "term_acc": 1.0,
+   "spk_sim": 0.938,
+   "terms": {
+    "squawk": 1.0,
+    "7700": 1.0,
+    "emergency": 1.0,
+    "7600": 1.0,
+    "radio fail": 0.8,
+    "7500": 1.0,
+    "hijack": 1.0,
+    "transponder": 1.0
+   },
+   "transcript_en": "Squawk 7700 Emergency, 7600 Radio Fair, 7500 Hijack, Transponder Pe 3 Code, 3 O Yad."
+  },
+  {
+   "variant": "v2",
+   "line": "bm1",
+   "seed": 11,
+   "cer": 0.016,
+   "term_acc": 1.0,
+   "spk_sim": 0.928,
+   "terms": {
+    "positioning": 1.0,
+    "block time": 1.0,
+    "waiting time": 1.0,
+    "private jet": 1.0,
+    "per aircraft": 1.0,
+    "per seat": 1.0
+   },
+   "transcript_en": "POSITIONING PLUS BLOCK TIME PLUS WAITING TIME A private jet quote is priced per aircraft, not per seat. POSITIONING, BLOCK TIME, WAITING TIME, SAY TWICE FAST"
+  },
+  {
+   "variant": "v2",
+   "line": "bm2",
+   "seed": 11,
+   "cer": 0.336,
+   "term_acc": 0.727,
+   "spk_sim": 0.932,
+   "terms": {
+    "Pilatus": 1.0,
+    "PC-12": 0.6,
+    "King Air": 1.0,
+    "B200": 1.0,
+    "Phenom": 0.71,
+    "300": 1.0,
+    "Gulfstream": 1.0,
+    "G550": 1.0,
+    "Udaipur": 1.0,
+    "Leh": 1.0,
+    "Kedarnath": 0.67
+   },
+   "transcript_en": "the Pilatus BC-12, the King Air B-200, the Phenon-300 and the Gulfstream G-550 fly from Delhi to Udaipur, Leh and Gidanath."
+  },
+  {
+   "variant": "v2",
+   "line": "bm3",
+   "seed": 11,
+   "cer": 0.048,
+   "term_acc": 0.846,
+   "spk_sim": 0.929,
+   "terms": {
+    "NSOP": 1.0,
+    "operator": 1.0,
+    "empty leg": 1.0,
+    "Agusta": 0.86,
+    "helicopter": 1.0,
+    "Cessna": 1.0,
+    "Citation": 1.0,
+    "XLS": 1.0,
+    "helipad": 0.75,
+    "hangar": 1.0,
+    "handling": 1.0,
+    "hot and high": 1.0,
+    "Kedarnath": 0.78
+   },
+   "transcript_en": "an NSOP Operator, an Empty Leg, an Augusta Helicopter, and a Cessna Citation XLSS Helibad, Hangar, Handling Hot and High at Kidanath."
+  },
+  {
+   "variant": "v2",
+   "line": "lg1",
+   "seed": 11,
+   "cer": 0.276,
+   "term_acc": 0.875,
+   "spk_sim": 0.946,
+   "terms": {
+    "BNS": 1.0,
+    "BNSS": 0.6,
+    "BSA": 1.0,
+    "IPC": 1.0,
+    "CrPC": 1.0,
+    "Evidence Act": 1.0,
+    "1 July": 1.0,
+    "2024": 1.0
+   },
+   "transcript_en": "Under the BNS, the BNS and the BSA, the old IPC, CRPC and Evidence Act were replaced on 1 July 2024."
+  },
+  {
+   "variant": "v2",
+   "line": "lg2",
+   "seed": 11,
+   "cer": 0.031,
+   "term_acc": 0.857,
+   "spk_sim": 0.924,
+   "terms": {
+    "habeas corpus": 1.0,
+    "sub judice": 0.6,
+    "suo motu": 1.0,
+    "prima facie": 1.0,
+    "res judicata": 1.0,
+    "bona fide": 1.0,
+    "Latin": 1.0
+   },
+   "transcript_en": "habeas corpus, sub judas, suo motu, prima facie, res judicata, bona fide, six Latin legal phrases said six times swiftly."
+  },
+  {
+   "variant": "v2",
+   "line": "lg3",
+   "seed": 11,
+   "cer": 0.093,
+   "term_acc": 0.625,
+   "spk_sim": 0.94,
+   "terms": {
+    "FIR": 1.0,
+    "anticipatory bail": 1.0,
+    "affidavit": 1.0,
+    "vakalatnama": 0.67,
+    "RERA": 0.6,
+    "POCSO": 0.5,
+    "NDPS": 0.8,
+    "lawyer": 1.0
+   },
+   "transcript_en": "File an FIR, seek anticipatory bail, swear an affidavit, sign a vehicle at NAMA, and if RIDA, POXO or NDP as applies, call your lawyer first."
+  }
+ ],
+ "spelling_test": {
+  "ked1_s11": {
+   "text": "We flew to Kedarnath today.",
+   "term": "Kedarnath",
+   "heard": "We flew to Kedarnath today.",
+   "hit": 1.0
+  },
+  "ked1_s23": {
+   "text": "We flew to Kedarnath today.",
+   "term": "Kedarnath",
+   "heard": "We flew to Kedarnath today.",
+   "hit": 1.0
+  },
+  "ked2_s11": {
+   "text": "We flew to Kedaarnaath today.",
+   "term": "Kedarnath",
+   "heard": "We flew to Kedarnath today.",
+   "hit": 1.0
+  },
+  "ked2_s23": {
+   "text": "We flew to Kedaarnaath today.",
+   "term": "Kedarnath",
+   "heard": "We flew to Kedarnath today.",
+   "hit": 1.0
+  },
+  "ked3_s11": {
+   "text": "We flew to Kay-daar-naath today.",
+   "term": "Kedarnath",
+   "heard": "We flew to Kedar, not today.",
+   "hit": 0.7
+  },
+  "ked3_s23": {
+   "text": "We flew to Kay-daar-naath today.",
+   "term": "Kedarnath",
+   "heard": "We flew to K, Darnath today.",
+   "hit": 0.8
+  },
+  "vak1_s11": {
+   "text": "Please sign a vakalatnama today.",
+   "term": "vakalatnama",
+   "heard": "Please sign Avakalat Nama today.",
+   "hit": 1.0
+  },
+  "vak1_s23": {
+   "text": "Please sign a vakalatnama today.",
+   "term": "vakalatnama",
+   "heard": "Please sign a Vikalat Nama today.",
+   "hit": 0.83
+  },
+  "vak2_s11": {
+   "text": "Please sign a vakaalat-naama today.",
+   "term": "vakalatnama",
+   "heard": "Please sign Avakalat Nama today.",
+   "hit": 1.0
+  },
+  "vak2_s23": {
+   "text": "Please sign a vakaalat-naama today.",
+   "term": "vakalatnama",
+   "heard": "Please sign a Vakalat Nama today.",
+   "hit": 1.0
+  },
+  "vak3_s11": {
+   "text": "Please sign a wakaalat naama today.",
+   "term": "vakalatnama",
+   "heard": "Please sign Awakalat Naama today.",
+   "hit": 0.83
+  },
+  "vak3_s23": {
+   "text": "Please sign a wakaalat naama today.",
+   "term": "vakalatnama",
+   "heard": "Please sign a Vakal at Nama today.",
+   "hit": 1.0
+  },
+  "pc1_s11": {
+   "text": "The Pilatus P C twelve is ready.",
+   "term": "PC-12",
+   "heard": "The Pilatus BC-12 is ready.",
+   "hit": 0.6
+  },
+  "pc1_s23": {
+   "text": "The Pilatus P C twelve is ready.",
+   "term": "PC-12",
+   "heard": "The Pilatus PC-12 is ready!",
+   "hit": 1.0
+  },
+  "pc2_s11": {
+   "text": "The Pilatus P. C. twelve is ready.",
+   "term": "PC-12",
+   "heard": "The Pilates BC-12 is ready.",
+   "hit": 0.6
+  },
+  "pc2_s23": {
+   "text": "The Pilatus P. C. twelve is ready.",
+   "term": "PC-12",
+   "heard": "The Pilatus PC-12 is ready.",
+   "hit": 1.0
+  },
+  "pc3_s11": {
+   "text": "The Pilatus Pee Cee twelve is ready.",
+   "term": "PC-12",
+   "heard": "The Pilatus PC-12 is ready!",
+   "hit": 1.0
+  },
+  "pc3_s23": {
+   "text": "The Pilatus Pee Cee twelve is ready.",
+   "term": "PC-12",
+   "heard": "The Pilatus PC-12 is ready!",
+   "hit": 1.0
+  },
+  "phe1_s11": {
+   "text": "The Phenom three hundred is ready.",
+   "term": "Phenom",
+   "heard": "So, Phenom 300 is ready.",
+   "hit": 1.0
+  },
+  "phe1_s23": {
+   "text": "The Phenom three hundred is ready.",
+   "term": "Phenom",
+   "heard": "The Phenom 300 is ready.",
+   "hit": 1.0
+  },
+  "phe2_s11": {
+   "text": "The Fee-nom three hundred is ready.",
+   "term": "Phenom",
+   "heard": "The Phenom 300 is ready.",
+   "hit": 1.0
+  },
+  "phe2_s23": {
+   "text": "The Fee-nom three hundred is ready.",
+   "term": "Phenom",
+   "heard": "The Phenom 300 is ready.",
+   "hit": 1.0
+  },
+  "sj1_s11": {
+   "text": "The matter is sub judice now.",
+   "term": "sub judice",
+   "heard": "The matter is subdued as now.",
+   "hit": 0.5
+  },
+  "sj1_s23": {
+   "text": "The matter is sub judice now.",
+   "term": "sub judice",
+   "heard": "The matter is sub-Judas now.",
+   "hit": 0.6
+  },
+  "sj2_s11": {
+   "text": "The matter is sub joo-dih-see now.",
+   "term": "sub judice",
+   "heard": "The matter is subjew, dicey now.",
+   "hit": 0.8
+  },
+  "sj2_s23": {
+   "text": "The matter is sub joo-dih-see now.",
+   "term": "sub judice",
+   "heard": "The matter is subju, D.O.C. now.",
+   "hit": 0.7
+  },
+  "ws1_s11": {
+   "text": "नीचे विंडशियर और आइसिंग है।",
+   "term": "windshear",
+   "heard": "Niche windshear or icing hai.",
+   "hit": 1.0
+  },
+  "ws1_s23": {
+   "text": "नीचे विंडशियर और आइसिंग है।",
+   "term": "windshear",
+   "heard": "Nechi rinsher or icing hai.",
+   "hit": 0.6
+  },
+  "ws2_s11": {
+   "text": "नीचे विंड शियर और आइसिंग है।",
+   "term": "windshear",
+   "heard": "Niche wind shear or icing hai.",
+   "hit": 1.0
+  },
+  "ws2_s23": {
+   "text": "नीचे विंड शियर और आइसिंग है।",
+   "term": "windshear",
+   "heard": "Niche wind shear or icing hair.",
+   "hit": 1.0
+  },
+  "ws3_s11": {
+   "text": "नीचे विन्ड-शीयर और आइसिंग है।",
+   "term": "windshear",
+   "heard": "Niche wind shear or icing hai.",
+   "hit": 1.0
+  },
+  "ws3_s23": {
+   "text": "नीचे विन्ड-शीयर और आइसिंग है।",
+   "term": "windshear",
+   "heard": "Neche rinse sheared or icing hair.",
+   "hit": 0.7
+  },
+  "tg1_s11": {
+   "text": "अगला पेपर टेक जनरल है।",
+   "term": "Tech General",
+   "heard": "Agla paper take general hai.",
+   "hit": 0.75
+  },
+  "tg1_s23": {
+   "text": "अगला पेपर टेक जनरल है।",
+   "term": "Tech General",
+   "heard": "The other paper takes general.",
+   "hit": 0.78
+  },
+  "tg2_s11": {
+   "text": "अगला पेपर टैक जनरल है।",
+   "term": "Tech General",
+   "heard": "ABYA PEPER TAT GENERAL है.",
+   "hit": 0.73
+  },
+  "tg2_s23": {
+   "text": "अगला पेपर टैक जनरल है।",
+   "term": "Tech General",
+   "heard": "The next paper is Tag General.",
+   "hit": 0.73
+  },
+  "tg3_s11": {
+   "text": "अगला पेपर टेक्निकल जनरल है।",
+   "term": "Technical General",
+   "heard": "and the paper is technical general.",
+   "hit": 1.0
+  },
+  "tg3_s23": {
+   "text": "अगला पेपर टेक्निकल जनरल है।",
+   "term": "Technical General",
+   "heard": "The next paper is Technical General.",
+   "hit": 1.0
+  },
+  "sg1_s11": {
+   "text": "सिगमेट आए तो रूट बदलो।",
+   "term": "SIGMET",
+   "heard": "Sigmint, I, to root, badlo.",
+   "hit": 0.71
+  },
+  "sg1_s23": {
+   "text": "सिगमेट आए तो रूट बदलो।",
+   "term": "SIGMET",
+   "heard": "sigmit i to root badlo",
+   "hit": 0.71
+  },
+  "sg2_s11": {
+   "text": "सिग मेट आए तो रूट बदलो।",
+   "term": "SIGMET",
+   "heard": "SIGMETE AI, THOUGH ROOT BADLOW.",
+   "hit": 1.0
+  },
+  "sg2_s23": {
+   "text": "सिग मेट आए तो रूट बदलो।",
+   "term": "SIGMET",
+   "heard": "SIG MET AYE, TOO ROOT BADLOO",
+   "hit": 1.0
+  }
+ }
+}

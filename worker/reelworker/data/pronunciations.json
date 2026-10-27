@@ -539,7 +539,7 @@
    "match": [
     "SIGMET"
    ],
-   "say": "सिगमेट",
+   "say": "सिग मेट",
    "en": "sig met",
    "accounts": [
     "weone",
@@ -547,7 +547,7 @@
     "bookmycharter"
    ],
    "kind": "word",
-   "note": "said 'SIG-met'"
+   "note": "said 'SIG-met'; two parts read clearly; as one word heard 'sigmint' (test 2026-10-27)"
   },
   {
    "term": "TEMPO",
@@ -639,28 +639,28 @@
    "match": [
     "Tech General"
    ],
-   "say": "टेक जनरल",
+   "say": "टेक्निकल जनरल",
    "en": "tech general",
    "accounts": [
     "weone",
     "flystar"
    ],
    "kind": "word",
-   "note": "Technical General subject"
+   "note": "Technical General subject; 'टेक' is read as 'take'; the full word is clear (test 2026-10-27)"
   },
   {
    "term": "Tech Specific",
    "match": [
     "Tech Specific"
    ],
-   "say": "टेक स्पेसिफ़िक",
+   "say": "टेक्निकल स्पेसिफ़िक",
    "en": "tech specific",
    "accounts": [
     "weone",
     "flystar"
    ],
    "kind": "word",
-   "note": "Technical Specific subject"
+   "note": "Technical Specific subject; 'टेक' is read as 'take' (test 2026-10-27)"
   },
   {
    "term": "Technical General",
@@ -913,7 +913,7 @@
    "match": [
     "windshear"
    ],
-   "say": "विंडशियर",
+   "say": "विंड शियर",
    "en": "windshear",
    "accounts": [
     "weone",
@@ -921,7 +921,7 @@
     "bookmycharter"
    ],
    "kind": "word",
-   "note": ""
+   "note": "split into two words: read as one word it came out 'rinsher' (ear test 2026-10-27)"
   },
   {
    "term": "icing",
@@ -1232,12 +1232,12 @@
     "PC-12"
    ],
    "say": "पी सी ट्वेल्व",
-   "en": "P C twelve",
+   "en": "Pee Cee twelve",
    "accounts": [
     "bookmycharter"
    ],
    "kind": "word",
-   "note": "Pilatus turboprop"
+   "note": "Pilatus turboprop; 'P C' was heard as 'BC' in half the takes; 'Pee Cee' in all (test 2026-10-27)"
   },
   {
    "term": "King Air",
@@ -1754,12 +1754,12 @@
     "vakalatnama"
    ],
    "say": "वकालतनामा",
-   "en": "vakalatnama",
+   "en": "vakaalat-naama",
    "accounts": [
     "legalgroup"
    ],
    "kind": "word",
-   "note": "document that authorises a lawyer"
+   "note": "document that authorises a lawyer; clearer as two long-vowel parts (test 2026-10-27)"
   },
   {
    "term": "anticipatory bail",
