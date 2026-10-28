@@ -535,11 +535,12 @@ async function viewDashboard() {
   const paint = async () => {
     if (!grid.isConnected) return;
     const since = new Date(Date.now() - 30 * 86400e3).toISOString(); const week = Date.now() - 7 * 86400e3;
-    const [, { data: rows }, , { data: ap }] = await Promise.all([loadBrands(),
+    const [, { data: rows }, , { data: ap }, { data: bk_ }] = await Promise.all([loadBrands(),
       sb.from("jobs").select("id,brand,status,created_at,updated_at,ig:output->ig->>state,posted:output->ig->>posted_at").eq("kind", "reel").gte("created_at", since).limit(500),
       loadSettings().catch(() => {}),
-      sb.from("jobs").select("status,brand,input").eq("kind", "suggest").eq("input->>autopilot", "true").order("created_at", { ascending: false }).limit(40)]);
-    const all = rows || []; const st = (b) => all.filter((j) => (j.brand || "weone") === b);
+      sb.from("jobs").select("status,brand,input").eq("kind", "suggest").eq("input->>autopilot", "true").order("created_at", { ascending: false }).limit(40),
+      sb.from("jobs").select("brand,slot:output->>post_slot").eq("kind", "reel").eq("status", "done").not("output->>post_slot", "is", null).gte("output->>post_slot", new Date().toISOString()).limit(100)]);
+    const all = rows || []; const st = (b) => all.filter((j) => (j.brand || "weone") === b); const booked = bk_ || [];
     const postedWeek = (list) => list.filter((j) => j.ig === "posted" && j.posted && Date.parse(j.posted) > week).length;
     const apLast = (bid) => (ap || []).find((j) => (j.brand || "weone") === bid);
     const apOn = (S.brands || BRANDS_FALLBACK).filter((b) => b.status === "live" && apOf(b.id).on).length;
@@ -572,6 +573,11 @@ async function viewDashboard() {
           return h("div", { cls: "acct-ap" }, apSwitch(b, () => paint().catch(() => {})),
             h("span", { cls: "small muted" }, busy ? "Running now…" : a.on ? `Daily ${slotLabel(a.time || "13:30")} · next ${tzClock(nextRun(a, run))}` : "Off · tap to choose a daily time"),
             a.on && !anyPosting(b.id) ? h("span", { cls: "tiny", style: "color:#6E4300" }, "Nothing connected: reels wait for you") : null); })() : null,
+        live ? (() => { const ps = psOf(b.id); const next = booked.filter((x) => x.brand === b.id && Date.parse(x.slot) > Date.now()).sort((x, y) => Date.parse(x.slot) - Date.parse(y.slot));
+          return h("div", { cls: "acct-ap" }, psSwitch(b, () => paint().catch(() => {})),
+            ps.on ? h("button", { cls: "linkless small muted", style: "text-align:left", onclick: () => psDialog(b, () => paint().catch(() => {})), title: "Change posting times" },
+                `Posts at ${ps.times.map(slotLabel).join(", ")}${next.length ? ` · ${next.length} booked, next ${tzClock(next[0].slot)}` : ""}`)
+              : h("span", { cls: "small muted" }, "Off · approved reels post right away")); })() : null,
         h("div", { cls: "acct-foot" }, plat(b),
           safeUrl(b.website) ? h("a", { cls: "acct-web", href: b.website, target: "_blank", rel: "noopener noreferrer" }, h("img", { src: PLAT_IMG.web, alt: "", width: 16, height: 16 }), host(b.website)) : null,
           h("button", { cls: "btn quiet", onclick: () => { setBrand(b.id); go("account"); }, "aria-label": `Settings of ${b.name}` }, icon("gear", 16), "Settings"),
@@ -781,7 +787,7 @@ function apDialog(b, after) {
     catch (e) { msg.textContent = errText(e); go_.disabled = false; } } }, "Turn on");
   const d = h("dialog", { "aria-label": `Autopilot for ${b.name}`, cls: "connect" }, h("div", { style: "padding:20px 20px 4px" },
     h("h2", { style: "font-size:22px" }, `Autopilot for ${b.name}`),
-    h("p", { cls: "small muted", style: "margin:6px 0 12px" }, "Every day at this time it researches what is trending, picks the topic most likely to perform, makes the reel and posts it. Nobody has to tap anything."),
+    h("p", { cls: "small muted", style: "margin:6px 0 12px" }, "Every day at this time it researches what is trending, picks the topic most likely to perform and makes the reel. When it goes out is set by Scheduled posting (off = right after approval)."),
     h("label", { cls: "fld" }, h("span", {}, "Daily time (India)"), time),
     h("p", { cls: "tiny faint", style: "margin-top:6px" }, "Suggested: a time at least 90 minutes away from the other accounts, so the Mac makes one reel at a time."),
     posts ? null : h("p", { cls: "small", style: "margin-top:10px;color:#6E4300" }, "Nothing is connected for this account yet, so its reels will wait in Production for you to post. Connect Instagram, Facebook or LinkedIn in its Settings to post automatically."),
@@ -797,6 +803,53 @@ async function apToggle(b, on, after) {
 const apSwitch = (b, after, label = "Autopilot") => { const ap = apOf(b.id);
   return h("button", { cls: "switch" + (ap.on ? " on" : ""), role: "switch", "aria-checked": String(!!ap.on), "aria-label": `${label} for ${b.name}`,
     onclick: (e) => { e.stopPropagation(); apToggle(b, !ap.on, after); } }, h("i", { "aria-hidden": "true" }), h("span", {}, label)); };
+// ---------------------------------------------------------------- Scheduled posting: when approved reels go out (separate from Autopilot, which only makes them)
+const psOf = (b = S.brand) => { const v = S.settings?.[bkey("post_slots", b)] || {}; return { on: !!v.on, times: Array.isArray(v.times) ? v.times : [] }; };
+// the account's own best hour so far: its past Instagram posts grouped by India hour, ranked by reach (reels) or likes
+function bestTimes(bid) {
+  const posts = (S.settings?.[bkey("ig_library", bid)]?.posts || []).filter((p) => p.at);
+  const useReach = posts.filter((p) => p.reach != null).length >= 8; const val = (p) => useReach ? p.reach : (p.likes || 0) + 2 * (p.comments || 0);
+  const by = {}; for (const p of posts) { if (useReach && p.reach == null) continue; const hr = new Date(Date.parse(p.at) + 330 * 60e3).getUTCHours(); (by[hr] ||= []).push(val(p)); }
+  const med = (a) => { const x = [...a].sort((m, n) => m - n); return x[Math.floor(x.length / 2)]; };
+  const rows = Object.entries(by).filter(([, v]) => v.length >= 2).map(([hr, v]) => ({ hr: Number(hr), n: v.length, med: med(v) })).sort((a, b) => b.med - a.med);
+  return { rows, measure: useReach ? "reach" : "likes and comments", total: posts.length };
+}
+function psDialog(b, after) {
+  const ps = psOf(b.id); const best = bestTimes(b.id);
+  const sug = best.rows.slice(0, 2).map((r) => `${String(r.hr).padStart(2, "0")}:00`);
+  const start = ps.times.length ? ps.times : sug.length ? sug.slice(0, 1) : ["19:00"];
+  const ins = [0, 1, 2].map((i) => h("input", { type: "time", value: start[i] || "", "aria-label": `Posting time ${i + 1} (India)`, style: "width:140px" }));
+  const msg = statusMsg();
+  const go_ = h("button", { cls: "btn primary", onclick: async () => {
+    const times = ins.map((x) => x.value).filter(Boolean);
+    if (!times.length) { msg.textContent = "Choose at least one time."; ins[0].focus(); return; }
+    go_.disabled = true; msg.textContent = "Saving…";
+    try { await rpc("set_post_slots", { p_brand: b.id, p_on: true, p_times: times }); await loadSettings();
+      toast(`Scheduled posting on for ${b.name}: ${[...new Set(times)].sort().map(slotLabel).join(", ")}.`); d.close(); after?.(); }
+    catch (e) { msg.textContent = errText(e); go_.disabled = false; } } }, "Save");
+  const d = h("dialog", { "aria-label": `Scheduled posting for ${b.name}`, cls: "connect" }, h("div", { style: "padding:20px 20px 4px" },
+    h("h2", { style: "font-size:22px" }, `Scheduled posting for ${b.name}`),
+    h("p", { cls: "small muted", style: "margin:6px 0 12px" }, "Approved reels wait and go out at the next free time below (one reel per time slot), on every page this account has connected. Posting runs in the cloud, so the Mac can be off. \"Post now\" on a reel still posts at once."),
+    h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, ins),
+    h("p", { cls: "tiny faint", style: "margin-top:6px" }, "India time. Up to 3 a day; leave a box empty to use fewer."),
+    best.rows.length ? h("div", { cls: "small", style: "margin-top:12px" }, h("b", {}, "This account's best hours so far "), h("span", { cls: "muted" }, `(median ${best.measure} of its last ${best.total} Instagram posts, hours with 2+ posts):`),
+      h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px" }, best.rows.slice(0, 4).map((r) => h("button", { cls: "btn quiet", style: "padding:4px 10px",
+        onclick: () => { const e = ins.find((x) => !x.value) || ins[0]; e.value = `${String(r.hr).padStart(2, "0")}:00`; } }, `${slotLabel(String(r.hr).padStart(2, "0") + ":00")} · ${nfmt(r.med)} (${r.n})`))),
+      h("p", { cls: "tiny faint", style: "margin-top:4px" }, best.total < 30 ? "Few posts behind this: treat it as a hint and compare results on the Insights page." : "Tap an hour to use it."))
+      : h("p", { cls: "small muted", style: "margin-top:12px" }, "Not enough past Instagram posts with results to suggest an hour yet; pick a time and compare results on the Insights page."),
+    msg), h("div", { cls: "dlg-foot" }, h("button", { cls: "btn quiet", onclick: () => d.close() }, "Cancel"), go_));
+  d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal(); ins[0].focus();
+}
+async function psToggle(b, on, after) {
+  if (on) return psDialog(b, after);
+  try { await rpc("set_post_slots", { p_brand: b.id, p_on: false, p_times: psOf(b.id).times }); await loadSettings();
+    toast(`Scheduled posting off for ${b.name}: approved reels post right away. Reels already booked keep their time.`); }
+  catch (e) { toast(errText(e), { err: true }); }
+  after?.();
+}
+const psSwitch = (b, after) => { const ps = psOf(b.id);
+  return h("button", { cls: "switch" + (ps.on ? " on" : ""), role: "switch", "aria-checked": String(ps.on), "aria-label": `Scheduled posting for ${b.name}`,
+    onclick: (e) => { e.stopPropagation(); psToggle(b, !ps.on, after); } }, h("i", { "aria-hidden": "true" }), h("span", {}, "Scheduled posting")); };
 function autopilotPanel() {
   const box = h("section", { cls: "panel ap", "aria-label": "Autopilot" });
   const paint = async () => {
@@ -824,7 +877,7 @@ function autopilotPanel() {
     box.replaceChildren(
       h("div", { cls: "igp-head" },
         h("div", {}, h("h3", {}, h("i", { cls: "lamp " + (ap.on ? "ok" : "") }), ap.on ? `Autopilot is on: every day at ${slotLabel(ap.time || "13:30")}` : "Autopilot is off"),
-          h("p", { cls: "small muted", style: "margin-top:4px" }, "Picks today's most viral-ready topic, makes the reel and posts it. No taps needed."),
+          h("p", { cls: "small muted", style: "margin-top:4px" }, "Picks today's most viral-ready topic and makes the reel. Scheduled posting decides when it goes out."),
           ap.on && !running ? h("p", { cls: "tiny faint", style: "margin-top:4px" }, `Next run ${tzClock(nextRun(ap))}.`) : null,
           ins && ins.ok === false ? h("p", { cls: "tiny", style: "margin-top:4px;color:#6E4300" }, "Learning uses likes and comments only. Add the instagram_business_manage_insights permission to the Instagram token for views, sends and saves.") : null),
         h("div", { cls: "igp-btns" },
@@ -1074,7 +1127,9 @@ function autoPostLine(j) {
   if (!autoOn(j) || !d) return "Ready for your review";
   if (j.output?.hold) return "Ready for review. Auto-post paused while you check.";
   const left = (Date.parse(d) - Date.now()) / 1000;
-  return left > 0 ? `Ready. Posts to Instagram automatically at ${clock(d)} unless you act.` : "Ready. Posting to Instagram now…";
+  const ps = psOf(j.brand || "weone");
+  if (ps.on) return left > 0 ? `Ready. Approved automatically at ${clock(d)} unless you act, then posted at the next slot (${ps.times.map(slotLabel).join(", ")}).` : "Ready. Booking the next posting slot…";
+  return left > 0 ? `Ready. Posts automatically at ${clock(d)} unless you act.` : "Ready. Posting now…";
 }
 // Buttons keep their state in S (not in the DOM), so the 5-second refresh can never reset a half-done tap.
 async function act(j, kind, fn, okMsg) {
@@ -1121,8 +1176,8 @@ async function reviewView(j) {
     oninput: (e) => { S.drafts[j.id] = e.target.value; } });
   notes.value = S.drafts[j.id] || "";
   const changeBox = h("div", { style: openBox ? "" : "display:none" }, notes);
-  const approve = h("button", { cls: "btn go", disabled: !!busy, onclick: () => act(j, "approve", () => rpc("set_review_decision", { p_job: j.id, p_decision: "approve", p_notes: null }), (row) => row?.output?.ig?.state ? "Approved. Posting to its connected pages now; the links appear in Library." : ownPosting(j) ? "Approved. It's in the Library." : `Approved. It's in ${brandOf(j.brand).name}'s Library (nothing was posted).`) },
-    icon("check"), busy === "approve" ? "Approving…" : autoOn(j) ? "Approve & post now" : "Approve");
+  const approve = h("button", { cls: "btn go", disabled: !!busy, onclick: () => act(j, "approve", () => rpc("set_review_decision", { p_job: j.id, p_decision: "approve", p_notes: null }), (row) => row?.output?.post_slot ? `Approved. Scheduled for ${tzClock(row.output.post_slot)} on its connected pages.` : row?.output?.ig?.state ? "Approved. Posting to its connected pages now; the links appear in Library." : ownPosting(j) ? "Approved. It's in the Library." : `Approved. It's in ${brandOf(j.brand).name}'s Library (nothing was posted).`) },
+    icon("check"), busy === "approve" ? "Approving…" : autoOn(j) ? (psOf(j.brand || "weone").on ? "Approve & schedule" : "Approve & post now") : "Approve");
   const change = h("button", { cls: "btn", disabled: !!busy, onclick: () => {
     if (!S.changeOpen[j.id]) { S.changeOpen[j.id] = true; if (deadline && !o.hold) rpc("hold_auto_post", { p_job: j.id, p_hold: true }).then(patchLocal).catch(() => {});   // writing changes pauses auto-post
       refreshProduction(); setTimeout(() => document.querySelector(`[data-notes="${j.id}"]`)?.focus(), 60); return; }
@@ -1222,7 +1277,7 @@ function postBadge(j, p) {
   if (st === "uploading") return row("wait", `Uploading to ${name}…`);
   if (st === "processing") return row("wait", `${name} is processing the video…`);
   if (st === "scheduled") { const soon = Date.parse(x.at) <= Date.now() + 60e3;
-    return [row(soon ? "wait" : "", soon ? `Posting to ${name} in about a minute` : `${name}: next try ${tzClock(x.at)}`), x.error ? h("p", { cls: "ig-note" }, x.error) : null]; }
+    return [row(soon ? "wait" : "", soon ? `Posting to ${name} in about a minute` : x.error || !j.output?.post_slot ? `${name}: next try ${tzClock(x.at)}` : `${name}: scheduled for ${tzClock(x.at)}`), x.error ? h("p", { cls: "ig-note" }, x.error) : null]; }
   if (st === "queued") return row("wait", `Posting to ${name} shortly`);
   if (st === "failed") return [row("bad", `${name}: posting failed`), h("p", { cls: "ig-note" }, (x.error || "").replace(/^Posting failed:\s*/, ""))];
   return row("", `Not posted to ${name}`);
