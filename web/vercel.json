@@ -1,5 +1,5 @@
 {
- "cleanUrls": true,
+ "cleanUrls": false,
  "headers": [
   {
    "source": "/(.*)",
@@ -46,6 +46,12 @@
      "value": "/"
     }
    ]
+  }
+ ],
+ "rewrites": [
+  {
+   "source": "/privacy",
+   "destination": "/privacy.html"
   }
  ]
 }

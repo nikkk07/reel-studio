@@ -216,7 +216,7 @@ async function notifyReady(j) {
   const auto = j.output?.autopilot_hold ? " Autopilot held it back: it posts only when you approve." : autoOn(j) ? ` It posts to Instagram by itself in ${S.settings?.post_schedule?.review_minutes ?? 5} min unless you act.` : "";
   toast(`Ready for review: ${titleOf(j)}.${auto}`, { ms: 12000, action: { label: "Review", fn: () => go("production", j.id) } });
   if ("Notification" in window && Notification.permission === "granted") {
-    const opts = { body: `${titleOf(j)} is ready.${auto}`, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: j.id, data: { url: "/#/production" } };
+    const opts = { body: `${titleOf(j)} is ready.${auto}`, icon: "icons/icon-192.png?v=2", badge: "icons/icon-192.png?v=2", tag: j.id, data: { url: "/#/production" } };
     try { const reg = await navigator.serviceWorker?.getRegistration(); reg ? reg.showNotification("Reel ready", opts) : new Notification("Reel ready", opts); } catch { /* */ }
   }
 }
@@ -245,7 +245,7 @@ function shell(content, { nav = true } = {}) {
   const initials = (S.session?.user?.email || "?").slice(0, 2).toUpperCase();
   const top = h("header", { cls: "top" }, h("div", { cls: "top-in" },
     studioLevel
-      ? h("a", { cls: "brand plain", href: "#/home", "aria-label": "Reel Studio dashboard" }, h("div", {}, h("b", {}, "Reel Studio"), h("span", {}, "All accounts")))
+      ? h("a", { cls: "brand plain", href: "#/home", "aria-label": "Reel Studio dashboard" }, h("img", { src: "icons/logo-mark.png?v=2", alt: "", width: 34, height: 34, style: "margin-right:2px" }), h("div", {}, h("b", {}, "Reel Studio"), h("span", {}, "All accounts")))
       : h("button", { cls: "brand acct", onclick: () => go("home"), title: "Switch account", "aria-label": `${brandOf().name}. Switch account` }, brandLogo(brandOf(), 36),
           h("div", {}, h("b", {}, brandOf().name), h("span", {}, "Switch account ▾"))),
     nav && S.session ? h("nav", { cls: "nav", "aria-label": "Main" }, items.map((it) => navBtn(it, false))) : null,
