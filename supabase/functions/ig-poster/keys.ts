@@ -1,6 +1,7 @@
 // Studio keys pasted on the site (Pexels, Pixabay, Meta app) are checked here, in the cloud, so a wrong key shows up at once
 // even while the Mac is off. A key is checked when it is saved and again once a day. Keys never leave the server.
 import { type Json, iso, now, minsAgo, rest, setting, secret } from "./db.ts";
+import { r2conf, r2check } from "./r2.ts";
 
 const PEXELS = Deno.env.get("PEXELS_API") ?? "https://api.pexels.com";
 const PIXABAY = Deno.env.get("PIXABAY_API") ?? "https://pixabay.com";
@@ -62,6 +63,15 @@ export async function keysTick(): Promise<Json> {
     if (fresh.updated_at === meta.updated_at)
       await rest("POST", "settings", { key: "meta_app", value: { ...fresh, ...verdict, checked_at: iso(now()) }, updated_at: iso(now()) }, "resolution=merge-duplicates,return=minimal");
     out.meta = verdict.state;
+  }
+  const r2s = await setting("r2");                         // Cloudflare R2: a real list request with the saved keys
+  if (due(r2s) && r2s.account_id && r2s.bucket) {
+    const c = await r2conf(false);
+    const verdict: Json = c ? await r2check(c) : { state: "bad", note: "No R2 keys saved." };
+    const fresh = await setting("r2");
+    if (fresh.updated_at === r2s.updated_at)
+      await rest("POST", "settings", { key: "r2", value: { ...fresh, ...verdict, checked_at: iso(now()) }, updated_at: iso(now()) }, "resolution=merge-duplicates,return=minimal");
+    out.r2 = verdict.state;
   }
   return out;
 }

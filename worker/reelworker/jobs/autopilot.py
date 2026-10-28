@@ -51,7 +51,7 @@ def history(db, days=60, brand="weone", prof=None):
         posted = (o.get("ig") or {}).get("posted_at")
         when = datetime.fromisoformat(posted.replace("Z", "+00:00")).astimezone(IST) if posted else None
         cat = (i.get("concept") or {}).get("category") or i.get("category")
-        out.append({"title": title, "status": r["status"], "category": cat, "lane": lanes.of((i.get("concept") or {}).get("lane") or i.get("lane"), cat, title, prof),
+        out.append({"id": r["id"], "thumb": o.get("thumb"), "permalink": (o.get("ig") or {}).get("permalink"), "title": title, "status": r["status"], "category": cat, "lane": lanes.of((i.get("concept") or {}).get("lane") or i.get("lane"), cat, title, prof),
                     "hook": (i.get("concept") or {}).get("hook"), "autopilot": "autopilot" in i,
                     "posted": when.strftime("%a %H:%M") if when else None, "hours_live": st.get("hours_since_post"),
                     "views": st.get("views"), "reach": st.get("reach"), "likes": st.get("likes"), "comments": st.get("comments"),
@@ -59,8 +59,37 @@ def history(db, days=60, brand="weone", prof=None):
                     "skip_rate": st.get("reels_skip_rate"), "eng": engagement(st), "created": r["created_at"][:10],
                     "posted_at": posted, "critic": (o.get("critic") or {}).get("total"), "qc": (o.get("qc") or {}).get("score"),
                     "words": (o.get("critic") or {}).get("words"), "said": st.get("top_comments") or [],
+                    "opening": o.get("hook") or {}, "duration": o.get("duration"),
                     "media_id": (o.get("ig") or {}).get("media_id")})
     return out
+
+
+def hook_score(h):
+    """How well the first seconds held people: 100 - skip rate (share of plays that left in the first 3 s) when Instagram
+    gives it, else the share of the reel watched on average. None until the reel has results."""
+    if h.get("skip_rate") is not None:
+        return round(100 - float(h["skip_rate"]), 1)
+    if h.get("avg_watch_s") and h.get("duration"):
+        return round(100 * min(1.0, float(h["avg_watch_s"]) / float(h["duration"])), 1)
+    return None
+
+
+def hooks_text(hist, n=5):
+    """The hook bank: openings ranked by how many viewers stayed past the first seconds (real results, best and worst)."""
+    hs = [h for h in hist if (h.get("opening") or {}).get("say") or h.get("hook")]
+    skip = [h for h in hs if h.get("skip_rate") is not None]
+    if len(skip) >= 3:                    # one measure for all, never a mix of two different ones
+        rated = [(round(100 - float(h["skip_rate"]), 1), h) for h in skip]
+    else:
+        rated = [(round(100 * min(1.0, float(h["avg_watch_s"]) / float(h["duration"])), 1), h) for h in hs if h.get("avg_watch_s") and h.get("duration")]
+    rated.sort(key=lambda x: -x[0])
+    if len(rated) < 3:
+        return ""
+    line = lambda sc, h: (f"- hold {sc}%: says \"{((h.get('opening') or {}).get('say') or h.get('hook') or '')[:110]}\" | on screen \"{(h.get('opening') or {}).get('text', '')[:60]}\""
+                          f" | first shot: {(h.get('opening') or {}).get('visual', '')[:60]}")
+    best, worst = rated[:n], rated[-min(3, max(0, len(rated) - n)):] if len(rated) > n else []
+    return ("\nHook bank (how many viewers stayed past the first seconds; copy the pattern, never the words):\n" + "\n".join(line(*x) for x in best)
+            + ("\nWeakest openings (avoid these patterns):\n" + "\n".join(line(*x) for x in worst) if worst else ""))
 
 
 def library(db, brand="weone", studio=None):
@@ -134,7 +163,7 @@ def performance_text(hist, posts=None):
             cats.setdefault(h["category"], []).append(h["eng"])
     if cats:
         lines.append("By category (median eng): " + ", ".join(f"{c} {median(v):.1f} (n={len(v)})" for c, v in sorted(cats.items(), key=lambda x: -median(x[1]))))
-    return "\n".join(lines) + lib
+    return "\n".join(lines) + hooks_text(hist) + lib
 
 
 def score(topics, judged):

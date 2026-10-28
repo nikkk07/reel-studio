@@ -10,6 +10,9 @@ import { liTick } from "./linkedin.ts";
 import { fbTick } from "./facebook.ts";
 import { keysTick } from "./keys.ts";
 import { checksTick } from "./checks.ts";
+import { mediaUrl } from "./media.ts";
+import { retentionTick } from "./retention.ts";
+import { dmTick } from "./dm.ts";
 const API = Deno.env.get("IG_API") ?? "https://graph.instagram.com/v26.0";
 const REFRESH_URL = Deno.env.get("IG_REFRESH_URL") ?? "https://graph.instagram.com/refresh_access_token";
 const MAX_ATTEMPTS = 5;
@@ -28,12 +31,6 @@ async function setIg(job: Json, ig: Json, expect?: string) {
   const rows = await rest("PATCH", `jobs?id=eq.${job.id}&status=eq.done${expect ? `&output->ig->>state=eq.${expect}` : ""}`, { output: out });
   if (rows?.length) job.output = out;
   return !!rows?.length;
-}
-async function sign(path: string, seconds = 7200) {
-  const r = await fetch(`${SB}/storage/v1/object/sign/reels/${path}`, { method: "POST", headers: H, body: JSON.stringify({ expiresIn: seconds }) });
-  if (!r.ok) throw new IGError(`storage link failed (${r.status})`);
-  const j = await r.json(); const u: string = j.signedURL ?? j.signedUrl ?? "";
-  return u.startsWith("http") ? u : `${SB}/storage/v1${u}`;
 }
 
 // ---------------------------------------------------------------- Instagram API
@@ -147,8 +144,8 @@ async function step(job: Json, tok: string, uid: string, b: Brand): Promise<stri
   if (!(await setIg(job, g, prev))) return "taken";
   if (g.container_id) return "re-checking the earlier upload";      // never create a second container for the same reel
   const caption = o.ig_caption || fallbackCaption(o, b);
-  const params: Json = { media_type: "REELS", video_url: await sign(o.ig_video ?? o.video), caption, share_to_feed: "true" };
-  if (o.thumb) params.cover_url = await sign(o.thumb);
+  const params: Json = { media_type: "REELS", video_url: await mediaUrl(o, o.ig_video ?? o.video), caption, share_to_feed: "true" };
+  if (o.thumb) params.cover_url = await mediaUrl(o, o.thumb);
   if (o.title) params.audio_name = `${String(o.title).slice(0, 50)} · ${b.name}`;
   const c = await ig("POST", `${API}/${uid}/media`, tok, params);
   if (!c.id) throw new IGError("Instagram did not accept the video");
@@ -306,5 +303,7 @@ Deno.serve(async (req) => {
   try { res.keys = await keysTick(); } catch (e) { res.keys = { error: String((e as Error).message ?? e) }; }
   try { res.library = await libraryTick(list); } catch (e) { res.library = { error: String((e as Error).message ?? e) }; }
   try { res.checks = await checksTick(list); } catch (e) { res.checks = { error: String((e as Error).message ?? e) }; }
+  try { res.dm = await dmTick(list); } catch (e) { res.dm = { error: String((e as Error).message ?? e) }; }
+  try { res.retention = await retentionTick(); } catch (e) { res.retention = { error: String((e as Error).message ?? e) }; }
   return Response.json(res);
 });

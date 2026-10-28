@@ -79,30 +79,49 @@ def heartbeat_loop(db: Supabase):
                          "cap_hit": reels_today() >= studio.daily_cap(), "keys": studio.sources(),
                          "voices": {"hi": studio.voice_model("hi"), "en": studio.voice_model("en"), "ready": STATUS.get("voices")}},
             }, upsert=True)
-            if time.time() - last_prune > 86400:
+            if time.time() - last_prune > 3600:          # hourly: the Mac keeps only what is still needed
                 prune(db); last_prune = time.time()
         except Exception as e:  # noqa: BLE001
             log.warning("heartbeat failed: %s", e)
         STOP.wait(15)
 
 
+RETAIN_DAYS = 3        # finished masters on the Mac (the posting copy lives in the cloud until it is posted, then 3 days)
+
+
 def prune(db: Supabase):
+    """Keep the Mac's disk small. A reel's work folder (raw footage, voice takes, render parts) is needed only while the
+    reel can still be revised: it goes once the cloud has removed the reel's video (posted 3+ days ago), the reel was
+    stopped/failed a day ago, or after 7 days. Masters in deliverables/ go after 3 days. Running jobs are never touched."""
     try:
-        cutoff = now_iso(datetime.now(timezone.utc) - timedelta(days=30))
-        db.delete("job_events", f"ts=lt.{cutoff}")
+        db.delete("job_events", f"ts=lt.{now_iso(datetime.now(timezone.utc) - timedelta(days=30))}")
         db.delete("pings", f"created_at=lt.{now_iso(datetime.now(timezone.utc) - timedelta(days=1))}")
-        old = db.select("jobs", f"select=id,output&kind=eq.reel&created_at=lt.{cutoff}&output->>storage_prefix=not.is.null")
-        for j in old:
-            prefix = j["output"].get("storage_prefix")
-            files = [f"{prefix}/{o['name']}" for o in db.list_objects(prefix)]
-            db.delete_objects(files)
-            db.update("jobs", f"id=eq.{j['id']}", {"output": {**j["output"], "storage_prefix": None, "pruned": True}})
-        # local disk: job folders (raw footage, takes, chunks) older than 14 days; masters stay in deliverables/
-        n = 0
-        for d in config.JOBS_DIR.iterdir():
-            if d.is_dir() and time.time() - d.stat().st_mtime > 14 * 86400 and not any(d.name == (c or {}).get("id") for c in CURRENT.values()):
+        running = {(c or {}).get("id") for c in CURRENT.values()}
+        dirs = [d for d in config.JOBS_DIR.iterdir() if d.is_dir() and d.name not in running] if config.JOBS_DIR.exists() else []
+        info = {}
+        for k in range(0, len(dirs), 40):
+            ids = ",".join(d.name for d in dirs[k:k + 40] if len(d.name) == 36)
+            if ids:
+                for r in db.select("jobs", f"select=id,status,updated_at,output->>pruned&id=in.({ids})"):
+                    info[r["id"]] = r
+        n = 0; day = 86400; now = time.time()
+        for d in dirs:
+            j = info.get(d.name); age = now - d.stat().st_mtime
+            gone = (j is None and age > day) or age > 7 * day
+            if j:
+                upd = datetime.fromisoformat(str(j["updated_at"]).replace("Z", "+00:00")).timestamp()
+                gone = gone or str(j.get("pruned")).lower() == "true" or (j["status"] in ("cancelled", "failed") and now - upd > day)
+            if gone:
                 shutil.rmtree(d, ignore_errors=True); n += 1
-        log.info("prune done (%d old reels in cloud, %d local job folders)", len(old), n)
+        m = 0
+        if config.DELIVERABLES.exists():
+            for f in config.DELIVERABLES.rglob("*.mp4"):
+                if now - f.stat().st_mtime > RETAIN_DAYS * day:
+                    f.unlink(missing_ok=True); m += 1
+            for folder in config.DELIVERABLES.iterdir():
+                if folder.is_dir() and not any(folder.iterdir()):
+                    folder.rmdir()
+        log.info("prune done (%d job folders, %d masters older than %d days)", n, m, RETAIN_DAYS)
     except Exception as e:  # noqa: BLE001
         log.warning("prune failed: %s", e)
 

@@ -47,7 +47,10 @@ def make_caption(db, job_id, output, brand_id="weone"):
     import types
     actx = types.SimpleNamespace(db=db, job={"id": job_id, "brand": brand_id}, id=job_id, dir=config.JOBS_DIR / job_id, log=lambda *a, **k: None)
     res = agents.call(actx, "caption_writer", text, schemas.CAPTION, [], timeout=300, name="caption")
-    return compose(res["caption"], res["hashtags"], own=own or "-")
+    from . import dm
+    d = dm.active(db, brand_id, prof)       # Comment-to-DM working for this account: the caption says what to comment
+    cap = res["caption"] + (f"\n\n{d['caption_line']}" if d and d["keyword"].lower() not in res["caption"].lower() else "")
+    return compose(cap, res["hashtags"], own=own or "-")
 
 
 OUR = "we_one_aviation"
@@ -90,14 +93,9 @@ def _probe(path):
     return json.loads(r.stdout or "{}")
 
 
-def prepare_video(db, job_id, output):
-    """Instagram spec: MP4, H.264/HEVC, AAC <=48 kHz (128 kbps), moov first, 3 s - 15 min, <= 300 MB."""
-    work = config.JOBS_DIR / job_id / "ig"; work.mkdir(parents=True, exist_ok=True)
-    src = config.JOBS_DIR / job_id / "render" / "reel.mp4"
-    if not src.exists():
-        src = work / "src.mp4"
-        db.download(output["video"], src)
-    dst = work / "ig.mp4"
+def make_ig_file(src, dst):
+    """Instagram spec: MP4, H.264/HEVC, AAC <=48 kHz (128 kbps), moov first, 3 s - 15 min, <= 300 MB.
+    The same file is posted to Facebook and LinkedIn, so it is the only copy kept in the cloud."""
     r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
                         "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", str(dst)],
                        capture_output=True, text=True, timeout=600)
@@ -111,7 +109,25 @@ def prepare_video(db, job_id, output):
         raise RuntimeError("video format not accepted by Instagram")
     if dst.stat().st_size > 300e6:
         raise RuntimeError("video is larger than 300 MB")
-    db.upload(f"{job_id}/ig.mp4", dst, "video/mp4")
+    return dst
+
+
+def prepare_video(db, job_id, output):
+    """Older reels that were stored before the posting copy existed: make it and store it (R2 or Supabase)."""
+    from . import store
+    work = config.JOBS_DIR / job_id / "ig"; work.mkdir(parents=True, exist_ok=True)
+    src = config.JOBS_DIR / job_id / "render" / "reel.mp4"
+    if not src.exists():
+        src = work / "src.mp4"
+        store.download(db, output, src, output["video"])
+    dst = make_ig_file(src, work / "ig.mp4")
+    if output.get("store") == "r2":
+        r2 = store.r2_from_cloud(db)
+        if not r2:
+            raise RuntimeError("the reel is in R2 but R2 is not set up on the site any more")
+        r2.put(f"{job_id}/ig.mp4", dst, "video/mp4")
+    else:
+        db.upload(f"{job_id}/ig.mp4", dst, "video/mp4")
     shutil.rmtree(work, ignore_errors=True)
     return f"{job_id}/ig.mp4"
 

@@ -13,4 +13,5 @@ Write:
 - `insights`: 3-6 sentences on what is working and what is not (lanes, topics, hooks, length, posting time), quoting the numbers. Few reels = weak evidence; say so.
 - `lessons`: 0-4 NEW lessons, each for ONE agent (`strategist` picks topics, `trend_scout` researches trends, `viral_editor` scores topics, `scriptwriter` writes hooks and scripts, `hook_critic` judges scripts, `caption_writer` writes captions, `footage_picker` picks clips). A lesson is one concrete instruction the agent can follow next time ("Open core reels with the exam rule as a number: the 3 reels that did got 2.1x the saves"), with `why` = the evidence. Only lessons the data supports; never repeat or contradict an active lesson without retiring it.
 - `retire`: ids of active lessons the newer data clearly contradicts.
+- `next_experiment`: ONE test for next week that would teach the most, with what to change, what stays the same and the number that decides it (e.g. "Post 3 core reels at 16:00 instead of 13:30; keep topics and length; win if median reach is 20% higher"). Changing one thing at a time; never something the account's hard rules forbid.
 Do not use any tools.

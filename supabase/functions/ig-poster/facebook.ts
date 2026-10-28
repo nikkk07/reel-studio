@@ -1,11 +1,10 @@
 // Facebook Page Reels (Graph API video_reels): start -> upload (Facebook fetches our signed file URL) -> finish(PUBLISHED)
 // -> wait until published. State lives in jobs.output.fb; each step is saved, so a lost response is checked, never repeated.
 import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setPart, bk } from "./db.ts";
+import { mediaUrl } from "./media.ts";
 
 const FB = Deno.env.get("FB_API") ?? "https://graph.facebook.com/v26.0";
 const RUP = Deno.env.get("FB_RUPLOAD") ?? "https://rupload.facebook.com/video-upload/v26.0";
-const SB = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
-const KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const MAX_ATTEMPTS = 5;
 const BACKOFF_MIN = [10, 30, 60, 120];
 const TRANSIENT = new Set([1, 2, 4, 17, 32, 341, 368, 613, 6000, 6001]);
@@ -33,12 +32,6 @@ export function fbCaption(caption: string, name = "We One Aviation"): string {
   const follow = name === "We One Aviation" ? "Follow We One Aviation for daily aviation facts." : `Follow ${name}.`;
   return caption.replace(/^.*Follow\s+@\S+.*$/gmi, follow).replace(/@(\w+)/g, "$1").slice(0, 5000);
 }
-async function sign(path: string) {
-  const r = await fetch(`${SB}/storage/v1/object/sign/reels/${path}`, { method: "POST", headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn: 7200 }) });
-  if (!r.ok) throw new FBError(`storage link failed (${r.status})`);
-  const j = await r.json(); const u: string = j.signedURL ?? j.signedUrl ?? "";
-  return u.startsWith("http") ? u : `${SB}/storage/v1${u}`;
-}
 
 async function step(job: Json, tok: string, page: string, b: Brand): Promise<string> {
   const o = job.output ?? {}; let g: Json = { ...(o.fb ?? {}) };
@@ -59,7 +52,7 @@ async function step(job: Json, tok: string, page: string, b: Brand): Promise<str
     }
     if (!uploaded) {
       g = { ...g, upload_sent: true }; await setPart(job, "fb", g);
-      const url = await sign(o.ig_video ?? o.video);
+      const url = await mediaUrl(o, o.ig_video ?? o.video);
       const u = await fb("POST", `${RUP}/${g.video_id}`, tok, {}, { Authorization: `OAuth ${tok}`, file_url: url });
       if (!u.success) throw new FBError("Facebook did not take the video");
     }

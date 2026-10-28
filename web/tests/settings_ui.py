@@ -48,7 +48,7 @@ with sync_playwright() as pw:
         pg.locator(".acct", has_text="Flying Star Aviator").locator("button:has-text('Settings')").click(); pg.wait_for_timeout(2500)
         ok("#/account" in pg.url and "Flying Star Aviator" in pg.inner_text("header"), f"{nm}: Dashboard card → that account's Settings")
         labels = [t.strip() for t in pg.locator(navsel).all_inner_texts()]
-        ok(labels == ["Create", "Production", "Library", "Agents", "Settings"], f"{nm}: account level shows Create/Production/Library/Agents/Settings {labels}")
+        ok(labels == ["Create", "Production", "Library", "Insights", "Agents", "Settings"], f"{nm}: account level shows Create/Production/Library/Insights/Agents/Settings {labels}")
         t = pg.inner_text("main")
         ok(all(x in t for x in ["Profile", "Assets", "Connections", "Instagram", "Facebook", "LinkedIn", "Website"]), f"{nm}: profile, logo and 4 connections")
         if nm == "d":

@@ -2,7 +2,8 @@
 // State lives in jobs.output.li:  scheduled -> uploading (parts) -> processing -> posting -> posted
 // Safety: progress (video urn, uploaded parts) is saved after every part, so a timeout resumes instead of restarting;
 // before creating a post, the page's recent posts are checked for this video, so a lost response never double-posts.
-import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setSecret, setPart, storageSize, storageRange, bk } from "./db.ts";
+import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setSecret, setPart, bk } from "./db.ts";
+import { mediaSize, mediaRange } from "./media.ts";
 
 const LI_API = Deno.env.get("LI_API") ?? "https://api.linkedin.com/rest";
 const LI_OAUTH = Deno.env.get("LI_OAUTH") ?? "https://www.linkedin.com/oauth/v2";
@@ -81,7 +82,7 @@ async function step(job: Json, tok: string, st: Json, b: Brand): Promise<string>
     g = { ...g, state: g.resume ?? "uploading", attempts: Number(g.attempts ?? 0) + 1, started_at: iso(now()) }; delete g.error; delete g.resume;
     if (!(await setPart(job, "li", g, "scheduled"))) return "taken";      // a retry resumes where it stopped (never re-finalizes)
     if (!g.video && g.state === "uploading") {
-      const size = await storageSize(file);
+      const size = await mediaSize(o, file);
       const [j] = await li("POST", "/videos?action=initializeUpload", tok, { initializeUploadRequest: { owner: org, fileSizeBytes: size, uploadCaptions: false, uploadThumbnail: false } });
       const v = j.value ?? {};
       g = { ...g, video: v.video, token: v.uploadToken ?? "", parts: (v.uploadInstructions ?? []).map((p: Json) => [p.uploadUrl, p.firstByte, p.lastByte]), etags: [], size };
@@ -92,7 +93,7 @@ async function step(job: Json, tok: string, st: Json, b: Brand): Promise<string>
     const t0 = Date.now(); const etags: string[] = g.etags ?? [];
     while (etags.length < g.parts.length && Date.now() - t0 < BUDGET_MS) {
       const [url, first, last] = g.parts[etags.length];
-      const bytes = await storageRange(file, first, last);
+      const bytes = await mediaRange(o, file, first, last);
       let r: Response;
       try { r = await fetch(url, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: new Blob([bytes as BlobPart]) }); }
       catch (e) { throw new LIError(`network problem uploading to LinkedIn (${(e as Error).name})`); }

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from statistics import mean, median
 from .. import agents, brain, schemas
 from .. import brand as brandmod
-from .autopilot import history, library, library_text
+from .autopilot import history, library, library_text, hook_score
 
 MIN_MEASURED = 3            # reels with Instagram results before the Analyst may write lessons
 MIN_AFTER = 3               # results needed after a lesson before it is judged
@@ -149,6 +149,43 @@ def quality_problems(db, days=14):
     return out[:30]
 
 
+def digest(db, bid, hist, posts, analyst=None, now=None):
+    """The weekly digest shown on the dashboards: what happened in the last 7 days, the best and worst reel, what the system
+    learned, and the next experiment. Numbers come only from real results; a thin week says so."""
+    now = now or datetime.now(timezone.utc); week = now - timedelta(days=7)
+    def when(h):
+        try: return _parse(h["posted_at"]) if h.get("posted_at") else None
+        except ValueError: return None  # noqa: E701
+    posted = [h for h in hist if when(h) and when(h) >= week]
+    made = [h for h in hist if h.get("created") and h["created"] >= week.strftime("%Y-%m-%d")]
+    rated = [h for h in hist if when(h) and when(h) >= now - timedelta(days=14) and (h.get("eng") is not None or h.get("views") is not None)]
+    key = (lambda h: h["eng"]) if sum(h.get("eng") is not None for h in rated) >= 2 else (lambda h: h.get("views") or 0)
+    rated = [h for h in rated if key(h) is not None]; rated.sort(key=key, reverse=True)
+    pick = lambda h: {k: h.get(k) for k in ("id", "title", "thumb", "permalink", "views", "reach", "shares", "saved", "likes", "comments", "avg_watch_s", "eng", "posted_at")} | {
+        "hold": hook_score(h), "opening": (h.get("opening") or {}).get("say") or h.get("hook")}
+    tot = lambda k: sum(int(h.get(k) or 0) for h in posted)
+    try:
+        lessons = db.select("agent_lessons", f"select=id,agent,lesson,status,created_at,evaluated_at&brand=eq.{bid}&created_at=gte.{week.strftime('%Y-%m-%dT%H:%M:%SZ')}&order=created_at.desc&limit=8")
+    except Exception:  # noqa: BLE001
+        lessons = []
+    try:
+        dms = len(db.select("dm_log", f"select=id&brand=eq.{bid}&state=eq.sent&created_at=gte.{week.strftime('%Y-%m-%dT%H:%M:%SZ')}"))
+    except Exception:  # noqa: BLE001
+        dms = 0
+    nxt = (analyst or {}).get("next_experiment") or (
+        "Not enough measured reels yet to test anything: post one reel a day this week so the next digest can compare openings and times."
+        if len([h for h in hist if h.get("eng") is not None]) < MIN_MEASURED else
+        "Keep the topic mix, and test one change: open the next 3 reels with a specific number in the first line, then compare their hold with the hook bank.")
+    return {"week_start": week.strftime("%Y-%m-%d"), "at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "numbers": {"made": len(made), "posted": len(posted), "views": tot("views"), "reach": tot("reach"), "sends": tot("shares"),
+                        "saves": tot("saved"), "comments": tot("comments"), "dms": dms,
+                        "median_eng": round(median([h["eng"] for h in posted if h.get("eng") is not None]), 2) if any(h.get("eng") is not None for h in posted) else None},
+            "best": pick(rated[0]) if rated else None, "worst": pick(rated[-1]) if len(rated) >= 2 else None,
+            "lessons": [{"agent": l["agent"], "lesson": l["lesson"], "status": l["status"]} for l in lessons],
+            "insights": (analyst or {}).get("insights"), "next_experiment": nxt,
+            "evidence": "weak" if len(rated) < 5 else "ok", "measured": len(rated), "past_posts": len(posts)}
+
+
 def run(ctx):
     inp = ctx.job.get("input") or {}
     bid = ctx.job.get("brand") or inp.get("brand") or "weone"
@@ -187,5 +224,11 @@ def run(ctx):
             report.update(health=res.get("health"), usage_note=res.get("usage_note"), team_lessons=[m.get("lesson") for m in made], stats=stats)
         else:
             report["usage_note"] = "Not enough agent runs yet for the Resource Manager."
+    try:                                    # the weekly digest on the dashboards (refreshed every day, covers the last 7 days)
+        dg = digest(ctx.db, bid, hist, posts, ctx.data.get("analyst"))
+        ctx.db.insert("settings", {"key": "digest" if bid == "weone" else f"digest@{bid}", "value": dg}, upsert=True)
+        report["digest"] = {"posted": dg["numbers"]["posted"], "best": (dg["best"] or {}).get("title"), "next": dg["next_experiment"][:120]}
+    except Exception as e:  # noqa: BLE001
+        ctx.log(f"weekly digest not written: {str(e)[:120]}", "warn")
     ctx.finish("done", learn=report)
     ctx.log("learning run done")

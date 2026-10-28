@@ -108,3 +108,21 @@ select set_config('request.jwt.claims','{"email":"editor@x.com"}',false);
 select pg_temp.ok(pg_temp.err($$select public.set_voice_models('v2', 'v2')$$) like 'Only the studio owner%', 'members cannot change the voice model');
 select pg_temp.ok(pg_temp.err($$select public.set_voice_style('natural', 'natural')$$) like 'Only the studio owner%', 'members cannot change the voice style');
 reset role;
+
+-- Cloudflare R2: owner only, keys write-only, formats checked
+select set_config('request.jwt.claims','{"email":"weoneaviation8@gmail.com"}',false);
+set role authenticated;
+select pg_temp.ok((public.set_r2(repeat('a',32), 'reel-studio', repeat('b',32), repeat('c',64)))->>'state' = 'checking', 'R2 saved; waits for the cloud check');
+select pg_temp.ok((select value::text from settings where key = 'r2') not like '%cccccccc%', 'the R2 secret never appears in settings');
+select pg_temp.ok(pg_temp.err($$select public.set_r2('x', 'b', 'k', 's')$$) like 'The Account ID%', 'bad R2 account id refused');
+select pg_temp.ok(pg_temp.err($$select public.set_r2(repeat('a',32), 'Bad_Bucket', repeat('b',32), repeat('c',64))$$) like 'Use the bucket name%', 'bad bucket name refused');
+select pg_temp.ok(pg_temp.err($$select value from secrets where key = 'r2_secret_access_key'$$) like 'permission denied%', 'the site cannot read R2 keys');
+select pg_temp.ok(pg_temp.err($$select public.merge_reel_output(gen_random_uuid(), '{}')$$) like 'permission denied%', 'the site cannot use the cloud poster''s merge');
+-- Comment-to-DM
+select pg_temp.ok((public.set_dm('flystar', true, 'cpl', 'Hi {name}! CPL details: https://www.flystar.co.in/courses/cpl', true))->>'state' = 'checking', 'Comment-to-DM saved, keyword in capitals, waits for the cloud check');
+select pg_temp.ok((select value->'keywords'->>0 from settings where key = 'dm@flystar') = 'CPL', 'keyword stored as CPL');
+select pg_temp.ok(pg_temp.err($$select public.set_dm('flystar', true, 'two words', 'Hi there, details here please read', true)$$) like 'Use one keyword%', 'one keyword only');
+select pg_temp.ok(pg_temp.err($$select public.set_dm('flystar', true, 'CPL', 'short', true)$$) like 'Write a message%', 'message length checked');
+select pg_temp.ok(pg_temp.err($$insert into dm_log(brand, comment_id) values ('weone', 'x')$$) like 'permission denied%' or pg_temp.err($$insert into dm_log(brand, comment_id) values ('weone', 'x')$$) like '%row-level security%', 'the site cannot write the DM log');
+reset role;
+select pg_temp.ok((select count(*) from settings where key in ('dm', 'dm@bookmycharter', 'dm@flystar', 'dm@legalgroup')) = 4, 'every account starts with its own Comment-to-DM message');

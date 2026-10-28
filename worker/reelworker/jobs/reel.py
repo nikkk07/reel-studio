@@ -5,6 +5,7 @@ from pathlib import Path
 from .. import brain, config, schemas
 from .. import agents, lanes, studio
 from .. import brand as brandmod
+from .. import dm as dmlib
 from ..runner import run_stages, TransientError
 from ..media import footage, lexicon, mix, render, timeline
 
@@ -31,7 +32,9 @@ def _other_account(p, name):
 
 
 def _brand(ctx):
-    return brandmod.load(ctx.db, ctx.job.get("brand") or "weone")
+    bid = ctx.job.get("brand") or "weone"; prof = brandmod.load(ctx.db, bid)
+    d = dmlib.active(ctx.db, bid, prof)
+    return {**prof, "_dm": d} if d else prof
 
 
 def _parent_dir(ctx):
@@ -104,6 +107,9 @@ def validate_spec(spec: dict, prof: dict = None) -> dict:
         cta_say, cta_cap, name = CTA_SAY, CTA_CAPTION, "We One Aviation"
     else:
         (cta_say, cta_cap), name = brandmod.cta(prof), prof["name"]
+    dmc = prof.get("_dm")            # Comment-to-DM switched on and working: "Comment PILOT ..." replaces the follow line
+    if dmc:
+        cta_say, cta_cap = dmc["say"], dmc["caption"]
     bad = leaks(spec)
     if bad:
         raise TransientError(f"the script contained {bad[0]!r} (web address, phone, e-mail or another account); writing it again")
@@ -115,7 +121,7 @@ def validate_spec(spec: dict, prof: dict = None) -> dict:
         g["phrases"] = [p for p in g["phrases"] if p.get("say", "").strip()] or g["phrases"][:1]
     # exactly one call to action, always the standard one, always last
     for g in spec["groups"]:
-        g["phrases"] = [p for p in g["phrases"] if not _is_cta(p, name) and not _other_account(p, name)]
+        g["phrases"] = [p for p in g["phrases"] if not _is_cta(p, name) and not _other_account(p, name) and not (dmc and dmlib.is_dm_cta(p, dmc["keyword"]))]
     spec["groups"] = [g for g in spec["groups"] if g["phrases"]] or spec["groups"][:1]
     spec["groups"][-1]["phrases"].append({"say": cta_say, "caption": cta_cap})
     # no line said twice in a row
@@ -205,6 +211,15 @@ def critic_text(prof, spec, fs, lane):
                         factsheet=_sheet_text(fs) if fs else "(revision of an approved script: judge against its own claims)", script=json.dumps(view, ensure_ascii=False, indent=1))
 
 
+def hook_of(spec, crit=None):
+    """The opening of a reel: the first spoken line, its on-screen text, the first visual and graphic (the first ~3 seconds)."""
+    g0 = (spec.get("groups") or [{}])[0]; p0 = (g0.get("phrases") or [{}])[0]
+    shot = next((s for s in spec.get("shots", []) if s.get("at_group") == g0.get("id") and int(s.get("at_phrase") or 0) == 0), (spec.get("shots") or [{}])[0])
+    gfx = next((g for g in spec.get("graphics", []) if g.get("at_group") == g0.get("id") and int(g.get("at_phrase") or 0) == 0), None)
+    return {"say": p0.get("say", "")[:200], "text": p0.get("caption", "").replace("*", "")[:120], "visual": (shot or {}).get("query", "")[:120],
+            "graphic": (gfx or {}).get("type"), "critic": (crit or {}).get("hook")}
+
+
 def _audience_note(ctx, prof):
     """What this account's real audience responded to (hooks, formats, comments), so the script learns from past results.
     Empty until there is something measured: no tokens spent on guesses."""
@@ -287,6 +302,8 @@ def stage_script(ctx, prog):
             if (crit2.get("total") or 0) >= (crit.get("total") or 0):
                 spec, crit = spec2, crit2
     spec["lane"] = lane
+    try: ctx.merge_output({"hook": hook_of(spec, crit)})     # the hook bank: what the first seconds say and show, scored later by real viewers
+    except Exception: pass  # noqa: BLE001,E701
     ctx.trace("script", "write", "Scriptwriter", "done", f"{sum(len(g['phrases']) for g in spec['groups'])} lines")
     ctx.trace("script", "facts", "Hook Critic", "done", f"{crit.get('total')}/100" if crit else "revision", flush=True)
     ctx.path("spec.json").write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -759,9 +776,11 @@ def stage_publish(ctx, prog):
     res = json.loads(ctx.path("render", "result.json").read_text())
     prefix = ctx.id
     ctx.trace("publish", "video", "Upload reel", "run"); ctx.trace("publish", "archive", "Save master on Mac", "wait", flush=True)
-    ctx.db.upload(f"{prefix}/reel.mp4", res["delivery"], "video/mp4"); prog(0.8)
-    ctx.db.upload(f"{prefix}/thumb.jpg", res["thumb"], "image/jpeg")
-    ctx.trace("publish", "video", "Upload reel", "done", f"{res['delivery_mb']} MB")
+    # one cloud copy only: the Instagram-spec file, which Facebook and LinkedIn also take (R2 when set up, else Supabase)
+    from .. import instagram, store
+    igf = instagram.make_ig_file(res["delivery"], ctx.path("render", "ig.mp4"))
+    stored = store.put_reel(ctx.db, prefix, igf, res["thumb"], log=lambda m: ctx.log(m, "warn")); prog(0.8)
+    ctx.trace("publish", "video", "Upload reel", "done", f"{res['delivery_mb']} MB · {'Cloudflare R2' if stored['store'] == 'r2' else 'Supabase'}")
     final = config.DELIVERABLES / time.strftime("%Y-%m-%d")
     final.mkdir(parents=True, exist_ok=True)
     safe = "".join(ch for ch in _spec(ctx)["title"] if ch.isalnum() or ch in " -_")[:60].strip().replace(" ", "_") or ctx.id[:8]
@@ -780,8 +799,7 @@ def stage_publish(ctx, prog):
         for a, b in g["spans"]:
             if k < len(TL["captions"]):
                 c = TL["captions"][k]; script.append({"t": round(c["t0"], 2), "end": round(c["t1"], 2), "text": c["text"], "group": g["id"]}); k += 1
-    ctx.merge_output({"storage_prefix": prefix, "video": f"{prefix}/reel.mp4", "thumb": f"{prefix}/thumb.jpg",
-                      "duration": res["duration"], "lufs": res["lufs"], "true_peak": res["true_peak"], "delivery_mb": res["delivery_mb"],
+    ctx.merge_output({**stored, "duration": res["duration"], "lufs": res["lufs"], "true_peak": res["true_peak"], "delivery_mb": res["delivery_mb"],
                       "archive_on_mac": str(final / f"{safe}_{ctx.id[:8]}_master.mp4"), "script": script})
     try:     # Instagram caption + Instagram-spec file now, so the cloud can post even if the Mac is off later
         from .. import instagram

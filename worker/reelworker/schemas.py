@@ -109,7 +109,7 @@ TEAM = ["strategist", "trend_scout", "viral_editor", "fact_checker", "scriptwrit
 LESSON = {"type": "object", "required": ["agent", "lesson", "why"],
           "properties": {"agent": {"type": "string", "enum": TEAM}, "lesson": S, "why": S, "metric": {"type": "string", "enum": ["engagement", "critic", "qc", "success"]}}}
 ANALYST = {"type": "object", "required": ["insights", "lessons", "retire"],
-           "properties": {"insights": S, "lessons": {"type": "array", "maxItems": 4, "items": LESSON}, "retire": {"type": "array", "items": I}}}
+           "properties": {"insights": S, "lessons": {"type": "array", "maxItems": 4, "items": LESSON}, "retire": {"type": "array", "items": I}, "next_experiment": S}}
 RESOURCES = {"type": "object", "required": ["health", "lessons", "usage_note"],
              "properties": {"health": {"type": "array", "items": {"type": "object", "required": ["agent", "status", "note"],
                                                                   "properties": {"agent": S, "status": {"type": "string", "enum": ["ok", "watch", "bad"]}, "note": S}}},

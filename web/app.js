@@ -48,7 +48,7 @@ function s(tag, attrs = {}, ...kids) {
   return el;
 }
 const ICON = {
-  home: "M4 11.5 12 4l8 7.5M6.5 9.5V20h11V9.5M10 20v-5h4v5", ext: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
+  home: "M4 11.5 12 4l8 7.5M6.5 9.5V20h11V9.5M10 20v-5h4v5", chart: "M5 20V11M11 20V5M17 20v-8M3 20h18", ext: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
   plane: "M21 11.2 13.6 10 9.8 3H8.2l1.6 7.1-4.7.4-1.7-2.3H2.2l1 3.8-1 3.8h1.2l1.7-2.3 4.7.4L8.2 21h1.6l3.8-7 7.4-1.2c.6-.1 1-.4 1-.8s-.4-.7-1-.8Z",
   create: "M12 4v16M4 12h16", route: "M5 18c3-9 11-3 14-12M5 18a2 2 0 1 0 0 .1M19 6a2 2 0 1 0 0 .1",
   library: "M4 4h6v7H4zM14 4h6v4h-6zM14 12h6v8h-6zM4 15h6v5H4z", agents: "M12 3v3M8.5 8h7a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3zM9.5 13h.01M14.5 13h.01M3 13h2.5M18.5 13H21", check: "M5 12.5l4.5 4.5L19 7.5", x: "M6 6l12 12M18 6 6 18",
@@ -118,7 +118,7 @@ const platState = (k, b = S.brand) => stOf(PST[k], b).state || "not_connected";
 const platSet = (k, b = S.brand) => !["not_connected", "duplicate"].includes(platState(k, b));
 const anyPosting = (b = S.brand) => b === "weone" || ["ig", "fb", "li"].some((k) => platSet(k, b));
 const SVC_IMG = { supabase: "icons/services/supabase.png", vercel: "icons/services/vercel.svg", github: "icons/services/github.svg", apple: "icons/services/apple.png",
-  claude: "icons/services/claude.svg", meta: "icons/services/meta.svg", pexels: "icons/services/pexels.png", pixabay: "icons/services/pixabay.png" };
+  claude: "icons/services/claude.svg", meta: "icons/services/meta.svg", cloudflare: "icons/services/cloudflare.png", pexels: "icons/services/pexels.png", pixabay: "icons/services/pixabay.png" };
 const PLAT_IMG = { ig: "icons/platforms/instagram.png", fb: "icons/platforms/facebook.png", li: "icons/platforms/linkedin.png", web: "icons/platforms/website.png" };
 async function getJob(id) { const { data, error } = await sb.from("jobs").select("*").eq("id", id).single(); if (error) throw error; return data; }
 async function events(id, n = 10) { const { data } = await sb.from("job_events").select("id,ts,level,message").eq("job_id", id).order("id", { ascending: false }).limit(n); return data || []; }
@@ -144,6 +144,17 @@ async function signed(path, download) {
   if (!path) return null;
   const { data } = await sb.storage.from("reels").createSignedUrl(path, 3600, download ? { download } : undefined); return data?.signedUrl || null;
 }
+// a reel's video: Cloudflare R2 (a 7-day link saved with the reel) or Supabase (signed here); gone once retention removed it
+async function videoUrl(o, name) {
+  if (!o || o.pruned || !o.video) return null;
+  if (o.store === "r2") return o.play_url && Date.parse(o.play_until || 0) > Date.now() ? o.play_url : null;
+  return signed(o.video, name);
+}
+async function downloadReel(o, name) {
+  if (o?.store === "r2") { const u = await videoUrl(o); if (!u) { toast("This video is no longer stored.", { err: true }); return; } window.open(u, "_blank", "noopener"); return; }
+  return download(o.video, name);
+}
+const keptNote = (o) => o?.pruned ? `Video removed ${o.pruned_at ? ago(o.pruned_at) : ""} (${o.prune_reason || "storage limit"}). Results, script and thumbnail are kept.` : null;
 async function download(path, name) {     // signs a fresh link at tap time (links in an old page expire after an hour)
   const u = await signed(path, name); if (!u) { toast("Download link could not be created. Try again.", { err: true }); return; }
   const a = h("a", { href: u, download: name, style: "display:none" }); document.body.append(a); a.click(); a.remove();
@@ -223,7 +234,7 @@ function shell(content, { nav = true } = {}) {
   const badgeN = reviewN || activeN;
   const studioLevel = STUDIO_ROUTES.includes(S.route) || !S.session;
   const items = studioLevel ? [["home", "Dashboard", "home"], ["settings", "Settings", "gear"]]
-    : [["create", "Create", "create"], ["production", "Production", "route"], ["library", "Library", "library"], ["agents", "Agents", "agents"], ["account", "Settings", "gear"]];
+    : [["create", "Create", "create"], ["production", "Production", "route"], ["library", "Library", "library"], ["insights", "Insights", "chart"], ["agents", "Agents", "agents"], ["account", "Settings", "gear"]];
   const navBtn = ([k, label, ic], mobile) => h("button", { "aria-current": S.route === k ? "page" : null, onclick: () => go(k) },
     mobile ? icon(ic, 22) : null, label, k === "production" && badgeN ? h("span", { cls: "badge", "aria-label": `${badgeN} reels` }, badgeN) : null);
   const lamps = S.session ? h("button", { cls: "status", onclick: () => go("check"), title: "Run the pre-flight check" },
@@ -271,8 +282,8 @@ function render() {
   const fresh = Date.now() - S.checkedAt < 30 * 60e3 || (S.checkedAt > 0 && macAlive() && S.worker?.claude_ok !== false);
   // only starting a reel needs the Mac: every other page (accounts, settings, review, library) works with the Mac and Claude offline
   if (r === "check" || (!fresh && r === "create")) return viewPreflight(r === "check" ? "home" : r);
-  S.route = ["home", "settings", "create", "production", "library", "agents", "account"].includes(r) ? r : "home";
-  ({ home: viewDashboard, settings: viewSettings, create: viewCreate, production: viewProduction, library: viewLibrary, agents: viewAgents, account: viewAccount })[S.route]();
+  S.route = ["home", "settings", "create", "production", "library", "insights", "agents", "account"].includes(r) ? r : "home";
+  ({ home: viewDashboard, settings: viewSettings, create: viewCreate, production: viewProduction, library: viewLibrary, insights: viewInsights, agents: viewAgents, account: viewAccount })[S.route]();
 }
 
 // ---------------------------------------------------------------- login
@@ -388,11 +399,138 @@ async function stopRequest(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = "Stopping…"; }
   try { await rpc("stop_job", { p_job: id }); } catch (e) { toast(errText(e), { err: true }); if (btn) { btn.disabled = false; btn.textContent = "Stop"; } }
 }
+// ---------------------------------------------------------------- Performance: real Instagram results, charts and the weekly digest
+// Account colours for charts: a validated categorical palette in a fixed order (the brand colours of We One and Book My
+// Charter are both navy and could not be told apart). Identity is never colour alone: every bar and tile is labelled.
+const SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+const seriesOf = (bid) => SERIES[Math.max(0, (S.brands || BRANDS_FALLBACK).findIndex((b) => b.id === bid)) % SERIES.length];
+const nfmt = (v) => v == null ? "–" : Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : Math.abs(v) >= 1e4 ? Math.round(v / 1e3) + "K" : Math.abs(v) >= 1e3 ? (v / 1e3).toFixed(1).replace(/\.0$/, "") + "K" : String(Math.round(v * 10) / 10);
+const holdOf = (r) => r.st?.reels_skip_rate != null ? Math.round(100 - r.st.reels_skip_rate) : r.st?.avg_watch_s && r.dur ? Math.round(Math.min(1, r.st.avg_watch_s / r.dur) * 100) : null;
+async function perfRows(bid) {         // posted reels (60 days) with their results; one query, cached for the page
+  const since = new Date(Date.now() - 60 * 86400e3).toISOString();
+  let q = sb.from("jobs").select("id,brand,status,created_at,title:output->>title,st:output->ig_stats,posted:output->ig->>posted_at,link:output->ig->>permalink,thumb:output->>thumb,hook:output->hook,dur:output->>duration")
+    .eq("kind", "reel").gte("created_at", since).order("created_at", { ascending: false }).limit(400);
+  if (bid) q = q.eq("brand", bid);
+  const { data } = await q; return (data || []).map((r) => ({ ...r, dur: r.dur ? Number(r.dur) : null }));
+}
+const sumOf = (rows, k) => rows.reduce((a, r) => a + (Number(r.st?.[k]) || 0), 0);
+const inWeek = (rows, w) => rows.filter((r) => r.posted && Date.parse(r.posted) > Date.now() - (w + 1) * 7 * 86400e3 && Date.parse(r.posted) <= Date.now() - w * 7 * 86400e3);
+function kpiTiles(rows, dms) {
+  const a = inWeek(rows, 0), b = inWeek(rows, 1);
+  const tile = (label, k, extra) => { const v = k ? sumOf(a, k) : extra[0], pv = k ? sumOf(b, k) : extra[1];
+    const d = pv ? Math.round(100 * (v - pv) / pv) : null;
+    return h("div", { cls: "kpi" }, h("span", { cls: "kpi-l" }, label), h("b", { cls: "kpi-v" }, nfmt(v)),
+      h("span", { cls: "kpi-d " + (d == null ? "" : d >= 0 ? "up" : "down") }, d == null ? (b.length ? "last week 0" : "no data last week") : `${d >= 0 ? "▲" : "▼"} ${Math.abs(d)}% vs last week`)); };
+  return h("div", { cls: "kpis" }, tile("Reels posted", null, [a.length, b.length]), tile("Views", "views"), tile("Reach", "reach"), tile("Sends", "shares"), tile("Saves", "saved"),
+    dms != null ? tile("DMs sent", null, dms) : null);
+}
+// tooltip shared by every chart
+function vtip() { let t = document.querySelector(".vtip"); if (!t) { t = h("div", { cls: "vtip", role: "tooltip" }); document.body.append(t); } return t; }
+function hover(el, html) {
+  const show = (e) => { const t = vtip(); t.replaceChildren(...html()); t.style.display = "block";
+    const x = Math.min(window.innerWidth - t.offsetWidth - 8, e.clientX + 12), y = Math.max(8, e.clientY - t.offsetHeight - 12); t.style.left = x + "px"; t.style.top = y + "px"; };
+  el.addEventListener("mousemove", show); el.addEventListener("mouseenter", show); el.addEventListener("mouseleave", () => { vtip().style.display = "none"; });
+  el.addEventListener("focus", (e) => { const r = el.getBoundingClientRect(); show({ clientX: r.left + r.width / 2, clientY: r.top }); }); el.addEventListener("blur", () => { vtip().style.display = "none"; });
+}
+const niceMax = (m) => { if (m <= 0) return 1; const p = 10 ** Math.floor(Math.log10(m)); const f = m / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; };
+// columns over time: one series, value at the tallest cap only, hover for every column
+function columns({ items, color, unit = "", height = 220, label }) {
+  // drawn at the real width of its box (no stretched text), redrawn when the box resizes
+  const wrap = h("div", { cls: "chart-wrap" });
+  const draw = (box) => {
+    const W = Math.max(300, Math.round(box)), H = height, L = 40, B = 24, T = 18, max = niceMax(Math.max(...items.map((i) => i.value || 0), 1));
+    const step = (W - L - 8) / items.length, bw = Math.max(6, Math.min(28, step - 4)), y = (v) => T + (H - T - B) * (1 - v / max);
+    const every = Math.max(1, Math.ceil(52 / step));
+    const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: "vchart", role: "img", "aria-label": label });
+    for (const t of [0, 0.5, 1]) { const v = max * t; svg.append(s("line", { x1: L, x2: W - 4, y1: y(v), y2: y(v), class: "grid" }), s("text", { x: L - 6, y: y(v) + 4, class: "tick", "text-anchor": "end" }, nfmt(v) + unit)); }
+    const top = items.reduce((a, i, k) => (i.value || 0) > (items[a].value || 0) ? k : a, 0);
+    items.forEach((it, k) => {
+      const x = L + 4 + k * step + (step - bw) / 2, v = it.value || 0, yy = y(v), hh = Math.max(0, H - B - yy), r = Math.min(4, hh, bw / 2);
+      const g = s("g", { tabindex: "0", class: "hit", "aria-label": `${it.label}: ${nfmt(it.value)}${unit}` });
+      g.append(s("rect", { x: x - (step - bw) / 2 + 1, y: T, width: step - 2, height: H - B - T, fill: "transparent" }));
+      if (it.value != null) g.append(s("path", { d: `M${x},${H - B} V${yy + r} q0,-${r} ${r},-${r} h${bw - 2 * r} q${r},0 ${r},${r} V${H - B} Z`, fill: color }));
+      else g.append(s("text", { x: x + bw / 2, y: H - B - 4, class: "tick", "text-anchor": "middle" }, "–"));
+      if (k === top && it.value) g.append(s("text", { x: x + bw / 2, y: yy - 5, class: "val", "text-anchor": "middle" }, nfmt(v) + unit));
+      if ((items.length - 1 - k) % every === 0) g.append(s("text", { x: x + bw / 2, y: H - 7, class: "tick", "text-anchor": "middle" }, it.x));
+      hover(g, it.tip); svg.append(g);
+    });
+    svg.append(s("line", { x1: L, x2: W - 4, y1: H - B, y2: H - B, class: "axis" }));
+    wrap.replaceChildren(svg);
+  };
+  let last = 0;
+  const ro = new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w && Math.abs(w - last) > 4) { last = w; draw(w); } });
+  ro.observe(wrap); draw(640);
+  return wrap;
+}
+// horizontal bars: items compared on one measure, labelled, value at the tip
+function hbars({ items, unit = "", label, max }) {
+  const mx = max || niceMax(Math.max(...items.map((i) => i.value || 0), 1));
+  return h("div", { cls: "hbars", role: "list", "aria-label": label }, items.map((it) => {
+    const row = h("div", { cls: "hbar", role: "listitem", tabindex: "0" }, h("span", { cls: "hbar-l", title: it.label }, it.label),
+      h("span", { cls: "hbar-track" }, h("i", { style: `width:${it.value == null ? 0 : Math.max(1.5, 100 * it.value / mx)}%;background:${it.color}` })),
+      h("b", { cls: "hbar-v" }, it.value == null ? "–" : nfmt(it.value) + unit));
+    if (it.tip) hover(row, it.tip); return row; }));
+}
+const tipLines = (title, pairs) => [h("b", {}, title), ...pairs.filter(([, v]) => v != null && v !== "").map(([k, v]) => h("div", {}, h("span", { cls: "muted" }, k + " "), String(v)))];
+// a reel tile for the digest (thumbnail kept after the video is removed)
+function reelTile(r, tag) {
+  const img = h("img", { alt: "", loading: "lazy" }); if (r?.thumb) signed(r.thumb).then((u) => { if (u) img.src = u; });
+  return h("div", { cls: "rtile" }, h("span", { cls: "rtile-tag " + tag }, tag === "best" ? "Best reel" : "Weakest reel"),
+    r ? [h("div", { cls: "rtile-img" }, img), h("div", {}, h("b", {}, r.title || "Untitled"),
+      h("p", { cls: "small muted" }, [r.views != null ? `${nfmt(r.views)} views` : null, r.hold != null ? `${r.hold}% held the opening` : null, r.shares != null ? `${r.shares} sends` : null, r.saved != null ? `${r.saved} saves` : null].filter(Boolean).join(" · ")),
+      r.opening ? h("p", { cls: "tiny faint" }, `Opening: “${String(r.opening).slice(0, 90)}”`) : null,
+      r.permalink ? h("a", { cls: "tiny", href: r.permalink, target: "_blank", rel: "noopener noreferrer" }, "Open on Instagram") : null)]
+      : h("p", { cls: "small muted" }, "Not enough results this week."));
+}
+function digestPanel(b, dg) {
+  if (!dg) return h("section", { cls: "panel digest" }, h("h3", {}, "Weekly digest"), h("p", { cls: "small muted" }, "Written by the daily learning run (06:05). The first digest appears after its next run."));
+  return h("section", { cls: "panel digest" },
+    h("div", { cls: "digest-head" }, h("h3", {}, `Weekly digest · ${b.name}`), h("span", { cls: "tiny faint" }, `${dateShort(dg.week_start)} – ${dateShort(dg.at)} · updated ${ago(dg.at)}`)),
+    dg.evidence === "weak" ? h("p", { cls: "tiny", style: "color:#6E4300" }, `Only ${dg.measured} reels with results: treat these as hints, not proof.`) : null,
+    h("div", { cls: "rtiles" }, reelTile(dg.best, "best"), dg.worst ? reelTile(dg.worst, "worst") : null),
+    dg.insights ? h("p", { cls: "small", style: "margin-top:10px" }, dg.insights) : null,
+    h("div", { cls: "digest-cols" },
+      h("div", {}, h("h4", {}, "What the system learned"), dg.lessons?.length ? h("ul", { cls: "small" }, dg.lessons.map((l) => h("li", {}, l.lesson, h("span", { cls: "tiny faint" }, ` · ${l.agent.replace("_", " ")}, ${l.status}`))))
+        : h("p", { cls: "small muted" }, "No new lessons this week.")),
+      h("div", {}, h("h4", {}, "Next experiment"), h("p", { cls: "small" }, dg.next_experiment))));
+}
+async function viewInsights() {
+  const body = h("div", {}, h("div", { cls: "skeleton", style: "height:320px" }));
+  shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Insights"),
+    h("p", {}, `${brandOf().name}: real results from Instagram, what holds viewers in the first seconds, and what the system is learning.`))), body));
+  const b = brandOf();
+  const [rows] = await Promise.all([perfRows(b.id), loadSettings().catch(() => {})]);
+  const since = new Date(Date.now() - 7 * 86400e3).toISOString(), prev = new Date(Date.now() - 14 * 86400e3).toISOString();
+  const dmr = (await sb.from("dm_log").select("created_at").eq("brand", b.id).eq("state", "sent").gte("created_at", prev).then((r) => r.data, () => [])) || [];
+  const dms = [dmr.filter((r) => r.created_at >= since).length, dmr.filter((r) => r.created_at < since).length];
+  const posted = rows.filter((r) => r.posted).sort((x, y) => Date.parse(x.posted) - Date.parse(y.posted)).slice(-24);
+  const color = seriesOf(b.id);
+  const viewsChart = posted.length ? columns({ label: "Views per reel", color, items: posted.map((r) => ({ x: dateShort(r.posted), label: r.title, value: r.st?.views ?? null,
+    tip: () => tipLines(r.title || "Reel", [["Posted", tzClock(r.posted)], ["Views", r.st?.views], ["Reach", r.st?.reach], ["Sends", r.st?.shares], ["Saves", r.st?.saved], ["Held opening", holdOf(r) != null ? holdOf(r) + "%" : null]]) })) })
+    : h("p", { cls: "small muted" }, "No posted reels in the last 60 days.");
+  const hooks = posted.filter((r) => holdOf(r) != null && (r.hook?.say || r.title)).sort((x, y) => holdOf(y) - holdOf(x));
+  const hookChart = hooks.length ? hbars({ label: "Openings ranked by how many viewers stayed", unit: "%", max: 100, items: hooks.slice(0, 10).map((r) => ({ label: r.hook?.text || r.hook?.say || r.title, value: holdOf(r), color,
+    tip: () => tipLines(r.title || "Reel", [["Says", r.hook?.say], ["On screen", r.hook?.text], ["First shot", r.hook?.visual], ["Measure", r.st?.reels_skip_rate != null ? "100 − skip rate (first 3 s)" : "share of the reel watched"]]) })) })
+    : h("p", { cls: "small muted" }, "Hold rates appear about a day after reels are posted (Instagram needs the insights permission).");
+  const lib = (S.settings?.[bkey("ig_library", b.id)]?.posts || []);
+  const byType = ["REELS", "FEED"].map((t) => { const ps = lib.filter((p) => (p.type || "FEED") === t); return { t, n: ps.length, likes: ps.length ? Math.round(ps.reduce((a, p) => a + (p.likes || 0), 0) / ps.length) : null }; });
+  const table = h("details", { cls: "more" }, h("summary", {}, "Table view"), h("table", { cls: "dtable" }, h("thead", {}, h("tr", {}, ["Posted", "Reel", "Views", "Reach", "Sends", "Saves", "Held"].map((c) => h("th", {}, c)))),
+    h("tbody", {}, [...posted].reverse().map((r) => h("tr", {}, h("td", {}, dateShort(r.posted)), h("td", {}, r.title || ""), ...["views", "reach", "shares", "saved"].map((k) => h("td", { cls: "num" }, nfmt(r.st?.[k] ?? null))), h("td", { cls: "num" }, holdOf(r) != null ? holdOf(r) + "%" : "–"))))));
+  body.replaceChildren(
+    kpiTiles(rows, dms),
+    digestPanel(b, S.settings?.[bkey("digest", b.id)]),
+    h("section", { cls: "panel" }, h("h3", {}, "Views per reel"), h("p", { cls: "small muted" }, "Last 24 posted reels, oldest left. Hover a column for its numbers."), viewsChart, table),
+    h("section", { cls: "panel" }, h("h3", {}, "Hook bank"), h("p", { cls: "small muted" }, "Each reel's opening ranked by how many viewers stayed past the first seconds. The scriptwriter copies the patterns of the strongest, never the words."), hookChart),
+    lib.length ? h("section", { cls: "panel" }, h("h3", {}, "The account's other posts"), h("p", { cls: "small muted" }, `${lib.length} recent Instagram posts the learning also reads (refreshed daily).`),
+      hbars({ label: "Average likes by post type", items: byType.filter((x) => x.n).map((x) => ({ label: `${x.t === "REELS" ? "Reels" : "Photos & carousels"} (${x.n})`, value: x.likes, color })) })) : null);
+}
 // ---------------------------------------------------------------- Dashboard: every account at a glance (first page after sign-in)
 async function viewDashboard() {
   const grid = h("div", { cls: "accts" }, [1, 2, 3, 4].map(() => h("div", { cls: "skeleton acct-skel" })));
   const strip = h("div", { cls: "dash-strip" });
-  shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Dashboard"), h("p", {}, "Every account in one studio. Same process, each with its own reels, posting and autopilot."))), strip, grid));
+  const perf = h("div", { cls: "perf" });
+  shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Dashboard"), h("p", {}, "Every account in one studio. Same process, each with its own reels, posting and autopilot."))), strip, grid, perf));
+  homePerf(perf).catch(() => perf.replaceChildren());
   const paint = async () => {
     if (!grid.isConnected) return;
     const since = new Date(Date.now() - 30 * 86400e3).toISOString(); const week = Date.now() - 7 * 86400e3;
@@ -443,6 +581,37 @@ async function viewDashboard() {
   };
   await paint().catch(() => {});
   S.timers.push(setInterval(() => paint().catch(() => {}), 15000));
+}
+// home: how every account is doing, side by side (refreshed when the page opens; results change a few times a day)
+async function homePerf(box) {
+  box.replaceChildren(h("div", { cls: "skeleton", style: "height:220px;margin-top:20px" }));
+  const prev = new Date(Date.now() - 14 * 86400e3).toISOString(), since = new Date(Date.now() - 7 * 86400e3).toISOString();
+  const [rows, dmr] = await Promise.all([perfRows(), sb.from("dm_log").select("brand,created_at").eq("state", "sent").gte("created_at", prev).then((r) => r.data || [], () => [])]);
+  await loadSettings().catch(() => {});
+  const live = (S.brands || BRANDS_FALLBACK).filter((b) => b.status === "live");
+  const mine = (bid) => rows.filter((r) => (r.brand || "weone") === bid);
+  const posted30 = (bid) => mine(bid).filter((r) => r.posted && Date.parse(r.posted) > Date.now() - 30 * 86400e3 && r.st?.views != null);
+  const avg = (list, k) => list.length ? list.reduce((a, r) => a + (Number(r.st?.[k]) || 0), 0) / list.length : null;
+  const bars = (k, unit) => hbars({ label: k, unit, items: live.map((b) => { const ps = posted30(b.id); const v = avg(ps, k);
+    return { label: b.name, value: v == null ? null : Math.round(v), color: seriesOf(b.id),
+      tip: () => tipLines(b.name, [["Reels with results (30 days)", ps.length], ["Average views", nfmt(avg(ps, "views"))], ["Average reach", nfmt(avg(ps, "reach"))], ["Average sends", avg(ps, "shares")?.toFixed(1)], ["Average saves", avg(ps, "saved")?.toFixed(1)]]) }; }) });
+  const holdBars = hbars({ label: "Viewers who stayed past the opening", unit: "%", max: 100, items: live.map((b) => { const hs = posted30(b.id).map(holdOf).filter((v) => v != null);
+    return { label: b.name, value: hs.length ? Math.round(hs.reduce((a, v) => a + v, 0) / hs.length) : null, color: seriesOf(b.id), tip: () => tipLines(b.name, [["Reels measured", hs.length]]) }; }) });
+  const card = (b) => { const dg = S.settings?.[bkey("digest", b.id)];
+    return h("button", { cls: "dg-card", onclick: () => { setBrand(b.id); go("insights"); }, "aria-label": `${b.name} insights` },
+      h("div", { cls: "dg-top" }, h("i", { cls: "dg-dot", style: `background:${seriesOf(b.id)}` }), h("b", {}, b.name), h("span", { cls: "tiny faint" }, dg ? `updated ${ago(dg.at)}` : "no digest yet")),
+      dg ? [h("p", { cls: "small" }, h("span", { cls: "muted" }, "Best: "), dg.best ? `${dg.best.title || "Untitled"}${dg.best.views != null ? ` · ${nfmt(dg.best.views)} views` : ""}` : "not enough results"),
+        h("p", { cls: "small" }, h("span", { cls: "muted" }, "Next experiment: "), dg.next_experiment || "–"),
+        dg.evidence === "weak" ? h("span", { cls: "tiny", style: "color:#6E4300" }, `Early signal: ${dg.measured} reels measured`) : null]
+        : h("p", { cls: "small muted" }, "Written by the next daily learning run."),
+      h("span", { cls: "tiny dg-more" }, "Open insights →")); };
+  box.replaceChildren(h("div", { cls: "page-head", style: "margin-top:28px" }, h("div", {}, h("h2", {}, "Performance"), h("p", { cls: "small muted" }, "Instagram results of every account. Totals compare the last 7 days with the 7 before."))),
+    kpiTiles(rows, [dmr.filter((r) => r.created_at >= since).length, dmr.filter((r) => r.created_at < since).length]),
+    h("div", { cls: "perf-grid" },
+      h("section", { cls: "panel" }, h("h3", {}, "Average views per reel"), h("p", { cls: "small muted" }, "Posted reels of the last 30 days."), bars("views", "")),
+      h("section", { cls: "panel" }, h("h3", {}, "Opening hold"), h("p", { cls: "small muted" }, "Share of viewers still watching after the first seconds."), holdBars)),
+    h("h3", { style: "margin:22px 0 10px" }, "Weekly digest"),
+    h("div", { cls: "dg-grid" }, live.map(card)));
 }
 // ---------------------------------------------------------------- Assets: each account's own logo (used on its reels)
 const LOGO_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
@@ -933,9 +1102,9 @@ function actions(j) {
 }
 async function reviewView(j) {
   const o = j.output || {}; const name = `${titleOf(j).replace(/[^\w\- ]+/g, "").trim().slice(0, 50) || "reel"}.mp4`;
-  const [url, poster, dl] = await Promise.all([signed(o.video), signed(o.thumb), signed(o.video, name)]);
+  const [url, poster, dl] = await Promise.all([videoUrl(o), signed(o.thumb), videoUrl(o, name)]);
   const video = url ? h("video", { src: url, poster, controls: true, playsinline: true, preload: "metadata" }) : h("p", { cls: "muted", style: "color:#fff;padding:20px" }, "Video not available yet. It appears here once the upload finishes.");
-  if (url) video.addEventListener("error", async () => { if ((video._re = (video._re || 0) + 1) > 3) return; const t = video.currentTime; const u = await signed(o.video); if (u) { video.src = u; video.currentTime = t; } });
+  if (url) video.addEventListener("error", async () => { if ((video._re = (video._re || 0) + 1) > 3) return; const t = video.currentTime; const u = await videoUrl(o); if (u) { video.src = u; video.currentTime = t; } });
   const claimsBy = {}; (o.claims || []).forEach((c) => { (claimsBy[c.group || "_"] ||= []).push(c); });
   const lines = o.script || [];
   const lastOfGroup = {}; lines.forEach((l, i) => { lastOfGroup[l.group] = i; });
@@ -983,7 +1152,7 @@ async function reviewView(j) {
       o.ig_caption ? h("details", { cls: "more" }, h("summary", {}, "Instagram caption"), h("p", { cls: "small", style: "white-space:pre-wrap;margin-top:8px" }, o.ig_caption)) : null,
       (o.credits || []).length ? h("details", { cls: "more" }, h("summary", {}, "Footage credits"), h("ul", {}, o.credits.map((c) => h("li", {}, `${c.author}, ${c.source} (${c.licence})`)))) : null,
       o.archive_on_mac ? h("p", { cls: "tiny faint", style: "margin-top:12px;overflow-wrap:anywhere" }, `Full-quality master on the Mac: ${o.archive_on_mac}`) : null,
-      h("div", { cls: "decide" }, changeBox, h("div", { cls: "row" }, dl ? h("button", { cls: "btn quiet", onclick: () => download(o.video, name) }, icon("down"), "Download") : null, cancelChange, change, approve))));
+      h("div", { cls: "decide" }, changeBox, h("div", { cls: "row" }, dl ? h("button", { cls: "btn quiet", onclick: () => downloadReel(o, name) }, icon("down"), "Download") : null, cancelChange, change, approve))));
 }
 let prodBox = null, prodBusy = false, prodAgain = false;
 const stripCache = new Map();
@@ -1126,6 +1295,36 @@ function recheckBtn(k, b, refresh) {
     refresh();
   } }, pending() ? "Checking…" : "Re-check");
 }
+// Comment-to-DM: a viewer comments the keyword, the account sends them one private message (Instagram allows one per comment, within 7 days)
+const DM_STATE = { ready: ["ok", "Working: replies within about 2 minutes"], checking: ["wait", "Checking with Instagram…"], needs_permission: ["warn", "Needs a permission on the Instagram token"],
+  not_connected: ["no", "Waiting for this account's Instagram"], error: ["warn", "Not working right now"] };
+function dmCard(b, log, refresh) {
+  const d = S.settings?.[bkey("dm", b.id)] || { on: false, keywords: [], message: "" };
+  const [kind, word] = d.on ? (DM_STATE[d.state] || DM_STATE.checking) : ["no", "Off"];
+  const kw = h("input", { type: "text", maxlength: "15", value: (d.keywords || [])[0] || "", placeholder: "Keyword, e.g. QUOTE", "aria-label": "Keyword", style: "margin-top:8px;text-transform:uppercase" });
+  const msgIn = h("textarea", { rows: 5, maxlength: "900", "aria-label": "Message sent to the commenter", style: "margin-top:8px;width:100%" }, d.message || "");
+  const pub = h("input", { type: "checkbox", checked: d.public_reply !== false ? true : null });
+  const on = h("input", { type: "checkbox", checked: d.on ? true : null });
+  const msg = statusMsg(); const sent = log.filter((r) => r.state === "sent");
+  return h("article", { cls: `svc conn ${kind}`, style: "grid-column:1/-1" },
+    h("div", { cls: "svc-head" }, h("span", { cls: "plat-tile svc-ico" }, h("img", { src: PLAT_IMG.ig, alt: "" }),
+        h("span", { cls: `plat-badge ${kind}`, "aria-hidden": "true" }, kind === "ok" ? "✓" : kind === "no" ? "✕" : kind === "wait" ? "…" : "!")),
+      h("div", {}, h("h3", {}, "Comment-to-DM"), h("p", { cls: `small plat-state ${kind}` }, word))),
+    h("p", { cls: "small muted" }, `When someone comments ${(d.keywords || [])[0] || "the keyword"} on a post from the last 7 days, ${b.name} sends them this message once, and replies "Sent you a DM" under the comment. Reels then end with "Comment ${(d.keywords || [])[0] || "…"}" instead of "Follow". {name} becomes their @username.`),
+    d.note && d.on ? h("p", { cls: "small", style: "color:#7D1C26" }, d.note) : null,
+    b.id === "legalgroup" ? h("p", { cls: "tiny", style: "color:#6E4300" }, "Advocates in India may not solicit work (Bar Council of India rules), so this message only points to free explainers. Keep it informational.") : null,
+    h("div", { cls: "form-grid" }, h("label", { cls: "fld" }, h("span", {}, "Keyword"), kw),
+      h("label", { cls: "fld", style: "display:flex;gap:8px;align-items:center;margin-top:26px" }, on, h("span", {}, "On")),
+      h("label", { cls: "fld", style: "display:flex;gap:8px;align-items:center;margin-top:26px" }, pub, h("span", {}, "Also reply \"Sent you a DM\" publicly"))),
+    h("label", { cls: "fld" }, h("span", {}, "Message (max 900 characters)"), msgIn),
+    h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: async () => {
+      msg.textContent = "Saving…";
+      try { await rpc("set_dm", { p_brand: b.id, p_on: on.checked, p_keyword: kw.value.trim(), p_message: msgIn.value.trim(), p_public_reply: pub.checked });
+        await loadSettings(); toast(on.checked ? `Comment-to-DM on for ${b.name}. Instagram is checked within 2 minutes.` : "Comment-to-DM saved (off)."); refresh(); }
+      catch (e) { msg.textContent = errText(e); } } }, "Save"), msg),
+    h("p", { cls: "small", style: "margin-top:8px" }, h("b", {}, `${sent.length} sent in the last 7 days`),
+      log.length ? h("span", { cls: "muted" }, ` · latest: ${log.slice(0, 4).map((r) => `@${r.username} (${r.state}, ${ago(r.created_at)})`).join(", ")}`) : null));
+}
 function webCard(b, refresh) {
   const web = safeUrl(b.website); const v = stOf("website_status", b.id); const s_ = web ? v.state : "not_connected";
   const kind = !web ? "no" : s_ === "connected" ? "ok" : s_ === "error" ? "warn" : "wait";
@@ -1239,7 +1438,9 @@ async function viewAccount() {
   const paint = async (force) => {
     if (!body.isConnected) return;
     await Promise.all([loadSettings().catch(() => {}), loadBrands().catch(() => {}), loadOwner()]);
-    const b = brandOf(); const nowSig = JSON.stringify([b, ["ig", "fb", "li"].map((k) => stOf(PST[k])), stOf("website_status"), S.settings?.linkedin_app, S.settings?.meta_app]);
+    const since = new Date(Date.now() - 7 * 86400e3).toISOString();
+    const dmLog = (await sb.from("dm_log").select("username,state,created_at").eq("brand", S.brand).gte("created_at", since).order("created_at", { ascending: false }).limit(200).then((r) => r.data, () => [])) || [];
+    const b = brandOf(); const nowSig = JSON.stringify([b, ["ig", "fb", "li"].map((k) => stOf(PST[k])), stOf("website_status"), S.settings?.[bkey("dm")], dmLog.length, S.settings?.linkedin_app, S.settings?.meta_app]);
     if (!force && nowSig === sig) return; sig = nowSig;
     if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;     // never wipe a half-typed field
     const L = b.links || {};
@@ -1268,7 +1469,10 @@ async function viewAccount() {
       logo,
       h("section", { cls: "panel" }, h("h3", {}, "Connections"),
         h("p", { cls: "small muted", style: "margin:4px 0 14px" }, `Reels of ${b.name} post only to the pages connected here. A page connected to another account can't be connected here too.`),
-        h("div", { cls: "svc-grid" }, ["ig", "fb", "li"].map((k) => connCard(k, b, () => paint(true))), webCard(b, () => paint(true)))));
+        h("div", { cls: "svc-grid" }, ["ig", "fb", "li"].map((k) => connCard(k, b, () => paint(true))), webCard(b, () => paint(true)))),
+      h("section", { cls: "panel" }, h("h3", {}, "Call to action"),
+        h("p", { cls: "small muted", style: "margin:4px 0 14px" }, "Turns comments into conversations. Works in the cloud, also while the Mac is off."),
+        h("div", { cls: "svc-grid" }, dmCard(b, dmLog, () => paint(true)))));
   };
   await paint(true).catch((e) => body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(e)))));
   S.timers.push(setInterval(() => paint(false).catch(() => {}), 8000));
@@ -1315,6 +1519,32 @@ function metaCard(refresh) {
       try { await rpc("set_meta_app", { p_app_id: id.value.trim(), p_app_secret: sec.value.trim() }); sec.value = ""; await loadSettings(); toast("Meta app saved. Checking it now…"); refresh(); }
       catch (e) { msg.textContent = errText(e); } } }, m.app_id ? "Replace" : "Save"),
       h("a", { cls: "btn quiet", href: "https://developers.facebook.com/apps/", target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "Meta apps")), msg] : null);
+}
+// Cloudflare R2: where reels wait to be posted (10 GB free, no download fees). Until it is checked, Supabase is used.
+function r2Card(refresh) {
+  const c = S.settings?.r2 || { state: "not_set" };
+  const kind = c.state === "ok" ? "ok" : c.state === "bad" ? "warn" : c.state === "checking" ? "wait" : "no";
+  const f = (ph, label, val) => h("input", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: ph, value: val || "", "aria-label": label, style: "margin-top:8px" });
+  const acc = f("Account ID (32 characters)", "Cloudflare Account ID", c.account_id), bucket = f("Bucket name, e.g. reel-studio", "R2 bucket name", c.bucket);
+  const kid = secretInput(c.hint ? "Access Key ID (saved)" : "Access Key ID", "R2 Access Key ID"), sec = secretInput(c.hint ? `Secret Access Key (saved ${c.hint})` : "Secret Access Key", "R2 Secret Access Key");
+  const msg = statusMsg();
+  return h("article", { cls: `svc ${kind}` },
+    h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, h("img", { src: SVC_IMG.cloudflare, alt: "" })), h("div", {}, h("h3", {}, "Cloudflare R2 (reel storage)"),
+      h("p", { cls: "small" }, h("i", { cls: "lamp " + (kind === "warn" ? "bad" : kind === "no" ? "" : kind) }), { ok: `Working: bucket ${c.bucket}`, warn: "Not accepted", wait: "Checking…", no: "Not set up: reels use Supabase" }[kind]))),
+    h("p", { cls: "small muted" }, "Each reel keeps one posting copy in the cloud, removed 3 days after it is posted (7 days if never reviewed). The Mac deletes its work files and masters too. Thumbnails, results and scripts stay."),
+    h("ol", { cls: "small muted", style: "margin:6px 0 0 18px" }, h("li", {}, "Cloudflare dashboard → R2 → Create bucket (any name)."), h("li", {}, "R2 → Manage API tokens → Create token: Object Read & Write, this bucket only."),
+      h("li", {}, "Paste the Account ID, bucket name, Access Key ID and Secret here."), h("li", {}, "Optional safety net: bucket → Settings → Object lifecycle → delete after 7 days.")),
+    c.note ? h("p", { cls: "small", style: "color:#7D1C26" }, c.note) : null,
+    S.owner ? [acc, bucket, kid, sec, h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: async () => {
+      if (![acc, bucket, kid, sec].every((x) => x.value.trim())) { msg.textContent = "Fill in all four fields."; return; }
+      msg.textContent = "Saving…";
+      try { await rpc("set_r2", { p_account: acc.value.trim(), p_bucket: bucket.value.trim(), p_key_id: kid.value.trim(), p_secret: sec.value.trim() });
+        kid.value = ""; sec.value = ""; await loadSettings(); toast("R2 saved. The cloud checks it within a minute; new reels go there once it works."); refresh(); }
+      catch (e) { msg.textContent = errText(e); } } }, c.account_id ? "Replace" : "Save"),
+      c.account_id ? h("button", { cls: "btn quiet danger", onclick: (e) => armed(e, "Tap again: new reels go back to Supabase", async () => {
+        try { await rpc("set_r2", { p_account: "", p_bucket: "", p_key_id: "", p_secret: "" }); await loadSettings(); toast("R2 removed. New reels are stored in Supabase."); } catch (err) { toast(errText(err), { err: true }); } refresh(); }) }, "Remove") : null,
+      h("a", { cls: "btn quiet", href: "https://dash.cloudflare.com/?to=/:account/r2/overview", target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "Cloudflare R2")), msg]
+      : h("p", { cls: "tiny faint" }, "Only the studio owner can change storage."));
 }
 function liAppCard(refresh) {
   const app = S.settings?.linkedin_app || {};
@@ -1370,7 +1600,7 @@ async function viewSettings() {
   const paint = async (force) => {
     if (!body.isConnected) return;
     await Promise.all([loadSettings().catch(() => {}), loadWorker().catch(() => {}), loadOwner()]);
-    const nowSig = JSON.stringify([S.settings?.studio_keys, S.settings?.meta_app, S.settings?.linkedin_app, S.settings?.post_schedule, S.settings?.worker_settings, S.worker?.info?.keys, macAlive(), S.worker?.claude_ok, S.editSlots]);
+    const nowSig = JSON.stringify([S.settings?.studio_keys, S.settings?.meta_app, S.settings?.r2, S.settings?.linkedin_app, S.settings?.post_schedule, S.settings?.worker_settings, S.worker?.info?.keys, macAlive(), S.worker?.claude_ok, S.editSlots]);
     if (!force && nowSig === sig) return; sig = nowSig;
     if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     const rr = () => paint(true); const w = S.worker; const i = w?.info || {};
@@ -1383,6 +1613,7 @@ async function viewSettings() {
         keyCard({ id: "pexels", name: "Pexels", img: SVC_IMG.pexels, wide: true, get: "https://www.pexels.com/api/", help: "Get a key", desc: "Main source of video clips (required)." }, rr),
         keyCard({ id: "pixabay", name: "Pixabay", img: SVC_IMG.pixabay, wide: true, get: "https://pixabay.com/api/docs/", help: "Get a key", desc: "Second source of video clips (optional, more choice)." }, rr)),
       sect("Developer apps", "Saved once here, used when you connect any account's Facebook or LinkedIn (in that account's Settings).", metaCard(rr), liAppCard(rr)),
+      sect("Storage", "Where finished reels wait until they are posted. Nothing is kept longer than needed.", r2Card(rr)),
       sect("Posting", null, h("article", { cls: "svc" }, h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, icon("route", 26)), h("div", {}, h("h3", {}, "Auto-post"),
           h("p", { cls: "small" }, sch.auto === false ? "Off: approved reels post only when you tap Post." : `On: ${sch.review_minutes ?? 5} min after a reel is ready it posts to that account's own connected pages, unless you act.`))),
         S.editSlots ? slotEditor(sch, rr) : h("div", { cls: "svc-btns" }, h("button", { cls: "btn quiet", onclick: () => { S.editSlots = { minutes: sch.review_minutes ?? 5, auto: sch.auto !== false }; rr(); } }, "Change")))),
@@ -1438,7 +1669,7 @@ async function viewLibrary() {
           h("button", { cls: "btn quiet", style: "margin-left:auto", onclick: () => go("account") }, "Connect in Settings")));
     if (!data?.length) { grid.replaceChildren(h("div", { cls: "panel empty", style: "grid-column:1/-1" }, h("h3", {}, "Nothing here yet"), h("p", {}, "Approved reels appear here, ready to download and post."), h("button", { cls: "btn primary", onclick: () => go("create") }, "Create a reel"))); return; }
     const cards = await Promise.all(data.map(async (j) => {
-      const o = j.output || {}; if (!(j.id in thumbs)) thumbs[j.id] = o.pruned ? null : await signed(o.thumb);
+      const o = j.output || {}; if (!(j.id in thumbs)) thumbs[j.id] = await signed(o.thumb);
       return h("div", { cls: "libcard" }, h("button", { cls: "poster", onclick: () => openPlayer(j) }, h("div", { cls: "frame" }, thumbs[j.id] ? h("img", { src: thumbs[j.id], alt: "", loading: "lazy" }) : null, h("span", { cls: "play" }, icon("play", 18, true))),
         h("h3", {}, titleOf(j)), h("p", { cls: "tiny" }, `${dateShort(j.updated_at)}, ${o.duration ?? "?"} s`)),
         ["ig", "fb", "li"].filter((p) => o[p] || platSet(p) || (p === "ig" && S.brand === "weone")).map((p) => [postBadge(j, p), postActions(j, p, () => refresh(true))]),
@@ -1451,10 +1682,10 @@ async function viewLibrary() {
 }
 async function openPlayer(j) {
   const o = j.output || {}; const name = `${titleOf(j).replace(/[^\w\- ]+/g, "").trim().slice(0, 50) || "reel"}.mp4`;
-  const [url, dl] = o.pruned ? [null, null] : await Promise.all([signed(o.video), signed(o.video, name)]);
-  const d = h("dialog", { "aria-label": titleOf(j) }, url ? h("video", { src: url, controls: true, autoplay: true, playsinline: true }) : h("p", { style: "padding:24px" }, "The cloud copy was removed after 30 days. The master is on the Mac."),
+  const [url, dl] = await Promise.all([videoUrl(o), videoUrl(o, name)]);
+  const d = h("dialog", { "aria-label": titleOf(j) }, url ? h("video", { src: url, controls: true, autoplay: true, playsinline: true }) : h("p", { style: "padding:24px" }, keptNote(o) || "This video is no longer stored in the cloud."),
     h("div", { cls: "dlg-foot" }, h("b", { style: "font-family:var(--f-head)" }, titleOf(j)), h("div", { style: "display:flex;gap:8px" },
-      dl ? h("button", { cls: "btn primary", onclick: () => download(o.video, name) }, icon("down"), "Download") : null, h("button", { cls: "btn", onclick: () => d.close() }, "Close"))));
+      dl ? h("button", { cls: "btn primary", onclick: () => downloadReel(o, name) }, icon("down"), "Download") : null, h("button", { cls: "btn", onclick: () => d.close() }, "Close"))));
   d.addEventListener("close", () => d.remove()); document.body.append(d); d.showModal();
 }
 

@@ -17,7 +17,7 @@ iso = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 class DB:
     """Tiny PostgREST: eq / in / is.null / gte / lt / or=(a.eq.x,a.is.null) / order desc / limit."""
-    def __init__(self): self.t = {"jobs": [], "agent_runs": [], "agent_lessons": [], "brands": [], "job_events": []}; self.seq = 0
+    def __init__(self): self.t = {"jobs": [], "agent_runs": [], "agent_lessons": [], "brands": [], "job_events": [], "settings": [], "dm_log": []}; self.seq = 0
     def _get(self, r, k):
         if "->>" in k: a, b = k.split("->>"); return str((r.get(a) or {}).get(b))
         return r.get(k)
@@ -117,6 +117,14 @@ L = db.t["agent_lessons"]
 a = [l for l in L if l["created_by"] == "analyst"][0]
 ok(a["agent"] == "scriptwriter" and a["brand"] == "weone" and a["metric"] == "engagement" and a["baseline"] == 2.0 and a["status"] == "active",
    f"Analyst lesson saved for the right agent and account, baseline = median engagement before it ({a['baseline']})")
+dg = next(r["value"] for r in db.t["settings"] if r["key"] == "digest")
+ok(dg["best"] is None and dg["numbers"]["posted"] == 0 and dg["next_experiment"], "older reels only: the digest says nothing was posted this week (no invented best reel)")
+db2 = DB(); seed(db2, [2, 9, 4, 1], start_days=6); b2 = Brain(); learn.brain = agents.brain = b2; agents._CACHE.clear(); brandmod._CACHE.clear()
+learn.run(ctx_for(db2, "learn", "weone", {"brand": "weone", "day": "d"}))
+dg = next(r["value"] for r in db2.t["settings"] if r["key"] == "digest")
+ok(dg["best"]["title"] == "Reel 1" and dg["worst"]["title"] == "Reel 3" and dg["numbers"]["posted"] == 4 and dg["numbers"]["sends"] == 16 and dg["evidence"] == "weak",
+   f"weekly digest: best/worst by real engagement, totals, and 'weak evidence' with only 4 reels ({dg['best']['title']} / {dg['worst']['title']})")
+learn.brain = agents.brain = b
 rm = [l for l in L if l["created_by"] == "resource_manager"][0]
 ok(rm["agent"] == "footage_picker" and rm["brand"] is None and rm["metric"] == "qc" and rm["baseline"] == 60.0, "Resource Manager lesson is team-wide with a QC baseline")
 ok(c.job["output"]["learn"]["health"] and c.job["output"]["learn"]["usage_note"], "the team's health and usage note are reported")

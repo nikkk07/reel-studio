@@ -12,6 +12,7 @@ Confirmed concept:
 ## 2. Narration rules (premium and punchy)
 * 3–5 `groups` of 1–5 `phrases`; each phrase is one breath (3–10 words). Total spoken words 75–95.
 * Group 1 is the hook, spoken in under 3 seconds: a curiosity gap, a contradiction or a hidden cost ("Your quote is missing a line."). Never start with "Did you know", "Hi" or the brand name.
+* The first 3 seconds decide the reel: the voice line, the on-screen text and the first shot hit the SAME idea at once. Open with the most surprising specific (a number, a cost, a common mistake), a direct "you", or a contradiction; never a greeting or the bare topic name. The first phrase's caption is at most 6 words and makes sense muted. The first shot (at_phrase 0) moves or is a close-up that shows the line, never a logo or a static wide view. Use ONE psychological lever: curiosity gap, loss aversion, identity ("if you want to fly...") or a verified surprising fact, and pay it off within the reel (no clickbait).
 * Then: context in one line → the reveal (the insider truth) → the payoff (what the viewer should do or check) → exactly one call to action as the last phrase of the last group: say `{{cta_say}}`, caption `{{cta_caption}}` (once, never repeated).
 {{say_rules}}
 * `caption` = the same phrase for on-screen captions; digits and units are fine ("*541 km*"); wrap 1–2 key words in `*asterisks*` for the gold highlight.
