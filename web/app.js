@@ -119,7 +119,8 @@ const platSet = (k, b = S.brand) => !["not_connected", "duplicate"].includes(pla
 const PLATS = ["ig", "fb", "li", "yt"];
 const anyPosting = (b = S.brand) => b === "weone" || PLATS.some((k) => platSet(k, b));
 const SVC_IMG = { supabase: "icons/services/supabase.png", vercel: "icons/services/vercel.svg", github: "icons/services/github.svg", apple: "icons/services/apple.png",
-  claude: "icons/services/claude.svg", meta: "icons/services/meta.svg", cloudflare: "icons/services/cloudflare.png", pexels: "icons/services/pexels.png", pixabay: "icons/services/pixabay.png" };
+  claude: "icons/services/claude.svg", meta: "icons/services/meta.svg", cloudflare: "icons/services/cloudflare.png", pexels: "icons/services/pexels.png", pixabay: "icons/services/pixabay.png",
+  groq: "icons/services/groq.svg", coverr: "icons/services/coverr.svg", thumbapi: "icons/services/thumbapi.svg" };
 const PLAT_IMG = { ig: "icons/platforms/instagram.png", fb: "icons/platforms/facebook.png", li: "icons/platforms/linkedin.png", yt: "icons/platforms/youtube.svg", web: "icons/platforms/website.png" };
 async function getJob(id) { const { data, error } = await sb.from("jobs").select("*").eq("id", id).single(); if (error) throw error; return data; }
 async function events(id, n = 10) { const { data } = await sb.from("job_events").select("id,ts,level,message").eq("job_id", id).order("id", { ascending: false }).limit(n); return data || []; }
@@ -1206,7 +1207,7 @@ async function reviewView(j) {
       lines.length ? [h("h3", { style: "margin-bottom:8px" }, "Script"), h("p", { cls: "small muted", style: "margin-bottom:10px" }, "Tap a line to jump the video there. Sources sit under the lines they support."), h("ol", { cls: "lines" }, items)] : null,
       h("div", { cls: "qc" }, h("h3", {}, "Claude's check"), h("p", { cls: "small", style: "margin-top:6px" }, qc.summary || "No notes."), (qc.issues || []).length ? h("ul", {}, qc.issues.map((i) => h("li", {}, `At ${i.t ?? "?"} s: ${i.problem}`))) : null),
       o.ig_caption ? h("details", { cls: "more" }, h("summary", {}, "Instagram caption"), h("p", { cls: "small", style: "white-space:pre-wrap;margin-top:8px" }, o.ig_caption)) : null,
-      (o.credits || []).length ? h("details", { cls: "more" }, h("summary", {}, "Footage credits"), h("ul", {}, o.credits.map((c) => h("li", {}, `${c.author}, ${c.source} (${c.licence})`)))) : null,
+      (o.credits || []).length ? h("details", { cls: "more" }, h("summary", {}, "Footage credits"), h("ul", {}, o.credits.map((c) => h("li", {}, c.source === "coverr" ? h("a", { href: "https://coverr.co", target: "_blank", rel: "noopener noreferrer" }, "Video by Coverr") : `${c.author}, ${c.source}`, ` (${c.licence})`)))) : null,
       o.archive_on_mac ? h("p", { cls: "tiny faint", style: "margin-top:12px;overflow-wrap:anywhere" }, `Full-quality master on the Mac: ${o.archive_on_mac}`) : null,
       h("div", { cls: "decide" }, changeBox, h("div", { cls: "row" }, dl ? h("button", { cls: "btn quiet", onclick: () => downloadReel(o, name) }, icon("down"), "Download") : null, cancelChange, change, approve))));
 }
@@ -1600,6 +1601,17 @@ function keyCard({ id, name, img, wide, get, desc, help }, refresh) {
       st.hint ? h("button", { cls: "btn quiet danger", onclick: (e) => armed(e, "Tap again to remove", () => save("")) }, "Remove") : null,
       h("a", { cls: "btn quiet", href: get, target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), help)), msg] : null);
 }
+// ThumbAPI: an AI thumbnail for each YouTube Short (optional; the free plan makes 5 a month, watermarked)
+function thumbCard(refresh) {
+  const on = !!S.settings?.thumbapi_use?.on; const st = (S.settings?.studio_keys || {}).thumbapi || {};
+  const sw = h("button", { cls: "switch" + (on ? " on" : ""), role: "switch", "aria-checked": String(on), "aria-label": "Use ThumbAPI for YouTube thumbnails", disabled: !S.owner || !st.hint,
+    onclick: async () => { try { await rpc("set_thumbapi_use", { p_on: !on }); await loadSettings(); toast(!on ? "AI thumbnails on: each new YouTube Short gets one (uses ThumbAPI credits)." : "AI thumbnails off."); } catch (e) { toast(errText(e), { err: true }); } refresh(); } },
+    h("i", { "aria-hidden": "true" }), h("span", {}, "Use for YouTube thumbnails"));
+  const card = keyCard({ id: "thumbapi", name: "ThumbAPI", img: SVC_IMG.thumbapi, get: "https://thumbapi.dev", help: "Get a key",
+    desc: "Makes a 1280×720 AI thumbnail from each reel's title and sets it on the YouTube Short. Free plan: 50 credits a month = 5 thumbnails, with a ThumbAPI watermark (paid plans remove it). YouTube only accepts custom thumbnails from phone-verified channels." }, refresh);
+  card.insertBefore(h("div", { style: "margin:4px 0 8px" }, sw, !st.hint ? h("p", { cls: "tiny faint" }, "Save a key first.") : null), card.children[2] || null);
+  return card;
+}
 function metaCard(refresh) {
   const m = S.settings?.meta_app || { state: "not_set" };
   const kind = m.state === "ok" ? "ok" : m.state === "bad" ? "warn" : m.state === "checking" ? "wait" : "no";
@@ -1715,7 +1727,7 @@ async function viewSettings() {
   const paint = async (force) => {
     if (!body.isConnected) return;
     await Promise.all([loadSettings().catch(() => {}), loadWorker().catch(() => {}), loadOwner()]);
-    const nowSig = JSON.stringify([S.settings?.studio_keys, S.settings?.meta_app, S.settings?.r2, S.settings?.linkedin_app, S.settings?.youtube_app, S.settings?.post_schedule, S.settings?.worker_settings, S.worker?.info?.keys, macAlive(), S.worker?.claude_ok, S.editSlots]);
+    const nowSig = JSON.stringify([S.settings?.studio_keys, S.settings?.thumbapi_use, S.settings?.meta_app, S.settings?.r2, S.settings?.linkedin_app, S.settings?.youtube_app, S.settings?.post_schedule, S.settings?.worker_settings, S.worker?.info?.keys, macAlive(), S.worker?.claude_ok, S.editSlots]);
     if (!force && nowSig === sig) return; sig = nowSig;
     if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     const rr = () => paint(true); const w = S.worker; const i = w?.info || {};
@@ -1726,7 +1738,14 @@ async function viewSettings() {
       !S.owner ? h("div", { cls: "banner info", style: "margin-bottom:16px" }, "Only the studio owner can change keys. You can see their status.") : "",
       sect("Stock footage", "Where the clips in every reel come from. Free keys; the Mac falls back to its own .env key if one is removed here.",
         keyCard({ id: "pexels", name: "Pexels", img: SVC_IMG.pexels, wide: true, get: "https://www.pexels.com/api/", help: "Get a key", desc: "Main source of video clips (required)." }, rr),
-        keyCard({ id: "pixabay", name: "Pixabay", img: SVC_IMG.pixabay, wide: true, get: "https://pixabay.com/api/docs/", help: "Get a key", desc: "Second source of video clips (optional, more choice)." }, rr)),
+        keyCard({ id: "pixabay", name: "Pixabay", img: SVC_IMG.pixabay, wide: true, get: "https://pixabay.com/api/docs/", help: "Get a key", desc: "Second source of video clips (optional, more choice)." }, rr),
+        keyCard({ id: "coverr", name: "Coverr", img: SVC_IMG.coverr, get: "https://coverr.co/developers", help: "Get a key",
+          desc: ["Third source of free clips, mixed in with the others. Free demo key: 50 searches an hour (about 2 to 3 reels); when it runs out the other libraries carry on. ",
+            h("a", { href: "https://coverr.co", target: "_blank", rel: "noopener noreferrer" }, "Videos by Coverr")] }, rr)),
+      sect("AI helpers", "Optional free services that back Claude up and add finishing touches. Nothing here is needed to make a reel.",
+        keyCard({ id: "groq", name: "Groq", img: SVC_IMG.groq, get: "https://console.groq.com/keys", help: "Get a key",
+          desc: "Backup brain: when Claude hits its usage limit, short text steps (captions, script review, pronunciation, scoring) are answered by Groq's free tier, so reels keep moving. Steps that need web research or watching clips still wait for Claude. Also gives every voice-over a second, stronger listen (Whisper large-v3) for pronunciation." }, rr),
+        thumbCard(rr)),
       sect("Developer apps", "Saved once here, used when you connect any account's Facebook, LinkedIn or YouTube (in that account's Settings).", metaCard(rr), liAppCard(rr), ytAppCard(rr)),
       sect("Storage", "Where finished reels wait until they are posted. Nothing is kept longer than needed.", r2Card(rr)),
       sect("Posting", null, h("article", { cls: "svc" }, h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, icon("route", 26)), h("div", {}, h("h3", {}, "Auto-post"),

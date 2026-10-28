@@ -1,4 +1,4 @@
-// Studio keys pasted on the site (Pexels, Pixabay, Meta app) are checked here, in the cloud, so a wrong key shows up at once
+// Studio keys pasted on the site (Pexels, Pixabay, Groq, Coverr, ThumbAPI, Meta app) are checked here, in the cloud, so a wrong key shows up at once
 // even while the Mac is off. A key is checked when it is saved and again once a day. Keys never leave the server.
 import { type Json, iso, now, minsAgo, rest, setting, secret } from "./db.ts";
 import { r2conf, r2check } from "./r2.ts";
@@ -6,6 +6,8 @@ import { r2conf, r2check } from "./r2.ts";
 const PEXELS = Deno.env.get("PEXELS_API") ?? "https://api.pexels.com";
 const PIXABAY = Deno.env.get("PIXABAY_API") ?? "https://pixabay.com";
 const FB = Deno.env.get("FB_API") ?? "https://graph.facebook.com/v26.0";
+const GROQ = Deno.env.get("GROQ_API") ?? "https://api.groq.com/openai/v1";
+const COVERR = Deno.env.get("COVERR_API") ?? "https://api.coverr.co";
 
 type Verdict = { state: "ok" | "bad" | "checking"; note: string | null; name?: string };
 
@@ -32,6 +34,22 @@ async function check(name: string, key: string, extra: Json): Promise<Verdict> {
     if (st === 429) return { state: "ok", note: "Pixabay says this key reached its limit; it resets by itself." };
     return { state: "checking", note: `Pixabay did not answer (${st || "network"}); trying again.` };
   }
+  if (name === "groq") {                 // listing models is free and needs a valid key
+    const [st] = await probe(`${GROQ}/models`, { headers: { Authorization: `Bearer ${key}` } });
+    if (st === 200) return { state: "ok", note: null };
+    if (st === 401 || st === 403) return { state: "bad", note: "Groq did not accept this key. Create a new one at console.groq.com/keys." };
+    if (st === 429) return { state: "ok", note: "Groq says the free limit is reached for now; it resets by itself." };
+    return { state: "checking", note: `Groq did not answer (${st || "network"}); trying again.` };
+  }
+  if (name === "coverr") {
+    const [st] = await probe(`${COVERR}/videos?page_size=1`, { headers: { Authorization: `Bearer ${key}` } });
+    if (st === 200) return { state: "ok", note: null };
+    if (st === 401 || st === 403) return { state: "bad", note: "Coverr did not accept this key. Copy it again from coverr.co/developers." };
+    if (st === 429) return { state: "ok", note: "Coverr's hourly limit is reached (demo keys: 50 searches an hour); it resets by itself." };
+    return { state: "checking", note: `Coverr did not answer (${st || "network"}); trying again.` };
+  }
+  if (name === "thumbapi")              // every test image costs credits, so the key is proven by its first real thumbnail
+    return { state: "ok", note: "Saved. Not test-run (each image costs credits); the first YouTube thumbnail proves it." };
   if (name === "meta") {
     const [st, j] = await probe(`${FB}/${encodeURIComponent(extra.app_id)}?fields=id,name&access_token=${encodeURIComponent(`${extra.app_id}|${key}`)}`);
     if (st === 200 && j.id) return { state: "ok", note: null, name: j.name };
@@ -46,7 +64,7 @@ const due = (v: Json) => v && v.state !== "not_set" && (v.state === "checking" |
 export async function keysTick(): Promise<Json> {
   const out: Json = {};
   const keys = await setting("studio_keys");
-  for (const name of ["pexels", "pixabay"]) {
+  for (const name of ["pexels", "pixabay", "groq", "coverr", "thumbapi"]) {
     const v = keys[name]; if (!due(v)) continue;
     const [key] = await secret(`api_${name}`);
     const verdict: Verdict = key ? await check(name, key, {}) : { state: "bad", note: "No key saved." };

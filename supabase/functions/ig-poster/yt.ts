@@ -3,7 +3,7 @@
 // Safety: the upload session and the bytes YouTube confirmed are saved after every part, so a timeout or a lost response
 // resumes (YouTube is asked how much it has) instead of uploading a second copy. A vertical video of up to 3 minutes
 // is a Short automatically. Uploads have their own quota (100 a day per Google project), far above the studio's reels.
-import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setPart, bk } from "./db.ts";
+import { SB, H, type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setPart, bk } from "./db.ts";
 import { mediaSize, mediaRange } from "./media.ts";
 
 const YT = Deno.env.get("YT_API") ?? "https://www.googleapis.com/youtube/v3";
@@ -132,12 +132,26 @@ async function step(job: Json, tok: string, b: Brand): Promise<string> {
     if (!v || us === "rejected" || us === "failed" || us === "deleted")
       throw new YTError(`YouTube did not publish the video (${v?.status?.rejectionReason ?? v?.status?.failureReason ?? us ?? "not found"})`, 0, false);
     if (us === "processed" || minsAgo(g.uploaded_at) > 60) {
+      if (o.yt_thumb && !g.thumb) g.thumb = await setThumb(tok, g.video_id, o.yt_thumb);
       g = { ...g, state: "posted", posted_at: iso(now()), permalink: shortUrl(g.video_id) }; delete g.error;
       await setPart(job, "yt", g); return "posted";
     }
     return `processing (${us ?? "?"})`;
   }
   return "nothing to do";
+}
+// the AI thumbnail made on the Mac (ThumbAPI, optional): never blocks the post; YouTube only accepts custom
+// thumbnails from channels that verified a phone number, so a refusal is recorded, not retried
+export async function setThumb(tok: string, videoId: string, path: string): Promise<string> {
+  try {
+    const f = await fetch(`${SB}/storage/v1/object/reels/${path}`, { headers: H });
+    if (!f.ok) return `skipped: thumbnail file missing (${f.status})`;
+    const r = await fetch(`${YT_UP}/thumbnails/set?videoId=${encodeURIComponent(videoId)}`, { method: "POST",
+      headers: { Authorization: `Bearer ${tok}`, "Content-Type": "image/jpeg" }, body: new Uint8Array(await f.arrayBuffer()) });
+    const j: Json = await r.json().catch(() => ({}));
+    if (r.ok) return "set";
+    return `refused: ${String(j.error?.message ?? r.status).replace(/<[^>]+>/g, "").slice(0, 160)}`;
+  } catch (e) { return `skipped: ${(e as Error).name}`; }
 }
 async function done(job: Json, g: Json, j: Json): Promise<string> {
   if (!j.id) throw new YTError("YouTube finished the upload but did not return the video id", 0, false);

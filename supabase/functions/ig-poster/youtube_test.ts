@@ -9,7 +9,7 @@ Deno.env.set("GOOGLE_TOKEN_URL", "http://google.test/token");
 type Row = Record<string, any>;
 const T: Record<string, Row[]> = { settings: [], secrets: [], jobs: [], brands: [] };
 const SIZE = 20 * 1024 * 1024;
-let REFRESH_OK = true, DROP_NEXT_PART = false, PROCESSED = false;
+let REFRESH_OK = true, DROP_NEXT_PART = false, PROCESSED = false, THUMB_OK = true; const THUMBS: string[] = [];
 const UP: { sessions: Row[]; received: number; meta?: Row; parts: number; done: boolean } = { sessions: [], received: 0, parts: 0, done: false };
 
 function path(row: Row, col: string) { let v: any = row; for (const p of col.split(/->>?/)) v = v?.[p]; return v; }
@@ -29,6 +29,7 @@ const hdr = (init: RequestInit, k: string) => new Headers(init.headers).get(k);
 globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {}) => {
   const u = new URL(String(input instanceof Request ? input.url : input)); const method = (init.method ?? "GET").toUpperCase();
   if (u.host === "sb.test") {
+    if (u.pathname === "/storage/v1/object/reels/j1/yt_thumb.jpg") return new Response(new Uint8Array([255, 216, 255]), { status: 200 });
     if (u.pathname.startsWith("/storage/v1/object/reels/")) {
       const [a, b] = (hdr(init, "range") ?? "").replace("bytes=", "").split("-").map(Number);
       return new Response(new Uint8Array(b - a + 1), { status: 206, headers: { "content-range": `bytes ${a}-${b}/${SIZE}` } });
@@ -65,6 +66,7 @@ globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {})
       if (DROP_NEXT_PART) { DROP_NEXT_PART = false; throw new TypeError("connection reset"); }
       return UP.done ? done() : incomplete();
     }
+    if (u.pathname === "/upload/youtube/v3/thumbnails/set") { THUMBS.push(u.searchParams.get("videoId")!); return THUMB_OK ? J({ items: [{}] }) : J({ error: { code: 403, message: "The authenticated user doesn't have permissions to upload and set custom video thumbnails." } }, 403); }
     if (u.pathname === "/youtube/v3/videos") return J({ items: [{ id: "VID123", status: { uploadStatus: PROCESSED ? "processed" : "uploaded" } }] });
     if (u.pathname === "/youtube/v3/channels") return J({ items: [{ id: "UCflystar", snippet: { title: "Flying Star Aviator", customUrl: "@flyingstar" } }] });
   }
@@ -132,4 +134,16 @@ Deno.test("Re-check reads the channel with a fresh token", async () => {
   assertEquals(await ytCheck(B), "connected");
   const st = T.settings.find((r) => r.key === "youtube_status@flystar")!.value;
   assertEquals(st.channel_title, "Flying Star Aviator"); assertEquals(st.recheck_at, undefined);
+});
+
+Deno.test("an AI thumbnail is set once the Short is processed; a refusal (unverified channel) never blocks the post", async () => {
+  seed(); T.jobs[0].output.yt = { state: "processing", video_id: "VID123", uploaded_at: new Date().toISOString(), attempts: 1 };
+  T.jobs[0].output.yt_thumb = "j1/yt_thumb.jpg"; PROCESSED = true; THUMBS.length = 0;
+  await ytTick([B]);
+  assertEquals(yt().state, "posted"); assertEquals(yt().thumb, "set"); assertEquals(THUMBS, ["VID123"]);
+  seed(); T.jobs[0].output.yt = { state: "processing", video_id: "VID123", uploaded_at: new Date().toISOString(), attempts: 1 };
+  T.jobs[0].output.yt_thumb = "j1/yt_thumb.jpg"; PROCESSED = true; THUMB_OK = false;
+  await ytTick([B]);
+  assertEquals(yt().state, "posted"); assert(String(yt().thumb).startsWith("refused: The authenticated user"));
+  THUMB_OK = true;
 });

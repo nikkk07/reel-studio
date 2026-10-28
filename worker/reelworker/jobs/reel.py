@@ -447,10 +447,30 @@ def _run_voice(ctx, cfg, cfg_name, out_name, prog, lo, hi, label):
     return json.loads(ctx.path(out_name).read_text(encoding="utf-8"))
 
 
+def _second_ears(ctx, prof, out, parts):
+    """Groq Whisper large-v3 (free tier, optional): a stronger second transcript of the 3 best takes of every part, so the
+    Voice Inspector compares two independent listeners. Off without a Groq key; a failure never stops the reel."""
+    from .. import groq
+    if not groq.key():
+        return
+    lang = "hi" if brandmod.hinglish(prof) else "en"; n = 0
+    for p in parts:
+        best = sorted(out[p["id"]]["takes"], key=lambda t: t.get("score", 9))[:3]
+        keep = {Path(t["file"]).stem for t in best}
+        for t, src in ((t, next(x for x in out[p["id"]]["takes"] if Path(x["file"]).stem == t["take"])) for t in p["takes"]):
+            if t["take"] in keep:
+                heard = groq.transcribe(Path(src["file"]), lang)
+                if heard:
+                    t["transcript_whisper_large"] = heard; n += 1
+    if n:
+        ctx.log(f"Groq Whisper large-v3 double-checked {n} voice takes")
+
+
 def _inspect(ctx, prof, out):
     """Voice Inspector: compares what should be said with what the recogniser heard in every take; picks the take said right."""
     parts = [{"id": gid, "intended": v["chosen"].get("text") or "",
               "takes": [{"take": Path(t["file"]).stem, "transcript": t["transcript"]} for t in v["takes"]]} for gid, v in out.items()]
+    _second_ears(ctx, prof, out, parts)
     res = agents.call(ctx, "voice_inspector", brain.prompt("pron_check", brand_name=prof["name"], parts=json.dumps(parts, ensure_ascii=False, indent=1)),
                       schemas.PRONCHECK, [], timeout=600, name="pron_check",
                       grade=lambda o: 100 * sum(1 for p in o.get("parts", []) if p.get("ok")) / max(1, len(o.get("parts", []))))
@@ -810,6 +830,10 @@ def stage_publish(ctx, prog):
     except Exception as e:  # noqa: BLE001  (the Mac retries this in the background)
         ctx.trace("publish", "insta", "Instagram caption & file", "fail", "retrying later", flush=True)
         ctx.log(f"Instagram caption/file will be prepared shortly ({str(e)[:120]})", "warn")
+    from .. import thumbs                     # optional AI thumbnail for YouTube (ThumbAPI), never blocks the reel
+    t = thumbs.make(ctx.db, ctx.job.get("brand") or "weone", prefix, _spec(ctx)["title"], ctx.dir / "render", log=lambda m: ctx.log(m, "warn"))
+    if t:
+        ctx.merge_output({"yt_thumb": t}); ctx.log("AI thumbnail for YouTube ready (ThumbAPI)")
 
 
 STAGES = [("script", 8, stage_script), ("voice", 35, stage_voice), ("footage", 12, stage_footage),

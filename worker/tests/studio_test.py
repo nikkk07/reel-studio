@@ -29,7 +29,7 @@ ok(studio.key("PEXELS_API_KEY") == ("cloudpexels", "cloud") and studio.daily_cap
 db = DB({"pexels": "x"}); studio.bind(db); studio.get("PEXELS_API_KEY"); n = db.n
 for _ in range(20): studio.get("PEXELS_API_KEY")
 ok(db.n == n, "cached: no database call per clip search")
-ok(studio.sources() == {"pexels": "cloud", "pixabay": None}, "the Mac reports where each key comes from (never the key)")
+ok(studio.sources() == {"pexels": "cloud", "pixabay": None, "groq": None, "coverr": None, "thumbapi": None}, "the Mac reports where each key comes from (never the key)")
 class DBV(DB):
     def select(self, t, q=""):
         if t == "settings": return [{"value": {"voice_hi": "hi", "voice_en": "v3"}}]

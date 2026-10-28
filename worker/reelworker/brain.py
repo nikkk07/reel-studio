@@ -54,7 +54,35 @@ def _describe(tool: str, inp: dict) -> str:
     return f"Using {tool}"
 
 
+LAST = {"brain": "claude"}       # which brain answered the latest call (the agent log records it)
+OUT_TOKENS = {"caption": 1500, "hook_critic": 1500, "critic": 1500, "pron_check": 2000, "pronounce": 3000}
+
+
 def ask(name: str, text: str, schema: dict, tools: list, cwd: Path, timeout: int = 1200, on_event=None) -> dict:
+    """Claude first. When Claude is limited or signed out, a text-only call (no web, no images) that fits Groq's free tier
+    is answered by Groq instead, so captions, script reviews and pronunciation steps keep moving. Everything else waits."""
+    try:
+        LAST["brain"] = "claude"
+        return _ask_claude(name, text, schema, tools, cwd, timeout, on_event)
+    except (QuotaError, RuntimeError) as e:
+        claude_down = isinstance(e, QuotaError) or "not signed in" in str(e)
+        if not claude_down or tools or name == "health" or config.BRAIN_MODE == "mock" and not config.get("REELSTUDIO_TEST_GROQ"):
+            raise
+        from . import groq
+        try:
+            obj = groq.chat(name, text, schema, out_tokens=OUT_TOKENS.get(name, 2500))
+        except groq.GroqUnavailable:
+            raise e from None
+        LAST["brain"] = "groq"
+        if on_event:
+            try:
+                on_event("Claude is limited right now: Groq (backup) answered this step")
+            except Exception:  # noqa: BLE001
+                pass
+        return obj
+
+
+def _ask_claude(name: str, text: str, schema: dict, tools: list, cwd: Path, timeout: int = 1200, on_event=None) -> dict:
     """Run one Claude call and return the schema-validated object. on_event(str) receives live tool activity."""
     if config.BRAIN_MODE == "mock":
         delay = config.get("REELSTUDIO_MOCK_BRAIN_SECONDS", "")
@@ -139,7 +167,7 @@ def health_check():
         if v.returncode != 0:
             return False, "Claude Code not installed"
         d = config.APP / "state" / "health"; d.mkdir(parents=True, exist_ok=True)
-        r = ask("health", "Reply with the single word OK.", {"type": "object", "properties": {"reply": {"type": "string"}},
+        r = _ask_claude("health", "Reply with the single word OK.", {"type": "object", "properties": {"reply": {"type": "string"}},
                 "required": ["reply"]}, [], d, timeout=120)
         return ("OK" in r.get("reply", "").upper()), v.stdout.strip()[:60]
     except QuotaError as e:

@@ -1,12 +1,12 @@
 """Settings the owner changes on the site (Studio Settings), read from the cloud database every 2 minutes:
-the Pexels / Pixabay keys and the daily limit of new reels. The Mac's own .env is the fallback, so a removed or
+the Pexels / Pixabay / Groq / Coverr / ThumbAPI keys and the daily limit of new reels. The Mac's own .env is the fallback, so a removed or
 unreachable cloud value never stops the studio. Keys are never logged or printed."""
 import threading, time
 from . import config
 
-ENV_NAMES = {"PEXELS_API_KEY": "pexels", "PIXABAY_API_KEY": "pixabay"}
+ENV_NAMES = {"PEXELS_API_KEY": "pexels", "PIXABAY_API_KEY": "pixabay", "GROQ_API_KEY": "groq", "COVERR_API_KEY": "coverr", "THUMBAPI_KEY": "thumbapi"}
 _lock = threading.Lock()
-_state = {"db": None, "at": 0.0, "keys": {}, "cap": None, "voice": {}, "style": {}}
+_state = {"db": None, "at": 0.0, "keys": {}, "cap": None, "voice": {}, "style": {}, "thumbs": False}
 VOICE_MODELS = ("v2", "v3", "hi")     # 'hi' (V3 Hindi pack) for English = English read with a natural Indian accent
 # delivery: (exaggeration, cfg_weight). Expressive = Chatterbox's own advice for more emotion: exaggeration ~0.7 with cfg ~0.3
 # (lower cfg keeps the pace calm when exaggeration rises).
@@ -25,7 +25,7 @@ def refresh(force=False):
         if not force and time.time() - _state["at"] < 120:
             return
         try:
-            rows = db.select("secrets", "select=key,value&key=in.(api_pexels,api_pixabay)")
+            rows = db.select("secrets", "select=key,value&key=in.(api_pexels,api_pixabay,api_groq,api_coverr,api_thumbapi)")
             _state["keys"] = {r["key"][4:]: r["value"] for r in rows if r.get("value")}
             ws = db.select("settings", "select=value&key=eq.worker_settings")
             cap = (ws[0]["value"] if ws else {}).get("daily_cap")
@@ -33,6 +33,8 @@ def refresh(force=False):
             v = ws[0]["value"] if ws else {}
             _state["voice"] = {k: v.get(f"voice_{k}") for k in ("hi", "en") if v.get(f"voice_{k}") in VOICE_MODELS}
             _state["style"] = {k: v.get(f"style_{k}") for k in ("hi", "en") if v.get(f"style_{k}") in STYLES}
+            tu = db.select("settings", "select=value&key=eq.thumbapi_use")
+            _state["thumbs"] = bool((tu[0]["value"] if tu else {}).get("on"))
         except Exception:  # noqa: BLE001  (keep the last good values)
             pass
         _state["at"] = time.time()
@@ -68,6 +70,12 @@ def voice_style(lang):
     """(exaggeration, cfg_weight) of the Hinglish or English voice: chosen in Studio Settings, else natural."""
     refresh()
     return STYLES[_state.get("style", {}).get("hi" if lang == "hi" else "en") or "natural"]
+
+
+def thumbs_on():
+    """AI thumbnails for YouTube (ThumbAPI) only when the owner switched them on in Studio Settings."""
+    refresh()
+    return _state["thumbs"]
 
 
 def sources():

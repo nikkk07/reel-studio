@@ -5,6 +5,7 @@ import { assert, assertEquals } from "jsr:@std/assert@1";
 Deno.env.set("SUPABASE_URL", "http://sb.test"); Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "svc");
 Deno.env.set("IG_API", "http://ig.test/v1"); Deno.env.set("IG_REFRESH_URL", "http://ig.test/refresh");
 Deno.env.set("FB_API", "http://fb.test/v1"); Deno.env.set("PEXELS_API", "http://pexels.test"); Deno.env.set("PIXABAY_API", "http://pixabay.test");
+Deno.env.set("GROQ_API", "http://groq.test/v1"); Deno.env.set("COVERR_API", "http://coverr.test");
 
 type Row = Record<string, any>;
 const T: Record<string, Row[]> = { settings: [], secrets: [], jobs: [], brands: [], dm_log: [] };
@@ -82,6 +83,8 @@ globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {})
     return J({ error: { message: "unknown" } }, 404);
   }
   if (u.host === "pexels.test") return J({}, init.headers && (init.headers as Row).Authorization === "GOODpexels".padEnd(56, "x") ? 200 : 401);
+  if (u.host === "groq.test") return J({ data: [] }, new Headers(init.headers).get("authorization") === "Bearer gsk_good" ? 200 : 401);
+  if (u.host === "coverr.test") return J({ hits: [] }, new Headers(init.headers).get("authorization") === "Bearer coverr-good-key-0000" ? 200 : 403);
   if (u.host === "pixabay.test") return J({}, u.searchParams.get("key") === "123-goodpixabaykey0000" ? 200 : 400);
   if (u.host === "fb.test") {
     const tok = u.searchParams.get("access_token") ?? new URLSearchParams(body).get("access_token") ?? "";
@@ -178,6 +181,14 @@ Deno.test("studio keys are checked in the cloud; a newer save is never overwritt
   T.secrets.push({ key: "meta_app_secret", value: "ab".repeat(16) });
   await keysTick();
   assertEquals(st("meta_app").state, "ok"); assertEquals(st("meta_app").name, "Reel Studio");
+  // the new services: Groq and Coverr are checked with a free request; ThumbAPI is never test-run (it costs credits)
+  Object.assign(st("studio_keys"), { groq: { state: "checking", updated_at: saved }, coverr: { state: "checking", updated_at: saved }, thumbapi: { state: "checking", updated_at: saved } });
+  T.secrets.push({ key: "api_groq", value: "gsk_good" }, { key: "api_coverr", value: "coverr-bad" }, { key: "api_thumbapi", value: "thumb-key-000000000" });
+  const before = CALLS.length;
+  await keysTick();
+  assertEquals(st("studio_keys").groq.state, "ok"); assertEquals(st("studio_keys").coverr.state, "bad"); assertEquals(st("studio_keys").thumbapi.state, "ok");
+  assert(String(st("studio_keys").coverr.note).includes("coverr.co/developers"));
+  assert(!CALLS.slice(before).some((c) => c.includes("thumbapi")), "no paid test call");
 });
 
 Deno.test("captions name the right account", () => {

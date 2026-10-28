@@ -1,5 +1,5 @@
-"""Stock footage: Pexels + Pixabay search, contact sheets for Claude, download, 9:16 shot prep."""
-import concurrent.futures as cf, json, subprocess, urllib.parse
+"""Stock footage: Pexels + Pixabay + Coverr search, contact sheets for Claude, download, 9:16 shot prep."""
+import concurrent.futures as cf, json, subprocess, time, urllib.parse
 from pathlib import Path
 import httpx
 from PIL import Image, ImageDraw, ImageFont
@@ -36,7 +36,42 @@ def search(query: str, per_source=6) -> list:
                                 thumb=b.get("thumbnail") or vids["medium"].get("thumbnail"), author=v["user"], licence="Pixabay Content License"))
         except Exception:  # noqa: BLE001
             pass
+    key = studio.get("COVERR_API_KEY")
+    if key and not _coverr_paused():
+        try:                     # free API (demo keys: 50 searches an hour); https://api.coverr.co/docs/videos/
+            r = httpx.get("https://api.coverr.co/videos", params={"query": query, "page_size": max(3, per_source), "urls": "true"},
+                          headers={"Authorization": f"Bearer {key}", **UA}, timeout=25)
+            if r.status_code == 429:
+                _COVERR["paused_until"] = time.time() + 900
+            for v in (r.json().get("hits", []) if r.status_code == 200 else []):
+                u = v.get("urls") or {}
+                dl = u.get("mp4_download") or u.get("mp4")
+                if not dl:
+                    continue
+                out.append(dict(src="coverr", id=v["id"], page="https://coverr.co", dur=round(float(v.get("duration") or 0), 1),
+                                w=int(v.get("max_width") or 1920), h=int(v.get("max_height") or 1080), dl=dl,
+                                thumb=v.get("thumbnail") or v.get("poster"), author="Coverr", licence="Coverr License"))
+        except Exception:  # noqa: BLE001
+            pass
+    return _mix(out)
+
+
+def _mix(cands: list) -> list:
+    """Round-robin by source (best of each first), so a cap on the list keeps every library in the running."""
+    by = {}
+    for c in cands:
+        by.setdefault(c["src"], []).append(c)
+    lists = list(by.values()); out = []
+    for i in range(max((len(x) for x in lists), default=0)):
+        out += [x[i] for x in lists if i < len(x)]
     return out
+
+
+_COVERR = {"paused_until": 0.0}
+
+
+def _coverr_paused():
+    return time.time() < _COVERR["paused_until"]
 
 
 def contact_sheets(shots: list, cands: dict, folder: Path, font_path: str):

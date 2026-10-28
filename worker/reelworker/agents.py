@@ -104,5 +104,8 @@ def call(ctx, agent, text, schema, tools, timeout=1200, check=None, on_event=Non
             g = grade(obj)
         except Exception:  # noqa: BLE001
             g = None
-    record(db, agent, ctx.id, brand, True, int((time.time() - t0) * 1000), grade=g, lesson_ids=ids)
+    record(db, agent, ctx.id, brand, True, int((time.time() - t0) * 1000), grade=g, lesson_ids=ids,
+           note="answered by Groq (backup brain)" if getattr(brain, "LAST", {}).get("brain") == "groq" else None)
+    if getattr(brain, "LAST", {}).get("brain") == "groq":
+        ctx.log(f"Claude was limited: the {agent.replace('_', ' ')} step was answered by Groq (backup)", "warn")
     return obj
