@@ -1416,7 +1416,11 @@ function ytSignIn(clientId, b = S.brand) {
 }
 function ytDialog(b) {
   const app = S.settings?.youtube_app || {};
-  const go_ = h("button", { cls: "btn primary", disabled: !app.client_id, onclick: () => ytSignIn(app.client_id, b.id) }, "Sign in with Google");
+  const toSettings = () => { document.querySelector("dialog[aria-label='Connect YouTube']")?.close(); go("settings");
+    const t0 = Date.now(); const find = () => { const c = [...document.querySelectorAll("article.svc")].find((a) => a.textContent.includes("YouTube app (Google)"));
+      if (c) { c.scrollIntoView({ block: "center" }); c.querySelector("input")?.focus(); } else if (Date.now() - t0 < 8000) setTimeout(find, 300); }; setTimeout(find, 300); };
+  const go_ = app.client_id ? h("button", { cls: "btn primary", onclick: () => ytSignIn(app.client_id, b.id) }, "Sign in with Google")
+    : h("button", { cls: "btn primary", onclick: toSettings }, "Add Client ID in Studio Settings");
   stepsDlg("Connect YouTube", `Connect ${b.name}'s YouTube channel`, app.client_id ? "Uses the YouTube (Google) app saved in Studio Settings." : "First save the YouTube app in Studio Settings → Developer apps.", [
     ["YouTube app", app.client_id ? "Saved in Studio Settings." : "Studio Settings → Developer apps → YouTube: paste the OAuth Client ID and Client Secret."],
     ["Sign in", `Pick the Google account (or brand account) that owns ${b.name}'s channel. If Google says the app is unverified, choose Advanced → Continue: it is your own app.`],
