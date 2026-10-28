@@ -13,6 +13,7 @@ import { checksTick } from "./checks.ts";
 import { mediaUrl } from "./media.ts";
 import { retentionTick } from "./retention.ts";
 import { dmTick } from "./dm.ts";
+import { ytTick } from "./yt.ts";
 const API = Deno.env.get("IG_API") ?? "https://graph.instagram.com/v26.0";
 const REFRESH_URL = Deno.env.get("IG_REFRESH_URL") ?? "https://graph.instagram.com/refresh_access_token";
 const MAX_ATTEMPTS = 5;
@@ -300,6 +301,7 @@ Deno.serve(async (req) => {
   try { res.stats = await statsTick(list); } catch (e) { res.stats = { error: String((e as Error).message ?? e) }; }
   try { res.facebook = await fbTick(list); } catch (e) { res.facebook = { error: String((e as Error).message ?? e) }; }
   try { res.linkedin = await liTick(list); } catch (e) { res.linkedin = { error: String((e as Error).message ?? e) }; }
+  try { res.youtube = await ytTick(list); } catch (e) { res.youtube = { error: String((e as Error).message ?? e) }; }
   try { res.keys = await keysTick(); } catch (e) { res.keys = { error: String((e as Error).message ?? e) }; }
   try { res.library = await libraryTick(list); } catch (e) { res.library = { error: String((e as Error).message ?? e) }; }
   try { res.checks = await checksTick(list); } catch (e) { res.checks = { error: String((e as Error).message ?? e) }; }

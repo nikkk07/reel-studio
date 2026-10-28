@@ -113,13 +113,14 @@ const brandLogo = (b, size = 40) => { ensureLogo(b); return h("span", { cls: "bl
 // each account's own connection status: We One keeps the original keys, other accounts use "<key>@<account>"
 const bkey = (base, b = S.brand) => (!b || b === "weone" ? base : `${base}@${b}`);
 const stOf = (base, b = S.brand) => S.settings?.[bkey(base, b)] || { state: "not_connected" };
-const PST = { ig: "instagram_status", fb: "facebook_status", li: "linkedin_status" };
+const PST = { ig: "instagram_status", fb: "facebook_status", li: "linkedin_status", yt: "youtube_status" };
 const platState = (k, b = S.brand) => stOf(PST[k], b).state || "not_connected";
 const platSet = (k, b = S.brand) => !["not_connected", "duplicate"].includes(platState(k, b));
-const anyPosting = (b = S.brand) => b === "weone" || ["ig", "fb", "li"].some((k) => platSet(k, b));
+const PLATS = ["ig", "fb", "li", "yt"];
+const anyPosting = (b = S.brand) => b === "weone" || PLATS.some((k) => platSet(k, b));
 const SVC_IMG = { supabase: "icons/services/supabase.png", vercel: "icons/services/vercel.svg", github: "icons/services/github.svg", apple: "icons/services/apple.png",
   claude: "icons/services/claude.svg", meta: "icons/services/meta.svg", cloudflare: "icons/services/cloudflare.png", pexels: "icons/services/pexels.png", pixabay: "icons/services/pixabay.png" };
-const PLAT_IMG = { ig: "icons/platforms/instagram.png", fb: "icons/platforms/facebook.png", li: "icons/platforms/linkedin.png", web: "icons/platforms/website.png" };
+const PLAT_IMG = { ig: "icons/platforms/instagram.png", fb: "icons/platforms/facebook.png", li: "icons/platforms/linkedin.png", yt: "icons/platforms/youtube.svg", web: "icons/platforms/website.png" };
 async function getJob(id) { const { data, error } = await sb.from("jobs").select("*").eq("id", id).single(); if (error) throw error; return data; }
 async function events(id, n = 10) { const { data } = await sb.from("job_events").select("id,ts,level,message").eq("job_id", id).order("id", { ascending: false }).limit(n); return data || []; }
 async function loadWorker() { const { data } = await sb.from("workers").select("*").order("last_seen", { ascending: false }).limit(1); S.worker = (data || [])[0] || null; return S.worker; }
@@ -554,7 +555,7 @@ async function viewDashboard() {
         return h("span", { cls: `mini ${k} ${state === "connected" ? "ok" : state === "not_connected" ? "no" : "warn"}`, title: tip, role: "img", "aria-label": tip },
           h("img", { src: PLAT_IMG[k], alt: "", width: 24, height: 24 })); };
       return h("button", { cls: "minis linkless", onclick: () => { setBrand(b.id); go("account"); }, "aria-label": `${b.name} connections` },
-        dot("ig", "Instagram"), dot("fb", "Facebook"), dot("li", "LinkedIn"), safeUrl(b.website) ? dot("web", "Website") : null);
+        dot("ig", "Instagram"), dot("fb", "Facebook"), dot("li", "LinkedIn"), dot("yt", "YouTube"), safeUrl(b.website) ? dot("web", "Website") : null);
     };
     grid.replaceChildren(...[...(S.brands || BRANDS_FALLBACK).map((b) => {
       const list = st(b.id); const live = b.status === "live";
@@ -1069,7 +1070,7 @@ function autoPostLine(j) {
   const d = j.output?.review_deadline;
   if (j.output?.autopilot_hold) return "Ready. Autopilot held it back: approve it to post.";
   if (autoOn(j) && nightWait(j)) return "Ready. Autopilot posts it at 7:30 AM (never at night) unless you act.";
-  if (!ownPosting(j)) return `Ready for your review. It goes to the Library only: ${brandOf(j.brand).name} has no Instagram, Facebook or LinkedIn connected yet.`;
+  if (!ownPosting(j)) return `Ready for your review. It goes to the Library only: ${brandOf(j.brand).name} has no Instagram, Facebook, LinkedIn or YouTube connected yet.`;
   if (!autoOn(j) || !d) return "Ready for your review";
   if (j.output?.hold) return "Ready for review. Auto-post paused while you check.";
   const left = (Date.parse(d) - Date.now()) / 1000;
@@ -1212,7 +1213,7 @@ async function loadSettings() {
 }
 const tzClock = (iso) => new Date(iso).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 const slotLabel = (hm) => { const [hh, mm] = hm.split(":").map(Number); return new Date(2000, 0, 1, hh, mm).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); };
-const PLAT = { ig: "Instagram", li: "LinkedIn", fb: "Facebook" };
+const PLAT = { ig: "Instagram", li: "LinkedIn", fb: "Facebook", yt: "YouTube" };
 function postBadge(j, p) {
   const x = j.output?.[p] || {}; const st = x.state || "off"; const name = PLAT[p];
   const row = (cls, text, extra) => h("div", { cls: "ig-state " + cls }, h("i", { cls: "lamp " + (cls === "ok" ? "ok" : cls === "bad" ? "bad" : cls === "wait" ? "wait" : "") }), h("span", {}, text), extra || null);
@@ -1251,19 +1252,21 @@ function liSignIn(clientId, b = S.brand) {
   location.href = "https://www.linkedin.com/oauth/v2/authorization?" + new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: LI_REDIRECT, state, scope: LI_SCOPES });
 }
 function connCard(k, b, refresh) {
-  const st = stOf(PST[k], b.id); const state = st.state || "not_connected"; const app = S.settings?.linkedin_app || {};
+  const st = stOf(PST[k], b.id); const state = st.state || "not_connected"; const app = (k === "yt" ? S.settings?.youtube_app : S.settings?.linkedin_app) || {};
+  const signIn = k === "yt" ? () => ytSignIn(app.client_id, b.id) : () => liSignIn(app.client_id, b.id); const oauth = k === "li" || k === "yt";
   const days = k === "li" && st.expires_at ? Math.floor((Date.parse(st.expires_at) - Date.now()) / 86400e3) : null;
   const kind = state === "connected" ? (days != null && days < 7 ? "warn" : "ok") : state === "not_connected" ? "no" : state === "checking" ? "wait" : "warn";
-  const who = state === "connected" ? (k === "ig" ? `@${st.username}` : k === "fb" ? st.page_name : st.org_name) : "";
+  const who = state === "connected" ? (k === "ig" ? `@${st.username}` : k === "fb" ? st.page_name : k === "yt" ? st.channel_title : st.org_name) : "";
   const word = { ok: `Connected${who ? ": " + who : ""}`, no: "Not connected", wait: `Checking with ${PLAT[k]}…`, warn: state === "duplicate" ? "Belongs to another account" : state === "expired" ? "Connection expired" : days != null && days < 7 ? `Reconnect by ${dateShort(st.expires_at)}` : "Needs attention" }[kind];
   const owner = S.owner;
-  const connect = () => (k === "ig" ? igDialog(b, refresh) : k === "fb" ? fbDialog(b, refresh) : liDialog(b, refresh));
+  const connect = () => (k === "ig" ? igDialog(b, refresh) : k === "fb" ? fbDialog(b, refresh) : k === "yt" ? ytDialog(b, refresh) : liDialog(b, refresh));
   const disconnect = (e) => armed(e, "Tap again to disconnect", async () => {
-    try { await rpc({ ig: "disconnect_instagram", fb: "disconnect_facebook", li: "disconnect_linkedin" }[k], { p_brand: b.id }); await loadSettings(); toast(`${PLAT[k]} disconnected from ${b.name}. Nothing will be posted there.`); }
+    try { await rpc({ ig: "disconnect_instagram", fb: "disconnect_facebook", li: "disconnect_linkedin", yt: "disconnect_youtube" }[k], { p_brand: b.id }); await loadSettings(); toast(`${PLAT[k]} disconnected from ${b.name}. Nothing will be posted there.`); }
     catch (err) { toast(errText(err), { err: true }); } refresh(); });
   const note = st.note && state !== "connected" ? st.note
     : k === "li" && state === "connected" && days != null ? `LinkedIn asks for a fresh sign-in every 60 days: by ${dateShort(st.expires_at)}.`
-    : k === "fb" && state === "connected" ? "Page connections do not expire." : k === "ig" && state === "connected" ? "Renews itself automatically." : null;
+    : k === "fb" && state === "connected" ? "Page connections do not expire." : k === "ig" && state === "connected" ? "Renews itself automatically."
+    : k === "yt" && state === "connected" ? `Approved reels upload as public Shorts${st.handle ? " to " + st.handle : ""}. The sign-in renews itself.` : null;
   return h("article", { cls: `svc conn ${kind}` },
     h("div", { cls: "svc-head" }, h("span", { cls: "plat-tile svc-ico" }, h("img", { src: PLAT_IMG[k], alt: "" }), h("span", { cls: `plat-badge ${kind}`, "aria-hidden": "true" }, kind === "ok" ? "✓" : kind === "no" ? "✕" : kind === "wait" ? "…" : "!")),
       h("div", {}, h("h3", {}, PLAT[k]), h("p", { cls: `small plat-state ${kind}` }, word))),
@@ -1271,13 +1274,13 @@ function connCard(k, b, refresh) {
     st.checked_at && state !== "not_connected" ? h("p", { cls: "tiny faint" }, `Last checked ${ago(st.checked_at)}`) : null,
     !owner && state !== "not_connected" ? h("div", { cls: "svc-btns" }, recheckBtn(k, b, refresh)) : null,
     owner ? h("div", { cls: "svc-btns" }, state !== "not_connected" ? recheckBtn(k, b, refresh) : null,
-      k === "li" && app.client_id && state !== "not_connected" ? h("button", { cls: kind === "ok" ? "btn quiet" : "btn primary", onclick: () => liSignIn(app.client_id, b.id) }, "Reconnect") : null,
-      !(k === "li" && app.client_id && state !== "not_connected") ? h("button", { cls: kind === "ok" ? "btn quiet" : "btn primary", onclick: connect }, state === "not_connected" ? `Connect ${PLAT[k]}` : "Reconnect") : null,
+      oauth && app.client_id && state !== "not_connected" ? h("button", { cls: kind === "ok" ? "btn quiet" : "btn primary", onclick: signIn }, "Reconnect") : null,
+      !(oauth && app.client_id && state !== "not_connected") ? h("button", { cls: kind === "ok" ? "btn quiet" : "btn primary", onclick: connect }, state === "not_connected" ? `Connect ${PLAT[k]}` : "Reconnect") : null,
       state !== "not_connected" ? h("button", { cls: "btn quiet danger", onclick: disconnect }, "Disconnect") : null)
       : h("p", { cls: "tiny faint" }, "Only the studio owner can connect or disconnect."));
 }
 // "Re-check": the cloud checks the connection within a minute (works while the Mac is offline) and the card updates by itself
-const CHECK_LABEL = { ig: "Instagram", fb: "Facebook", li: "LinkedIn", web: "Website" };
+const CHECK_LABEL = { ig: "Instagram", fb: "Facebook", li: "LinkedIn", yt: "YouTube", web: "Website" };
 function recheckBtn(k, b, refresh) {
   const base = k === "web" ? "website_status" : PST[k];
   const pending = () => { const v = stOf(base, b.id); return v.recheck_at && Date.now() - Date.parse(v.recheck_at) < 3 * 60e3; };
@@ -1403,6 +1406,41 @@ function liDialog(b, refresh) {
     ["Sign in", `Sign in as an admin of ${b.name}'s Company Page. ${vanity ? "The page in this account's profile is picked: " + vanity : "Tip: add the page link in this account's profile so the right page is picked."}`]],
     null, statusMsg(), go_);
 }
+// YouTube: Google sign-in in the browser, the code is swapped server side (yt-auth) for a lasting token
+const YT_SCOPES = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly";
+function ytSignIn(clientId, b = S.brand) {
+  const state = "yt" + Array.from(crypto.getRandomValues(new Uint8Array(16)), (x) => x.toString(16).padStart(2, "0")).join("");
+  try { sessionStorage.setItem("yt_state", state); sessionStorage.setItem("yt_brand", b); } catch { /* */ }
+  location.href = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: LI_REDIRECT, state,
+    scope: YT_SCOPES, access_type: "offline", prompt: "consent select_account", include_granted_scopes: "true" });
+}
+function ytDialog(b) {
+  const app = S.settings?.youtube_app || {};
+  const go_ = h("button", { cls: "btn primary", disabled: !app.client_id, onclick: () => ytSignIn(app.client_id, b.id) }, "Sign in with Google");
+  stepsDlg("Connect YouTube", `Connect ${b.name}'s YouTube channel`, app.client_id ? "Uses the YouTube (Google) app saved in Studio Settings." : "First save the YouTube app in Studio Settings → Developer apps.", [
+    ["YouTube app", app.client_id ? "Saved in Studio Settings." : "Studio Settings → Developer apps → YouTube: paste the OAuth Client ID and Client Secret."],
+    ["Sign in", `Pick the Google account (or brand account) that owns ${b.name}'s channel. If Google says the app is unverified, choose Advanced → Continue: it is your own app.`],
+    ["Allow", "Tick \"Manage your YouTube videos\". Approved reels are then uploaded as public Shorts; nothing else on the channel is touched."]],
+    null, statusMsg(), go_);
+}
+async function finishOAuth() {          // back from LinkedIn's or Google's sign-in page: ?code=…&state=…
+  const q = new URLSearchParams(location.search); if (!q.has("code") && !q.has("error")) return;
+  let ytState = null; try { ytState = sessionStorage.getItem("yt_state"); } catch { /* */ }
+  return ytState && (q.get("state") || "").startsWith("yt") ? finishYouTube() : finishLinkedIn();
+}
+async function finishYouTube() {
+  const q = new URLSearchParams(location.search);
+  let expected = null, b = "weone"; try { expected = sessionStorage.getItem("yt_state"); b = sessionStorage.getItem("yt_brand") || "weone"; sessionStorage.removeItem("yt_state"); sessionStorage.removeItem("yt_brand"); } catch { /* */ }
+  setBrand(b); history.replaceState(null, "", location.pathname + "#/account");
+  if (q.has("error")) { toast(`YouTube: ${q.get("error") === "access_denied" ? "Google sign-in was cancelled." : q.get("error_description") || q.get("error")}`, { err: true, ms: 9000 }); render(); return; }
+  if (!expected || q.get("state") !== expected) { toast("Google sign-in could not be verified. Start Connect YouTube again.", { err: true, ms: 9000 }); render(); return; }
+  toast("Connecting the YouTube channel…", { ms: 4000 });
+  const { data, error } = await sb.functions.invoke("yt-auth", { body: { code: q.get("code"), redirect_uri: LI_REDIRECT, brand: b } });
+  let msg = data?.error; if (error && !msg) { try { msg = (await error.context?.json())?.error; } catch { /* */ } msg ||= error.message; }
+  if (msg) toast(`YouTube: ${msg}`, { err: true, ms: 12000 });
+  else toast(`${brandOf(b).name}: YouTube connected to ${data.channel_title}${data.handle ? " (" + data.handle + ")" : ""}.`, { ms: 8000 });
+  await loadSettings().catch(() => {}); go("account");
+}
 async function finishLinkedIn() {     // back from LinkedIn's sign-in page: ?code=…&state=…
   const q = new URLSearchParams(location.search); if (!q.has("code") && !q.has("error")) return;
   let expected = null, b = "weone"; try { expected = sessionStorage.getItem("li_state"); b = sessionStorage.getItem("li_brand") || "weone"; sessionStorage.removeItem("li_state"); sessionStorage.removeItem("li_brand"); } catch { /* */ }
@@ -1418,7 +1456,7 @@ async function finishLinkedIn() {     // back from LinkedIn's sign-in page: ?cod
 }
 // Library: small status tiles; tapping one opens the account's Settings
 function platformBar() {
-  return h("section", { cls: "plats", "aria-label": "Connected accounts" }, ["ig", "fb", "li"].map((k) => {
+  return h("section", { cls: "plats", "aria-label": "Connected accounts" }, PLATS.map((k) => {
     const st = stOf(PST[k]); const state = st.state || "not_connected";
     const kind = state === "connected" ? "ok" : state === "not_connected" ? "no" : state === "checking" ? "wait" : "warn";
     const word = { ok: "Connected", no: "Not connected", wait: "Checking…", warn: "Needs attention" }[kind];
@@ -1440,7 +1478,7 @@ async function viewAccount() {
     await Promise.all([loadSettings().catch(() => {}), loadBrands().catch(() => {}), loadOwner()]);
     const since = new Date(Date.now() - 7 * 86400e3).toISOString();
     const dmLog = (await sb.from("dm_log").select("username,state,created_at").eq("brand", S.brand).gte("created_at", since).order("created_at", { ascending: false }).limit(200).then((r) => r.data, () => [])) || [];
-    const b = brandOf(); const nowSig = JSON.stringify([b, ["ig", "fb", "li"].map((k) => stOf(PST[k])), stOf("website_status"), S.settings?.[bkey("dm")], dmLog.length, S.settings?.linkedin_app, S.settings?.meta_app]);
+    const b = brandOf(); const nowSig = JSON.stringify([b, PLATS.map((k) => stOf(PST[k])), stOf("website_status"), S.settings?.[bkey("dm")], dmLog.length, S.settings?.linkedin_app, S.settings?.meta_app, S.settings?.youtube_app]);
     if (!force && nowSig === sig) return; sig = nowSig;
     if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;     // never wipe a half-typed field
     const L = b.links || {};
@@ -1469,7 +1507,7 @@ async function viewAccount() {
       logo,
       h("section", { cls: "panel" }, h("h3", {}, "Connections"),
         h("p", { cls: "small muted", style: "margin:4px 0 14px" }, `Reels of ${b.name} post only to the pages connected here. A page connected to another account can't be connected here too.`),
-        h("div", { cls: "svc-grid" }, ["ig", "fb", "li"].map((k) => connCard(k, b, () => paint(true))), webCard(b, () => paint(true)))),
+        h("div", { cls: "svc-grid" }, PLATS.map((k) => connCard(k, b, () => paint(true))), webCard(b, () => paint(true)))),
       h("section", { cls: "panel" }, h("h3", {}, "Call to action"),
         h("p", { cls: "small muted", style: "margin:4px 0 14px" }, "Turns comments into conversations. Works in the cloud, also while the Mac is off."),
         h("div", { cls: "svc-grid" }, dmCard(b, dmLog, () => paint(true)))));
@@ -1561,6 +1599,24 @@ function liAppCard(refresh) {
       catch (e) { msg.textContent = errText(e); } } }, app.client_id ? "Replace" : "Save"),
       h("a", { cls: "btn quiet", href: "https://www.linkedin.com/developers/apps", target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "LinkedIn apps")), msg] : null);
 }
+function ytAppCard(refresh) {
+  const app = S.settings?.youtube_app || {};
+  const cid = h("input", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "Client ID (…apps.googleusercontent.com)", value: app.client_id || "", "aria-label": "YouTube Client ID", style: "margin-top:8px" });
+  const sec = secretInput(app.hint ? `Client Secret (saved ${app.hint})` : "Client Secret (GOCSPX-…)", "YouTube Client Secret"); const msg = statusMsg();
+  const uris = [...new Set([LI_REDIRECT, "https://reel-studio-hq.vercel.app/", "https://weone-reelstudio.vercel.app/"])];
+  return h("article", { cls: `svc ${app.client_id ? "ok" : "no"}` },
+    h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, h("img", { src: PLAT_IMG.yt, alt: "" })), h("div", {}, h("h3", {}, "YouTube app (Google)"),
+      h("p", { cls: "small" }, h("i", { cls: "lamp " + (app.client_id ? "ok" : "") }), app.client_id ? `Saved · Client ID ${app.client_id.slice(0, 14)}…` : "Not saved"))),
+    h("p", { cls: "small muted" }, "Used by Connect YouTube of every account. Google Cloud → APIs: enable YouTube Data API v3. OAuth client type Web application; Authorized redirect URIs: ",
+      ...uris.flatMap((u, i) => [i ? " and " : "", h("code", {}, u)]), "."),
+    h("p", { cls: "small", style: "color:#6E4300" }, "Google Auth Platform → Audience: press Publish app. While it stays in Testing, Google ends every sign-in after 7 days and uploads stop."),
+    S.owner ? [cid, sec, h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: async () => {
+      if (!cid.value.trim() || !sec.value.trim()) { msg.textContent = "Fill in Client ID and Client Secret."; return; }
+      msg.textContent = "Saving…";
+      try { await rpc("set_youtube_app", { p_client_id: cid.value.trim(), p_client_secret: sec.value.trim() }); sec.value = ""; await loadSettings(); toast("YouTube app saved. Connect each account's channel in its Settings."); refresh(); }
+      catch (e) { msg.textContent = errText(e); } } }, app.client_id ? "Replace" : "Save"),
+      h("a", { cls: "btn quiet", href: "https://console.cloud.google.com/auth/clients", target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "Google Cloud")), msg] : null);
+}
 const VOICE_OPTS = { hi: [["hi", "Chatterbox V3 Hindi pack (best for Hinglish)"], ["v2", "Chatterbox V2"], ["v3", "Chatterbox V3"]],
   en: [["hi", "Hindi pack: Indian English accent"], ["v2", "Chatterbox V2"], ["v3", "Chatterbox V3"]] };
 const STYLE_OPTS = [["natural", "Natural: balanced, steady"], ["expressive", "Expressive: more emotion, calmer pace"]];
@@ -1600,7 +1656,7 @@ async function viewSettings() {
   const paint = async (force) => {
     if (!body.isConnected) return;
     await Promise.all([loadSettings().catch(() => {}), loadWorker().catch(() => {}), loadOwner()]);
-    const nowSig = JSON.stringify([S.settings?.studio_keys, S.settings?.meta_app, S.settings?.r2, S.settings?.linkedin_app, S.settings?.post_schedule, S.settings?.worker_settings, S.worker?.info?.keys, macAlive(), S.worker?.claude_ok, S.editSlots]);
+    const nowSig = JSON.stringify([S.settings?.studio_keys, S.settings?.meta_app, S.settings?.r2, S.settings?.linkedin_app, S.settings?.youtube_app, S.settings?.post_schedule, S.settings?.worker_settings, S.worker?.info?.keys, macAlive(), S.worker?.claude_ok, S.editSlots]);
     if (!force && nowSig === sig) return; sig = nowSig;
     if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     const rr = () => paint(true); const w = S.worker; const i = w?.info || {};
@@ -1612,7 +1668,7 @@ async function viewSettings() {
       sect("Stock footage", "Where the clips in every reel come from. Free keys; the Mac falls back to its own .env key if one is removed here.",
         keyCard({ id: "pexels", name: "Pexels", img: SVC_IMG.pexels, wide: true, get: "https://www.pexels.com/api/", help: "Get a key", desc: "Main source of video clips (required)." }, rr),
         keyCard({ id: "pixabay", name: "Pixabay", img: SVC_IMG.pixabay, wide: true, get: "https://pixabay.com/api/docs/", help: "Get a key", desc: "Second source of video clips (optional, more choice)." }, rr)),
-      sect("Developer apps", "Saved once here, used when you connect any account's Facebook or LinkedIn (in that account's Settings).", metaCard(rr), liAppCard(rr)),
+      sect("Developer apps", "Saved once here, used when you connect any account's Facebook, LinkedIn or YouTube (in that account's Settings).", metaCard(rr), liAppCard(rr), ytAppCard(rr)),
       sect("Storage", "Where finished reels wait until they are posted. Nothing is kept longer than needed.", r2Card(rr)),
       sect("Posting", null, h("article", { cls: "svc" }, h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, icon("route", 26)), h("div", {}, h("h3", {}, "Auto-post"),
           h("p", { cls: "small" }, sch.auto === false ? "Off: approved reels post only when you tap Post." : `On: ${sch.review_minutes ?? 5} min after a reel is ready it posts to that account's own connected pages, unless you act.`))),
@@ -1661,7 +1717,7 @@ async function viewLibrary() {
   const refresh = async (force = true) => {
     if (!grid.isConnected) return;
     const [{ data }] = await Promise.all([sb.from("jobs").select("id,input,output,updated_at").eq("kind", "reel").eq("status", "done").eq("brand", S.brand).order("updated_at", { ascending: false }).limit(60), loadSettings().catch(() => {})]);
-    const now = JSON.stringify([(data || []).map((j) => [j.id, j.output?.ig, j.output?.li, j.output?.fb]), S.settings, S.editSlots]);
+    const now = JSON.stringify([(data || []).map((j) => [j.id, j.output?.ig, j.output?.li, j.output?.fb, j.output?.yt]), S.settings, S.editSlots]);
     if (!force && now === sig) return; sig = now;
     if (panel.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;    // never wipe a half-edited time
     panel.replaceChildren(!isLive() ? setupCard() : ownPosting() ? platformBar()
@@ -1672,7 +1728,7 @@ async function viewLibrary() {
       const o = j.output || {}; if (!(j.id in thumbs)) thumbs[j.id] = await signed(o.thumb);
       return h("div", { cls: "libcard" }, h("button", { cls: "poster", onclick: () => openPlayer(j) }, h("div", { cls: "frame" }, thumbs[j.id] ? h("img", { src: thumbs[j.id], alt: "", loading: "lazy" }) : null, h("span", { cls: "play" }, icon("play", 18, true))),
         h("h3", {}, titleOf(j)), h("p", { cls: "tiny" }, `${dateShort(j.updated_at)}, ${o.duration ?? "?"} s`)),
-        ["ig", "fb", "li"].filter((p) => o[p] || platSet(p) || (p === "ig" && S.brand === "weone")).map((p) => [postBadge(j, p), postActions(j, p, () => refresh(true))]),
+        PLATS.filter((p) => o[p] || platSet(p) || (p === "ig" && S.brand === "weone")).map((p) => [postBadge(j, p), postActions(j, p, () => refresh(true))]),
         !ownPosting() && !o.ig ? h("p", { cls: "ig-note" }, "Kept here to download. Connect this account's own pages in Settings to post.") : null);
     }));
     grid.replaceChildren(...cards);
@@ -1750,7 +1806,7 @@ async function findPending() {     // a reload or a second device re-attaches to
 }
 if (session) { await loadEstimates(); await Promise.all([poll(), findPending().catch(() => {}), loadSettings().catch(() => {}), loadBrands().catch(() => {})]); }
 booted = true; render();
-if (session) finishLinkedIn().catch((e) => toast(errText(e), { err: true }));
+if (session) finishOAuth().catch((e) => toast(errText(e), { err: true }));
 setInterval(poll, 6000);
 const wake = async () => { if (document.hidden || !S.session) return; await poll(); if (S.route === "production") refreshProduction(); };
 document.addEventListener("visibilitychange", wake);       // phones freeze background tabs: catch up the moment the page is visible again

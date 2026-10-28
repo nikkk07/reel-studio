@@ -11,7 +11,7 @@ import { r2conf, r2list, r2delete } from "./r2.ts";
 
 const DAY = 1440;
 const PENDING = new Set(["queued", "scheduled", "posting", "uploading", "processing"]);
-const PLATS = ["ig", "fb", "li"];
+const PLATS = ["ig", "fb", "li", "yt"];
 
 export function pruneReason(j: Json, nowMs = Date.now()): string | null {
   const o = j.output ?? {};

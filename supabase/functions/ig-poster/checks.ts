@@ -1,8 +1,9 @@
 // Connection checks for the account Settings page ("Re-check") and routine background checks.
-// Instagram is checked by the poster itself (index.ts); Facebook and LinkedIn here; the website is opened like a visitor would.
+// Instagram is checked by the poster itself (index.ts); Facebook, LinkedIn and YouTube here; the website is opened like a visitor would.
 import { type Json, type Brand, now, iso, minsAgo, setting, setSetting, bk } from "./db.ts";
 import { fbCheck } from "./facebook.ts";
 import { liCheck } from "./linkedin.ts";
+import { ytCheck } from "./yt.ts";
 
 const BLOCKS_BOTS = new Set([401, 403, 429]);      // a live site behind bot protection: online, it just refuses scripts
 
@@ -39,7 +40,7 @@ export async function checksTick(list: Brand[]): Promise<Json> {
   const res: Json = {};
   for (const b of list) {
     const r: Json = {};
-    for (const [k, f] of [["fb", fbCheck], ["li", liCheck], ["web", webCheck]] as const) {
+    for (const [k, f] of [["fb", fbCheck], ["li", liCheck], ["yt", ytCheck], ["web", webCheck]] as const) {
       try { const x = await f(b); if (x) r[k] = x; } catch (e) { r[k] = `error: ${String((e as Error).message ?? e).slice(0, 120)}`; }
     }
     if (Object.keys(r).length) res[b.id] = r;

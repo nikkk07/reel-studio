@@ -69,7 +69,7 @@ with sync_playwright() as pw:
             pg.keyboard.press("Escape"); pg.wait_for_timeout(400)
             pg.screenshot(path="/tmp/rs_stack/account_d.png", full_page=True)
             pg.goto("http://127.0.0.1:8765/index.html#/library"); pg.wait_for_timeout(2500)
-            ok(pg.locator(".plat").count() == 3, "Flying Star library shows its own connection tiles")
+            ok(pg.locator(".plat").count() == 4, "Flying Star library shows its own connection tiles")
             pg.locator(".plat.ig").click(); pg.wait_for_timeout(1200); ok("#/account" in pg.url, "tapping a tile opens the account's Settings")
             pg.goto("http://127.0.0.1:8765/index.html#/home"); pg.wait_for_timeout(2000)
             ok("ok" in pg.locator(".acct", has_text="Flying Star Aviator").locator(".mini.ig").get_attribute("class"), "Dashboard dot: Flying Star Instagram connected")
