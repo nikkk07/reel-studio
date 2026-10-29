@@ -124,3 +124,8 @@ PRONCHECK = {"type": "object", "required": ["parts"],
                             "properties": {"id": S, "best_take": S, "ok": B, "retry_text": S,
                                            "problems": {"type": "array", "items": {"type": "object", "required": ["intended", "heard"],
                                                         "properties": {"intended": S, "heard": S, "fix_say": S}}}}}}}}
+
+# ---- per-reel Comment-to-DM plan (CTA strategist): a topic keyword and a real, useful DM built from the verified facts
+DMPLAN = {"type": "object", "required": ["keyword", "offer", "say_offer", "points", "link", "next_step", "reply"],
+          "properties": {"keyword": S, "offer": S, "say_offer": S, "points": {"type": "array", "minItems": 3, "maxItems": 5, "items": S},
+                         "link": S, "source": S, "next_step": S, "reply": S, "why": S}}

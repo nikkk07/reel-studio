@@ -1,4 +1,4 @@
-// Comment-to-DM: someone comments the account's keyword under a recent post, the account sends them one private reply
+// Comment-to-DM: someone comments a reel's own keyword (or the account's keyword) under a recent post, the account sends them one private reply
 // (Instagram "private replies": 1 message per comment, within 7 days of the comment), plus an optional short public reply.
 // Runs every 2 minutes in the cloud, so it works while the Mac is off.
 // Safety: a comment is claimed in dm_log (unique comment id) BEFORE the message is sent, so it is never messaged twice;
@@ -63,6 +63,12 @@ async function dmBrand(b: Brand): Promise<Json> {
       return { state: "not ready" };
     }
   }
+  // each reel's own keyword and DM (CTA Strategist); the account's keyword stays the fallback on every post
+  const plans: Record<string, Json> = {};
+  if (media.length) {
+    const rows: Json[] = (await rest("GET", `jobs?select=mid:output->ig->>media_id,dm:output->dm&kind=eq.reel&brand=eq.${b.id}&output->ig->>media_id=in.(${media.map((m) => m.id).join(",")})`)) ?? [];
+    for (const r of rows) if (r.mid && r.dm?.keyword && r.dm?.message) plans[String(r.mid)] = r.dm;
+  }
   const hourAgo = iso(new Date(Date.now() - 3600e3));
   let budget = HOURLY_CAP - ((await rest("GET", `dm_log?select=id&brand=eq.${b.id}&created_at=gte.${hourAgo}`)) ?? []).length;
   const out: Json = { sent: 0, media: media.length };
@@ -70,7 +76,9 @@ async function dmBrand(b: Brand): Promise<Json> {
     if (budget <= 0) { out.capped = true; break; }
     const comments: Json[] = ((await ig("GET", `${m.id}/comments`, tok, { fields: "id,text,timestamp,username,from", limit: "50" })).data ?? [])
       .filter((c: Json) => minsAgo(String(c.timestamp).replace(/\+0000$/, "Z")) < 7 * 1440 - 30);
-    const cand: Json[] = comments.map((c: Json): Json => ({ ...c, kw: matches(c.text, keywords), who: String(c.username ?? c.from?.username ?? "") }))
+    const plan = plans[String(m.id)];
+    const kws = plan ? [String(plan.keyword), ...keywords.filter((k) => k.toUpperCase() !== String(plan.keyword).toUpperCase())] : keywords;
+    const cand: Json[] = comments.map((c: Json): Json => ({ ...c, kw: matches(c.text, kws), who: String(c.username ?? c.from?.username ?? "") }))
       .filter((c: Json) => c.kw && c.who.toLowerCase() !== own && String(c.from?.id ?? "") !== uid);
     if (!cand.length) continue;
     const done = new Set(((await rest("GET", `dm_log?select=comment_id&comment_id=in.(${cand.map((c) => c.id).join(",")})`)) ?? []).map((r: Json) => r.comment_id));
@@ -81,9 +89,11 @@ async function dmBrand(b: Brand): Promise<Json> {
       } catch { continue; }
       budget--;
       try {
-        await ig("POST", `${uid}/messages`, tok, {}, { recipient: { comment_id: c.id }, message: { text: render(d.message, c.who) } });
+        const own = plan && String(c.kw).toUpperCase() === String(plan.keyword).toUpperCase();
+        await ig("POST", `${uid}/messages`, tok, {}, { recipient: { comment_id: c.id }, message: { text: render(own ? plan.message : d.message, c.who) } });
         if (d.public_reply !== false) {
-          try { await ig("POST", `${c.id}/replies`, tok, { message: PUBLIC_REPLIES[out.sent % PUBLIC_REPLIES.length] }); } catch { /* the DM is what matters */ }
+          const pub = own && plan.reply ? String(plan.reply) : PUBLIC_REPLIES[out.sent % PUBLIC_REPLIES.length];
+          try { await ig("POST", `${c.id}/replies`, tok, { message: pub }); } catch { /* the DM is what matters */ }
         }
         await rest("PATCH", `dm_log?comment_id=eq.${encodeURIComponent(c.id)}`, { state: "sent", sent_at: iso(now()) }, "return=minimal");
         out.sent++;

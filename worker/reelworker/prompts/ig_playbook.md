@@ -3,6 +3,7 @@ What Instagram itself has said (treat as facts):
 - Reach to non-followers is ranked mainly on **watch time, sends (DM shares) per reach and likes per reach** (Adam Mosseri, Instagram head, Jan 2025; restated through 2026). Sends weigh most for people who don't follow you yet; likes for followers.
 - **Original content** is recommended; accounts that mostly repost others' material lose recommendations to non-followers (Mosseri, April 2026: "make it your own"). Our reels are original: own script, own voice, own graphics over licensed stock footage.
 - At most **5 hashtags** per post (Dec 2025); captions and on-screen words are read for search, so the topic's plain search words must appear in both.
+- Posts built on **engagement bait** ("comment YES", "like if…", contests that require likes or follows) are not recommended to non-followers. Our Comment-to-DM is the opposite: a topic keyword that delivers a real saveable summary by DM, and the reel itself always gives the full answer.
 
 How we turn that into a script (proven short-form practice; our Analyst refines it with our own results):
 1. **0-1.5 s hook** decides everything: open with the payoff's tension, not an intro. Use one of: a contradiction ("X is not faster"), a hidden cost or rule ("one line is missing"), a specific number, a direct "you" stake, or a visual question. Never open with a greeting, the brand name, "did you know" or slow context. The first on-screen words must say the same thing as the voice.

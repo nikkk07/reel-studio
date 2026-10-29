@@ -48,7 +48,7 @@ def make_caption(db, job_id, output, brand_id="weone"):
     actx = types.SimpleNamespace(db=db, job={"id": job_id, "brand": brand_id}, id=job_id, dir=config.JOBS_DIR / job_id, log=lambda *a, **k: None)
     res = agents.call(actx, "caption_writer", text, schemas.CAPTION, [], timeout=300, name="caption")
     from . import dm
-    d = dm.active(db, brand_id, prof)       # Comment-to-DM working for this account: the caption says what to comment
+    d = dm.active(db, brand_id, prof, plan=output.get("dm"))   # Comment-to-DM working: the caption says this reel's keyword
     cap = res["caption"] + (f"\n\n{d['caption_line']}" if d and d["keyword"].lower() not in res["caption"].lower() else "")
     return compose(cap, res["hashtags"], own=own or "-")
 

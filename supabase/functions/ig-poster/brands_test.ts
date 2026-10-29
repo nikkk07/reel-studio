@@ -9,7 +9,7 @@ Deno.env.set("GROQ_API", "http://groq.test/v1"); Deno.env.set("COVERR_API", "htt
 
 type Row = Record<string, any>;
 const T: Record<string, Row[]> = { settings: [], secrets: [], jobs: [], brands: [], dm_log: [] };
-const DMS: { comment: string; text: string }[] = []; const REPLIES: string[] = [];
+const DMS: { comment: string; text: string }[] = []; const REPLIES: string[] = []; const REPLY_TEXT: string[] = [];
 const IG_COMMENTS: Record<string, Row[]> = {}; const IG_MEDIA: Record<string, Row[]> = {}; let DM_PERM = true;
 const IG_USERS: Record<string, { id: string; username: string }> = {};       // token -> account
 const IG_POSTS: { user: string; caption: string; id: string }[] = [];
@@ -46,6 +46,8 @@ globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {})
     }
     if (u.pathname === "/rest/v1/rpc/set_reel_stats") return new Response(null, { status: 204 });
     const table = u.pathname.replace("/rest/v1/", ""); const rows = T[table]; const q = u.searchParams;
+    if (method === "GET" && (q.get("select") ?? "").startsWith("mid:"))      // per-reel DM plans by Instagram media id
+      return J(rows.filter((r) => match(r, q)).map((r) => ({ mid: r.output?.ig?.media_id, dm: r.output?.dm })));
     if (method === "GET") return J(rows.filter((r) => match(r, q)).map((r) => structuredClone(r)));
     if (method === "POST" && table === "dm_log") {             // unique comment id, like the real table
       const row = JSON.parse(body);
@@ -74,7 +76,7 @@ globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {})
       if (!DM_PERM) return J({ error: { code: 10, message: "Application does not have permission for this action" } }, 403);
       const b = JSON.parse(body); DMS.push({ comment: b.recipient.comment_id, text: b.message.text }); return J({ recipient_id: "x", message_id: "m" });
     }
-    if (u.pathname.endsWith("/replies") && method === "POST") { REPLIES.push(u.pathname.split("/")[2]); return J({ id: "r" }); }
+    if (u.pathname.endsWith("/replies") && method === "POST") { REPLIES.push(u.pathname.split("/")[2]); REPLY_TEXT.push(u.searchParams.get("message") ?? ""); return J({ id: "r" }); }
     const p = new URLSearchParams(body);
     if (u.pathname === `/v1/${me.id}/media` && method === "POST") return J({ id: `c-${me.id}-${IG_POSTS.length}` });
     if (u.pathname.startsWith("/v1/c-")) return J({ status_code: "FINISHED" });
@@ -112,7 +114,7 @@ const ago = (m: number) => new Date(Date.now() - m * 60e3).toISOString();
 function reset() {
   for (const k of Object.keys(T)) T[k] = [];
   for (const k of Object.keys(IG_USERS)) delete IG_USERS[k];
-  IG_POSTS.length = 0; CALLS.length = 0; DMS.length = 0; REPLIES.length = 0; DM_PERM = true;
+  IG_POSTS.length = 0; CALLS.length = 0; DMS.length = 0; REPLIES.length = 0; REPLY_TEXT.length = 0; DM_PERM = true;
   for (const k of Object.keys(IG_COMMENTS)) delete IG_COMMENTS[k]; for (const k of Object.keys(IG_MEDIA)) delete IG_MEDIA[k];
   T.brands = [{ id: "weone", name: "We One Aviation", links: {} }, { id: "flystar", name: "Flying Star Aviator", links: {} }, { id: "bookmycharter", name: "Book My Charter", links: {} }];
 }
@@ -316,4 +318,24 @@ Deno.test("Comment-to-DM: a missing permission is shown on the account, not retr
   DM_PERM = true; T.secrets.find((r) => r.key === "instagram_token@flystar")!.updated_at = new Date(Date.now() + 1000).toISOString();
   await dmTick(T.brands as any, true);
   assertEquals(DMS.map((x) => x.comment).sort(), ["c5", "c6"], "after Reconnect both waiting comments get their message");
+});
+
+Deno.test("Comment-to-DM per reel: the reel's own keyword gets its own DM and reply; the account keyword still works", async () => {
+  reset();
+  IG_USERS["tok-fs"] = { id: "500", username: "flyingstar" };
+  T.secrets.push({ key: "instagram_token@flystar", value: "tok-fs", updated_at: ago(60) });
+  T.settings.push({ key: "instagram_status@flystar", value: { state: "connected", user_id: "500", username: "flyingstar", checked_at: ago(1) } },
+                  { key: "dm@flystar", value: { on: true, keywords: ["CPL"], message: "Hi {name}! CPL course details.", state: "ready" } });
+  T.jobs.push({ id: "r1", brand: "flystar", kind: "reel", status: "done", output: { ig: { state: "posted", media_id: "m7" },
+    dm: { keyword: "MEDICAL", message: "Hi {name}, thank you for your comment.\n\nHere is the medical checklist:\n1. Class 2 first.", reply: "Sent! Check your messages for the checklist." } } });
+  IG_MEDIA["500"] = [{ id: "m7", timestamp: ago(30).replace("Z", "+0000") }, { id: "m8", timestamp: ago(40).replace("Z", "+0000") }];
+  IG_COMMENTS["m7"] = [{ id: "k1", text: "Medical please", timestamp: ago(5), username: "asha" }, { id: "k2", text: "cpl", timestamp: ago(4), username: "ravi" }];
+  IG_COMMENTS["m8"] = [{ id: "k3", text: "MEDICAL", timestamp: ago(3), username: "joe" }];
+  await dmTick(T.brands as any, true);
+  const by = Object.fromEntries(DMS.map((x) => [x.comment, x.text]));
+  assert(by.k1.startsWith("Hi @asha, thank you for your comment.") && by.k1.includes("medical checklist"), "reel keyword: the reel's own DM");
+  assertEquals(by.k2, "Hi @ravi! CPL course details.", "account keyword on the same reel: the account DM");
+  assert(!("k3" in by), "another reel's keyword on a post without that plan is not matched");
+  assert(REPLY_TEXT.includes("Sent! Check your messages for the checklist."), "the reel's own public reply");
+  assertEquals(T.dm_log.find((r) => r.comment_id === "k1")!.keyword, "MEDICAL");
 });

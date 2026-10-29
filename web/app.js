@@ -1207,6 +1207,9 @@ async function reviewView(j) {
       lines.length ? [h("h3", { style: "margin-bottom:8px" }, "Script"), h("p", { cls: "small muted", style: "margin-bottom:10px" }, "Tap a line to jump the video there. Sources sit under the lines they support."), h("ol", { cls: "lines" }, items)] : null,
       h("div", { cls: "qc" }, h("h3", {}, "Claude's check"), h("p", { cls: "small", style: "margin-top:6px" }, qc.summary || "No notes."), (qc.issues || []).length ? h("ul", {}, qc.issues.map((i) => h("li", {}, `At ${i.t ?? "?"} s: ${i.problem}`))) : null),
       o.ig_caption ? h("details", { cls: "more" }, h("summary", {}, "Instagram caption"), h("p", { cls: "small", style: "white-space:pre-wrap;margin-top:8px" }, o.ig_caption)) : null,
+      o.dm?.keyword ? h("details", { cls: "more" }, h("summary", {}, `Comment-to-DM: viewers comment ${o.dm.keyword} to get ${o.dm.offer || "the details"}`),
+        h("pre", { cls: "small", style: "white-space:pre-wrap;font:inherit;margin:8px 0 0;background:var(--sunk);padding:10px 12px;border-radius:8px" }, String(o.dm.message || "").replace("{name}", "@viewer")),
+        o.dm.reply ? h("p", { cls: "tiny faint", style: "margin-top:6px" }, `Public reply under their comment: “${o.dm.reply}”`) : null) : null,
       (o.credits || []).length ? h("details", { cls: "more" }, h("summary", {}, "Footage credits"), h("ul", {}, o.credits.map((c) => h("li", {}, c.source === "coverr" ? h("a", { href: "https://coverr.co", target: "_blank", rel: "noopener noreferrer" }, "Video by Coverr") : `${c.author}, ${c.source}`, ` (${c.licence})`)))) : null,
       o.archive_on_mac ? h("p", { cls: "tiny faint", style: "margin-top:12px;overflow-wrap:anywhere" }, `Full-quality master on the Mac: ${o.archive_on_mac}`) : null,
       h("div", { cls: "decide" }, changeBox, h("div", { cls: "row" }, dl ? h("button", { cls: "btn quiet", onclick: () => downloadReel(o, name) }, icon("down"), "Download") : null, cancelChange, change, approve))));
@@ -1369,7 +1372,7 @@ function dmCard(b, log, refresh) {
     h("div", { cls: "svc-head" }, h("span", { cls: "plat-tile svc-ico" }, h("img", { src: PLAT_IMG.ig, alt: "" }),
         h("span", { cls: `plat-badge ${kind}`, "aria-hidden": "true" }, kind === "ok" ? "✓" : kind === "no" ? "✕" : kind === "wait" ? "…" : "!")),
       h("div", {}, h("h3", {}, "Comment-to-DM"), h("p", { cls: `small plat-state ${kind}` }, word))),
-    h("p", { cls: "small muted" }, `When someone comments ${(d.keywords || [])[0] || "the keyword"} on a post from the last 7 days, ${b.name} sends them this message once, and replies "Sent you a DM" under the comment. Reels then end with "Comment ${(d.keywords || [])[0] || "…"}" instead of "Follow". {name} becomes their @username.`),
+    h("p", { cls: "small muted" }, `Every new reel gets its own topic keyword and its own DM (the CTA Strategist writes it from the reel's verified facts: key points, the right page on ${host(b.website || "") || "the website"}, one next step), so viewers comment because the summary is worth saving. You can read each reel's keyword and DM on its review screen. The keyword below is the fallback: it works on every post from the last 7 days, and on reels made before this. Each commenter gets one message, plus a short public reply under the comment. {name} becomes their @username.`),
     d.note && d.on ? h("p", { cls: "small", style: "color:#7D1C26" }, d.note) : null,
     b.id === "legalgroup" ? h("p", { cls: "tiny", style: "color:#6E4300" }, "Advocates in India may not solicit work (Bar Council of India rules), so this message only points to free explainers. Keep it informational.") : null,
     h("div", { cls: "form-grid" }, h("label", { cls: "fld" }, h("span", {}, "Keyword"), kw),

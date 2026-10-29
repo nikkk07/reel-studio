@@ -33,8 +33,64 @@ def _other_account(p, name):
 
 def _brand(ctx):
     bid = ctx.job.get("brand") or "weone"; prof = brandmod.load(ctx.db, bid)
-    d = dmlib.active(ctx.db, bid, prof)
+    d = dmlib.active(ctx.db, bid, prof, plan=(getattr(ctx, "data", None) or {}).get("dm_plan"))
     return {**prof, "_dm": d} if d else prof
+
+
+def _url_ok(url):
+    try:
+        import httpx
+        r = httpx.get(url, follow_redirects=True, timeout=10, headers={"User-Agent": "Mozilla/5.0 (ReelStudio link check)"})
+        return r.status_code < 400 or r.status_code in (401, 403, 429)       # bot protection still means the page exists
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def plan_dm(ctx, prof, concept, fs, parent=None):
+    """CTA Strategist: this reel's own comment keyword and the DM it sends (key points from the verified facts, the right
+    page, one next step). Only when the account's Comment-to-DM is on and working. Returns the plan or None."""
+    bid = ctx.job.get("brand") or "weone"
+    if not dmlib.account(ctx.db, bid):
+        return None
+    if "dm_plan" in ctx.data:
+        return ctx.data["dm_plan"]
+    if parent and (parent / "dm_plan.json").exists():            # a revision keeps the approved reel's keyword
+        ctx.data["dm_plan"] = json.loads((parent / "dm_plan.json").read_text(encoding="utf-8")); return ctx.data["dm_plan"]
+    if not fs:
+        return None
+    home = dmlib.site_of(prof.get("website"))
+    pages = [prof.get("website")] + [u for u in (prof.get("sources") or []) if dmlib.site_of(u) == home]
+    pages = list(dict.fromkeys(u.strip() for u in pages if u))[:25]
+    facts = fs.get("facts", [])
+    facts_txt = "\n".join(f"- {f.get('fact')} (source: {f.get('source_url')})" for f in facts)
+    since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 45 * 86400))
+    try:
+        used = [r["kw"] for r in ctx.db.select("jobs", f"select=kw:output->dm->>keyword&kind=eq.reel&brand=eq.{bid}&created_at=gte.{since}&limit=40") if r.get("kw")]
+    except Exception:  # noqa: BLE001
+        used = []
+    used = [u for u in used if u]
+    urls = [f.get("source_url") for f in facts if f.get("source_url")]
+    text = brain.prompt("dm_plan", brand_name=prof["name"], brand_brief=brandmod.brief(prof, full=False), title=str(concept.get("title", "")),
+                        hook=str(concept.get("hook", "")), angle=str(fs.get("angle") or concept.get("angle") or ""), facts=facts_txt,
+                        pages="\n".join(f"- {u}" for u in pages) or f"- {prof.get('website')}", used=", ".join(used) or "(none)",
+                        language="Hinglish" if brandmod.hinglish(prof) else "English")
+    try:
+        plan = agents.call(ctx, "cta_strategist", text, schemas.DMPLAN, [], timeout=300, name="dm_plan",
+                           check=lambda o: dmlib.check_plan(o, prof, urls, used))
+    except Exception as e:  # noqa: BLE001  (the account's own keyword is used instead; the reel never waits for this)
+        ctx.log(f"CTA Strategist skipped ({str(e)[:120]}); this reel uses the account's keyword", "warn"); return None
+    plan["keyword"] = plan["keyword"].strip().upper()
+    plan["points"] = [str(x).strip() for x in plan["points"]][:5]
+    if not _url_ok(plan["link"]):
+        ctx.log(f"DM link {plan['link']} did not open; using the homepage", "warn"); plan["link"] = prof.get("website")
+    if plan.get("source") and not _url_ok(plan["source"]):
+        plan["source"] = ""
+    plan["message"] = dmlib.message(plan, prof)
+    ctx.data["dm_plan"] = plan; ctx.save()
+    ctx.path("dm_plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")
+    ctx.merge_output({"dm": {k: plan.get(k) for k in ("keyword", "offer", "message", "reply", "link", "source", "why")}})
+    ctx.log(f"CTA Strategist: viewers comment {plan['keyword']} to get {plan['offer']}")
+    return plan
 
 
 def _parent_dir(ctx):
@@ -259,10 +315,17 @@ def stage_script(ctx, prog):
         fs = ctx.data["factsheet"]
         ctx.path("factsheet.json").write_text(json.dumps(fs, ensure_ascii=False, indent=1), encoding="utf-8")
     ctx.trace("script", "research", "Fact-Checker", "done", f"{len((fs or {}).get('facts', []))} verified facts" if fs else "kept from the approved version")
+    if plan_dm(ctx, prof, concept, fs, parent):                 # this reel's own keyword replaces the account's in the CTA
+        prof = _brand(ctx)
     ctx.trace("script", "write", "Scriptwriter", "run", flush=True)
     verify = ("The Fact-Checker has already verified the facts below. Write ONLY from them; do not search again unless a fact you need is missing, and never "
               "contradict the sheet's `do_not_say` or `corrections`." if fs else "Use WebSearch/WebFetch only if the notes need a new fact.")
     block = ("\n\n## Verified fact sheet from the Fact-Checker\n" + _sheet_text(fs) if fs else "") + "\n\n" + playbook + _core_note(prof, concept) + _audience_note(ctx, prof)
+    dp = ctx.data.get("dm_plan") if (prof.get("_dm") or {}).get("plan") else None
+    if dp:                                   # the ending offer is part of the story: the reel earns it, the DM completes it
+        block += (f"\n\n## The reel's call to action (added automatically as the last line; do not write it yourself)\n"
+                  f"Viewers will be told: comment {dp['keyword']} to get {dp['offer']} by DM. Give the full answer in the reel itself; "
+                  "the DM is the saveable summary, never the withheld payoff. Make the last content line lead naturally into wanting that summary.")
     if not brandmod.legacy(prof):            # every other account: its own knowledge, language, tone and call to action
         cs, cc = brandmod.cta(prof)
         common = dict(brand_name=prof["name"], brand_brief=brandmod.brief(prof), language=prof.get("language", "english").title(), cta_say=cs, cta_caption=cc,
