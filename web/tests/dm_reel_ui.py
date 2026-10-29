@@ -17,6 +17,10 @@ with sync_playwright() as pw:
     ok("viewers comment MEDICAL to get the 4-step DGCA medical checklist" in pg.inner_text("summary:has-text('Comment-to-DM')"), "review screen names the reel's keyword and offer")
     pg.click("summary:has-text('Comment-to-DM')"); t = pg.inner_text("details:has(summary:has-text('Comment-to-DM'))")
     ok("Hi @viewer, thank you for your comment." in t and "Sent! Check your messages" in t, "the exact DM and public reply can be read before approving")
+    pg.goto(URL + "#/account/weone"); pg.wait_for_selector("h3:text-is('Comment-to-DM')", timeout=20000); pg.wait_for_timeout(800)
+    lay = pg.evaluate("""() => { const a = [...document.querySelectorAll('article')].find((x) => x.querySelector('h3')?.textContent === 'Comment-to-DM');
+      return [...a.querySelectorAll('.check-row label')].map((l) => [l.querySelector('input').getBoundingClientRect().width, l.querySelector('span').getBoundingClientRect().height]); }""")
+    ok(len(lay) == 2 and all(w <= 24 and hgt <= 24 for w, hgt in lay), f"settings card: both switches are small checkboxes with one-line labels {lay}")
     ok(not errors, f"no page errors {errors[:2]}")
 sql(f"delete from jobs where id='{jid}'")
 bad = [n for k, n in R if not k]; print(f"{len(R) - len(bad)}/{len(R)} reel DM UI checks passed" + (" | FAILED: " + "; ".join(bad) if bad else ""))

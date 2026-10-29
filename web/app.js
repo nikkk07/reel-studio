@@ -1375,10 +1375,10 @@ function dmCard(b, log, refresh) {
     h("p", { cls: "small muted" }, `Every new reel gets its own topic keyword and its own DM (the CTA Strategist writes it from the reel's verified facts: key points, the right page on ${host(b.website || "") || "the website"}, one next step), so viewers comment because the summary is worth saving. You can read each reel's keyword and DM on its review screen. The keyword below is the fallback: it works on every post from the last 7 days, and on reels made before this. Each commenter gets one message, plus a short public reply under the comment. {name} becomes their @username.`),
     d.note && d.on ? h("p", { cls: "small", style: "color:#7D1C26" }, d.note) : null,
     b.id === "legalgroup" ? h("p", { cls: "tiny", style: "color:#6E4300" }, "Advocates in India may not solicit work (Bar Council of India rules), so this message only points to free explainers. Keep it informational.") : null,
-    h("div", { cls: "form-grid" }, h("label", { cls: "fld" }, h("span", {}, "Keyword"), kw),
-      h("label", { cls: "fld", style: "display:flex;gap:8px;align-items:center;margin-top:26px" }, on, h("span", {}, "On")),
-      h("label", { cls: "fld", style: "display:flex;gap:8px;align-items:center;margin-top:26px" }, pub, h("span", {}, "Also reply \"Sent you a DM\" publicly"))),
-    h("label", { cls: "fld" }, h("span", {}, "Message (max 900 characters)"), msgIn),
+    h("div", { cls: "check-row", style: "margin-top:14px" }, h("label", {}, on, h("span", {}, "Comment-to-DM on")),
+      h("label", {}, pub, h("span", {}, "Also reply publicly under the comment"))),
+    h("div", { cls: "form-grid", style: "margin-top:0" }, h("label", { cls: "fld" }, h("span", {}, "Fallback keyword"), kw)),
+    h("label", { cls: "fld" }, h("span", {}, "Fallback message (max 900 characters)"), msgIn),
     h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: async () => {
       msg.textContent = "Saving…";
       try { await rpc("set_dm", { p_brand: b.id, p_on: on.checked, p_keyword: kw.value.trim(), p_message: msgIn.value.trim(), p_public_reply: pub.checked });
