@@ -73,7 +73,8 @@ def plan_dm(ctx, prof, concept, fs, parent=None):
     text = brain.prompt("dm_plan", brand_name=prof["name"], brand_brief=brandmod.brief(prof, full=False), title=str(concept.get("title", "")),
                         hook=str(concept.get("hook", "")), angle=str(fs.get("angle") or concept.get("angle") or ""), facts=facts_txt,
                         pages="\n".join(f"- {u}" for u in pages) or f"- {prof.get('website')}", used=", ".join(used) or "(none)",
-                        language="Hinglish" if brandmod.hinglish(prof) else "English")
+                        language="Hinglish" if brandmod.hinglish(prof) else "English",
+                        history=dmlib.history_text(dmlib.results(ctx.db, bid)))
     try:
         plan = agents.call(ctx, "cta_strategist", text, schemas.DMPLAN, [], timeout=300, name="dm_plan",
                            check=lambda o: dmlib.check_plan(o, prof, urls, used))

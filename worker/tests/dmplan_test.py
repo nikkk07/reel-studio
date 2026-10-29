@@ -39,6 +39,34 @@ long = {**GOOD, "points": ["x" * 165] * 5}
 ok(len(dm.message(long, PROF)) <= 950, "long plans are trimmed to Instagram's message limit")
 ok("not legal advice" in dm.message(GOOD, {**PROF, "business": "Legal services and lawyers"}), "legal accounts always carry the disclaimer")
 
+# 2b. measuring each keyword: tagged DM links, DMs per 1,000 reached, fed back to the CTA Strategist
+ok("Read more: https://www.flystar.co.in/blog/dgca-medical?utm_source=instagram&utm_medium=dm&utm_campaign=reel_medical" in m, "the DM's page link carries UTM tags named after the reel's keyword")
+ok(dm.tag("https://x.in/a?b=1#top", "reel_cpl") == "https://x.in/a?b=1&utm_source=instagram&utm_medium=dm&utm_campaign=reel_cpl#top"
+   and dm.tag("https://x.in/?utm_source=a", "z") == "https://x.in/?utm_source=a" and dm.tag("", "z") == "", "tagging keeps existing queries, fragments and tags")
+import time as _t
+NOW = _t.time(); iso_ = lambda h: _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime(NOW - h * 3600))
+class RDB:
+    def select(self, t, q=""):
+        if t == "jobs": return [{"kw": "MEDICAL", "offer": "the medical checklist", "mid": "m1", "at": iso_(72), "reach": "2000"},
+                                {"kw": "FEES", "offer": "the fee breakdown", "mid": "m2", "at": iso_(96), "reach": "4000"},
+                                {"kw": "NEW", "offer": "x", "mid": "m3", "at": iso_(5), "reach": "100"},
+                                {"kw": "NOREACH", "offer": "y", "mid": "m4", "at": iso_(80), "reach": None}]
+        if t == "dm_log": return [{"media_id": "m1", "keyword": "medical"}] * 9 + [{"media_id": "m2", "keyword": "FEES"}] * 2 + [{"media_id": "m1", "keyword": "CPL"}] * 5 + [{"media_id": "m4", "keyword": "NOREACH"}]
+        return []
+res = dm.results(RDB(), "flystar", now=NOW)
+byk = {x["keyword"]: x for x in res}
+ok(byk["MEDICAL"]["dms"] == 9 and byk["MEDICAL"]["per_1k"] == 4.5 and byk["FEES"]["per_1k"] == 0.5, "DMs per 1,000 reached, counting only the reel's own keyword")
+ok("NEW" not in byk and byk["NOREACH"]["per_1k"] is None, "reels younger than 2 days are not judged; missing reach is shown as not measured")
+h_ = dm.history_text(res)
+ok(h_.index("MEDICAL") < h_.index("FEES") < h_.index("NOREACH") and "9 DMs from 2,000 reached = 4.5 per 1,000 reached" in h_, "best keywords first for the CTA Strategist")
+ok("no measured results yet" in dm.history_text([]), "a new account gets a clear 'no results yet'")
+class Boom:
+    def select(self, *a, **k): raise RuntimeError("offline")
+ok(dm.results(Boom(), "flystar") == [], "unreadable data never stops a reel")
+very_long = {**GOOD, "points": ["y" * 168] * 3, "next_step": "z" * 200, "offer": "o" * 60}
+vm = dm.message(very_long, PROF)
+ok(len(vm) <= 950 and vm.rstrip().endswith("Team Flying Star Aviator"), "a long DM drops the source line before ever cutting the ending")
+
 # 3. the reel's CTA: spoken in the reel's language with its own keyword; caption line names the offer
 class DB:
     def __init__(self, on=True): self.on = on; self.merged = []
@@ -74,6 +102,7 @@ fs = {"facts": [{"fact": "Class 2 first", "source_url": FACTS[0]}], "angle": "me
 plan = reel.plan_dm(ctx, PROF, {"title": "DGCA medical", "hook": "Fail this and you never fly"}, fs)
 ok(calls and calls[0][0] == "cta_strategist" and "VISA" in calls[0][1] and "https://www.flystar.co.in/blog/dgca-medical" in calls[0][1] and "other.com" not in calls[0][1],
    "the CTA Strategist sees the facts, the account's own pages only, and the recent keywords")
+ok("Results of this account's earlier reel keywords" in calls[0][1] and "no measured results yet" in calls[0][1], "the CTA Strategist also sees how earlier keywords performed")
 ok(plan["link"] == "https://www.flystar.co.in", "a page that does not open is replaced by the homepage")
 out = {}
 for v in db.merged: out.update(v.get("output", {}) if isinstance(v.get("output"), dict) else {})

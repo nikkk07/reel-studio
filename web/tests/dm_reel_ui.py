@@ -8,6 +8,12 @@ dm = {"keyword": "MEDICAL", "offer": "the 4-step DGCA medical checklist", "messa
       "reply": "Sent! Check your messages for the checklist."}
 sql(f"""insert into jobs(kind,brand,status,input,output) values ('reel','weone','review','{{}}', $j${json.dumps({"title": "DGCA medical", "duration": 30, "dm": dm})}$j$)""")
 jid = sql("select id from jobs where output->>'title'='DGCA medical' order by created_at desc limit 1")
+sql("delete from dm_log where comment_id like 'kwt%'; delete from jobs where output->>'title' in ('KW test A','KW test B')")
+for t, kw, mid, h_, reach in [("KW test A", "MEDICAL", "kwm1", 72, 2000), ("KW test B", "FEES", "kwm2", 10, 900)]:
+    sql(f"""insert into jobs(kind,brand,status,input,output) values ('reel','weone','done','{{}}', jsonb_build_object('title','{t}','dm',jsonb_build_object('keyword','{kw}'),
+        'ig',jsonb_build_object('state','posted','media_id','{mid}','posted_at',to_char((now() - interval '{h_} hours') at time zone 'utc','YYYY-MM-DD"T"HH24:MI:SS"Z"')),'ig_stats',jsonb_build_object('reach',{reach})))""")
+for i in range(9): sql(f"insert into dm_log(brand,comment_id,media_id,username,keyword,state) values ('weone','kwt{i}','kwm1','u{i}','MEDICAL','sent')")
+sql("insert into dm_log(brand,comment_id,media_id,username,keyword,state) values ('weone','kwtx','kwm1','ux','PILOT','sent')")
 with sync_playwright() as pw:
     b = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
     cx = b.new_context(viewport={"width": 1280, "height": 900}, service_workers="block"); cx.add_init_script("sessionStorage.setItem('rs_checked', String(Date.now()))")
@@ -21,6 +27,9 @@ with sync_playwright() as pw:
     lay = pg.evaluate("""() => { const a = [...document.querySelectorAll('article')].find((x) => x.querySelector('h3')?.textContent === 'Comment-to-DM');
       return [...a.querySelectorAll('.check-row label')].map((l) => [l.querySelector('input').getBoundingClientRect().width, l.querySelector('span').getBoundingClientRect().height]); }""")
     ok(len(lay) == 2 and all(w <= 24 and hgt <= 24 for w, hgt in lay), f"settings card: both switches are small checkboxes with one-line labels {lay}")
+    tbl = pg.inner_text("table.kw-res")
+    ok("MEDICAL" in tbl and "4.5 ★" in tbl and "2,000" in tbl, f"keyword results: 9 DMs from 2,000 reached = 4.5 per 1,000, best marked {tbl[:160]!r}")
+    ok("FEES" in tbl and "too early" in tbl, "a reel younger than 2 days is not judged yet")
     ok(not errors, f"no page errors {errors[:2]}")
-sql(f"delete from jobs where id='{jid}'")
+sql(f"delete from jobs where id='{jid}'"); sql("delete from dm_log where comment_id like 'kwt%'; delete from jobs where output->>'title' in ('KW test A','KW test B')")
 bad = [n for k, n in R if not k]; print(f"{len(R) - len(bad)}/{len(R)} reel DM UI checks passed" + (" | FAILED: " + "; ".join(bad) if bad else ""))

@@ -1360,7 +1360,33 @@ function recheckBtn(k, b, refresh) {
 // Comment-to-DM: a viewer comments the keyword, the account sends them one private message (Instagram allows one per comment, within 7 days)
 const DM_STATE = { ready: ["ok", "Working: replies within about 2 minutes"], checking: ["wait", "Checking with Instagram…"], needs_permission: ["warn", "Needs a permission on the Instagram token"],
   not_connected: ["no", "Waiting for this account's Instagram"], error: ["warn", "Not working right now"] };
-function dmCard(b, log, refresh) {
+// each posted reel's own keyword: DMs sent, people reached, DMs per 1,000 reached (judged once the reel is 2 days old)
+async function keywordResults(brand) {
+  const since = new Date(Date.now() - 60 * 86400e3).toISOString();
+  const [jobs, logs] = await Promise.all([
+    sb.from("jobs").select("kw:output->dm->>keyword,mid:output->ig->>media_id,at:output->ig->>posted_at,reach:output->ig_stats->>reach")
+      .eq("kind", "reel").eq("brand", brand).eq("output->ig->>state", "posted").gte("output->ig->>posted_at", since)
+      .not("output->dm->>keyword", "is", null).order("created_at", { ascending: false }).limit(60).then((r) => r.data || [], () => []),
+    sb.from("dm_log").select("media_id,keyword").eq("brand", brand).eq("state", "sent").gte("created_at", since).limit(5000).then((r) => r.data || [], () => [])]);
+  const sent = {};
+  for (const x of logs) { const k = `${x.media_id}|${String(x.keyword || "").toUpperCase()}`; sent[k] = (sent[k] || 0) + 1; }
+  return jobs.filter((j) => j.kw && j.mid).map((j) => {
+    const dms = sent[`${j.mid}|${String(j.kw).toUpperCase()}`] || 0; const reach = Number(j.reach) || null;
+    return { kw: String(j.kw).toUpperCase(), at: j.at, dms, reach, per: reach ? Math.round(dms * 10000 / reach) / 10 : null, early: (Date.now() - new Date(j.at)) < 48 * 3600e3 };
+  });
+}
+function kwTable(rows, b) {
+  if (!rows?.length) return h("p", { cls: "small muted", style: "margin-top:10px" }, "Keyword results appear here once reels with their own keyword are posted.");
+  const best = Math.max(0, ...rows.filter((r) => !r.early && r.per != null).map((r) => r.per));
+  return h("div", { style: "margin-top:14px" }, h("h4", { style: "font-size:14px;margin:0 0 6px" }, "Keyword results (last 60 days)"),
+    h("div", { style: "overflow-x:auto" }, h("table", { cls: "kw-res" },
+      h("thead", {}, h("tr", {}, ["Keyword", "Posted", "DMs sent", "Reached", "Per 1,000"].map((t) => h("th", {}, t)))),
+      h("tbody", {}, rows.slice(0, 10).map((r) => h("tr", {}, h("td", {}, h("b", {}, r.kw)), h("td", {}, ago(r.at)), h("td", {}, String(r.dms)),
+        h("td", {}, r.reach ? r.reach.toLocaleString("en-IN") : "…"),
+        h("td", {}, r.early ? h("span", { cls: "muted" }, "too early") : r.per == null ? "…" : r.per === best && best > 0 ? h("b", {}, `${r.per} ★`) : String(r.per))))))),
+    h("p", { cls: "tiny faint", style: "margin-top:6px" }, `Judged 2 days after posting. The CTA Strategist reads these numbers and offers more of what earned DMs. Website visits from each DM show in ${host(b.website || "") || "your site"}'s analytics under utm_campaign reel_<keyword>.`));
+}
+function dmCard(b, log, refresh, kwRes) {
   const d = S.settings?.[bkey("dm", b.id)] || { on: false, keywords: [], message: "" };
   const [kind, word] = d.on ? (DM_STATE[d.state] || DM_STATE.checking) : ["no", "Off"];
   const kw = h("input", { type: "text", maxlength: "15", value: (d.keywords || [])[0] || "", placeholder: "Keyword, e.g. QUOTE", "aria-label": "Keyword", style: "margin-top:8px;text-transform:uppercase" });
@@ -1385,7 +1411,8 @@ function dmCard(b, log, refresh) {
         await loadSettings(); toast(on.checked ? `Comment-to-DM on for ${b.name}. Instagram is checked within 2 minutes.` : "Comment-to-DM saved (off)."); refresh(); }
       catch (e) { msg.textContent = errText(e); } } }, "Save"), msg),
     h("p", { cls: "small", style: "margin-top:8px" }, h("b", {}, `${sent.length} sent in the last 7 days`),
-      log.length ? h("span", { cls: "muted" }, ` · latest: ${log.slice(0, 4).map((r) => `@${r.username} (${r.state}, ${ago(r.created_at)})`).join(", ")}`) : null));
+      log.length ? h("span", { cls: "muted" }, ` · latest: ${log.slice(0, 4).map((r) => `@${r.username} (${r.state}, ${ago(r.created_at)})`).join(", ")}`) : null),
+    kwTable(kwRes, b));
 }
 function webCard(b, refresh) {
   const web = safeUrl(b.website); const v = stOf("website_status", b.id); const s_ = web ? v.state : "not_connected";
@@ -1541,7 +1568,8 @@ async function viewAccount() {
     await Promise.all([loadSettings().catch(() => {}), loadBrands().catch(() => {}), loadOwner()]);
     const since = new Date(Date.now() - 7 * 86400e3).toISOString();
     const dmLog = (await sb.from("dm_log").select("username,state,created_at").eq("brand", S.brand).gte("created_at", since).order("created_at", { ascending: false }).limit(200).then((r) => r.data, () => [])) || [];
-    const b = brandOf(); const nowSig = JSON.stringify([b, PLATS.map((k) => stOf(PST[k])), stOf("website_status"), S.settings?.[bkey("dm")], dmLog.length, S.settings?.linkedin_app, S.settings?.meta_app, S.settings?.youtube_app]);
+    const kwRes = await keywordResults(S.brand);
+    const b = brandOf(); const nowSig = JSON.stringify([b, PLATS.map((k) => stOf(PST[k])), stOf("website_status"), S.settings?.[bkey("dm")], dmLog.length, kwRes, S.settings?.linkedin_app, S.settings?.meta_app, S.settings?.youtube_app]);
     if (!force && nowSig === sig) return; sig = nowSig;
     if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;     // never wipe a half-typed field
     const L = b.links || {};
@@ -1573,7 +1601,7 @@ async function viewAccount() {
         h("div", { cls: "svc-grid" }, PLATS.map((k) => connCard(k, b, () => paint(true))), webCard(b, () => paint(true)))),
       h("section", { cls: "panel" }, h("h3", {}, "Call to action"),
         h("p", { cls: "small muted", style: "margin:4px 0 14px" }, "Turns comments into conversations. Works in the cloud, also while the Mac is off."),
-        h("div", { cls: "svc-grid" }, dmCard(b, dmLog, () => paint(true)))));
+        h("div", { cls: "svc-grid" }, dmCard(b, dmLog, () => paint(true), kwRes))));
   };
   await paint(true).catch((e) => body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(e)))));
   S.timers.push(setInterval(() => paint(false).catch(() => {}), 8000));

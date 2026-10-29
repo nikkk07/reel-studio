@@ -16,6 +16,10 @@ Angle: {{angle}}
 ## Keywords this account used recently (do not reuse)
 {{used}}
 
+## Results of this account's earlier reel keywords (DMs sent per 1,000 people reached, measured 2+ days after posting)
+{{history}}
+Learn from these numbers: offer the kind of resource that earned the most DMs per 1,000 reached (checklist, steps, fee breakdown, document list...), and avoid the shape of offers that earned few. Still never reuse a keyword, and the offer must fit THIS reel's facts.
+
 ## How Instagram distributes reels in 2026 (what Instagram has said)
 - Reach to new people is ranked mainly on watch time, sends (shares by DM) per reach and likes per reach (Adam Mosseri, head of Instagram). Comments and saves show the reel was valuable.
 - Posts built on engagement bait ("comment YES", "like if…", contests that require likes or follows) are not recommended to non-followers. So the keyword must name a real resource the viewer wants, and the DM must deliver it fully. No tricks, no withheld payoff in the reel itself.
@@ -27,7 +31,7 @@ Angle: {{angle}}
 - points: 3-5 short, specific, useful points (15-170 characters each) that a viewer would screenshot: steps, numbers, rules, a checklist, the mistake to avoid. Use only the verified facts above; keep their numbers exact; add the deadline/condition when a fact has one. No fluff, no sales talk, no prices unless a fact states one.
 - link: one URL copied exactly from the website pages above, the one that helps most with this topic.
 - source: optionally one source URL copied exactly from the facts above (an official page builds trust); empty if none fits.
-- next_step: one formal sentence with the single most useful next action (e.g. "Book your Class 2 medical at a DGCA-approved examiner before you start ground classes."). For {{brand_name}}'s services, invite them to reply to this message with their question; never pressure, never promise results.
+- next_step: one formal sentence (max 160 characters) with the single most useful next action (e.g. "Book your Class 2 medical at a DGCA-approved examiner before you start ground classes."). For {{brand_name}}'s services, invite them to reply to this message with their question; never pressure, never promise results.
 - reply: the short public reply under their comment (max 90 characters, friendly and professional, no keyword, no emoji spam), e.g. "Sent! Check your messages for the checklist."
 - why: one line on why this keyword and offer will make people comment and follow.
 
