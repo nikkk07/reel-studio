@@ -6,7 +6,7 @@
    "headers": [
     {
      "key": "Content-Security-Policy",
-     "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://rjgwxfsjjplijsnsfztd.supabase.co; media-src 'self' blob: https://rjgwxfsjjplijsnsfztd.supabase.co; connect-src 'self' https://rjgwxfsjjplijsnsfztd.supabase.co wss://rjgwxfsjjplijsnsfztd.supabase.co; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+     "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://rjgwxfsjjplijsnsfztd.supabase.co; media-src 'self' blob: https://rjgwxfsjjplijsnsfztd.supabase.co https://*.r2.cloudflarestorage.com; connect-src 'self' https://rjgwxfsjjplijsnsfztd.supabase.co wss://rjgwxfsjjplijsnsfztd.supabase.co; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
     },
     {
      "key": "X-Frame-Options",
