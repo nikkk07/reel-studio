@@ -140,5 +140,48 @@
    "source_url": "https://skybrary.aero/articles/lightning",
    "status": "verified"
   }
+ ],
+ "hook_options": [
+  {
+   "rank": 1,
+   "line": "उड़ते हुए plane पर बिजली गिरती है…",
+   "form": "open_statement",
+   "why": "incomplete high-stakes claim: the brain needs to know what happens"
+  },
+  {
+   "rank": 2,
+   "line": "क्या आप बिजली वाले plane में बैठेंगे?",
+   "form": "question",
+   "why": "personal fear question"
+  },
+  {
+   "rank": 3,
+   "line": "Pilot ने बताया: बिजली गिरी, फिर भी कोई डरा नहीं।",
+   "form": "micro_story",
+   "why": "story with a stake"
+  }
+ ],
+ "beats": [
+  {
+   "group": "G1",
+   "role": "hook",
+   "seconds": "0-3",
+   "mechanism": "curiosity gap",
+   "why": "a frightening event with no outcome yet"
+  },
+  {
+   "group": "G2",
+   "role": "rehook",
+   "seconds": "10-20",
+   "mechanism": "raised consequence",
+   "why": "restarts attention mid-way"
+  },
+  {
+   "group": "G3",
+   "role": "reveal",
+   "seconds": "25-35",
+   "mechanism": "payoff + status",
+   "why": "the viewer now knows what most people don't"
+  }
  ]
 }

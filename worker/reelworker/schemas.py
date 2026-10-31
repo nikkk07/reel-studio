@@ -21,6 +21,8 @@ OPTIMIZE = {"type": "object", "required": ["title", "hook", "concept", "outline"
 
 GRAPHIC_TYPES = ["chip", "big_text", "counter", "list_card", "quote_card", "compare", "timer", "flash", "dim", "shake", "plane_path"]
 
+HOOK_FORMS = ["question", "pattern_interrupt", "open_statement", "micro_story"]
+BEAT_ROLES = ["hook", "escalation", "rehook", "reveal", "bridge"]
 SPEC = {"type": "object",
         "required": ["title", "voice", "mood", "groups", "shots", "graphics", "claims"],
         "properties": {
@@ -42,6 +44,13 @@ SPEC = {"type": "object",
                 "type": "object", "required": ["claim", "value_used", "source_url", "status"],
                 "properties": {"claim": S, "value_used": S, "source_title": S, "source_url": S, "group": S,
                                "status": {"type": "string", "enum": ["verified", "estimate"]}}}},
+            # retention architecture (new reels): 3 ranked hooks, rank 1 is the first line; one intent note per group
+            "hook_options": {"type": "array", "maxItems": 5, "items": {
+                "type": "object", "required": ["rank", "line", "form", "why"],
+                "properties": {"rank": I, "line": S, "form": {"type": "string", "enum": HOOK_FORMS}, "why": S}}},
+            "beats": {"type": "array", "items": {
+                "type": "object", "required": ["group", "role", "mechanism", "why"],
+                "properties": {"group": S, "role": {"type": "string", "enum": BEAT_ROLES}, "seconds": S, "mechanism": S, "why": S}}},
         }}
 
 FOOTAGE = {"type": "object", "required": ["picks"],
@@ -81,7 +90,7 @@ FACTSHEET = {"type": "object", "required": ["facts", "angle", "do_not_say"],
              "properties": {"facts": {"type": "array", "minItems": 3, "items": {"type": "object", "required": ["fact", "source_url", "source_title", "confidence"],
                                       "properties": {"fact": S, "source_url": S, "source_title": S, "quote": S, "confidence": {"type": "string", "enum": ["high", "medium"]}}}},
                             "angle": S, "do_not_say": {"type": "array", "items": S}, "corrections": {"type": "array", "items": S}}}
-CRITIC_KEYS = ["hook", "open_loop", "clarity", "pacing", "payoff", "shareability", "saveability", "fact_fidelity", "brand_fit", "ending"]
+CRITIC_KEYS = ["hook", "open_loop", "escalation", "clarity", "pacing", "payoff", "shareability", "saveability", "fact_fidelity", "brand_fit", "resonance", "ending"]
 CRITIC = {"type": "object", "required": CRITIC_KEYS + ["total", "pass", "fixes"],
           "properties": {**{k: I for k in CRITIC_KEYS}, "total": I, "pass": B, "fixes": {"type": "array", "items": S}, "better_hook": S, "summary": S}}
 

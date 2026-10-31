@@ -1,6 +1,6 @@
 """Reel job: script -> voice -> footage -> render -> QC -> publish, each stage checkpointed."""
 from datetime import datetime, timezone
-import json, re, shutil, subprocess, sys, time
+import difflib, json, re, shutil, subprocess, sys, time
 from pathlib import Path
 from .. import brain, config, schemas
 from .. import agents, lanes, studio
@@ -257,13 +257,67 @@ def make_spec_check(prof, fs):
             probs.append("no claims with sources")
         if urls and claims and not any(c.get("source_url", "").rstrip("/") in urls for c in claims):
             probs.append("none of the claims comes from the Fact-Checker's sheet; write only from the verified facts")
+        bait = engagement_bait(spec)
+        if bait:
+            probs.append(f"engagement bait {bait!r}: Instagram does not recommend posts that ask for comments/likes/tags/shares to inflate them; "
+                         "remove it (the account's call to action is added automatically)")
+        if fs:                                   # a new reel: the retention architecture is part of the contract
+            probs += retention_problems(spec)
         return probs
     return check
+
+
+BAIT = [r"\b(comment|कमेंट|कॉमेंट)\w*\W{0,3}(\w+\W+){0,3}?(yes|haan|हाँ|हां|done|1|🔥|❤️?|💯|👇)(?!\w)", r"only (the )?real ones", r"\blike (kar\w* )?(if|agar)\b",
+        r"\btag (a|your|kisi|someone|apne)\b", r"\bshare (if|agar)\b", r"\bdrop an? \S+", r"double[- ]tap", r"सिर्फ (असली|रियल)"]
+
+
+def engagement_bait(spec):
+    """The first engagement-bait phrase the writer put in the narration or captions, or None."""
+    for g in spec.get("groups", []):
+        for p in g.get("phrases", []):
+            for t in (p.get("say", ""), p.get("caption", "")):
+                for rx in BAIT:
+                    m = re.search(rx, str(t), re.I)
+                    if m:
+                        return m.group(0)
+    return None
+
+
+def _norm(t):
+    return re.sub(r"[^\w]+", " ", str(t).replace("*", "")).strip().lower()
+
+
+def retention_problems(spec):
+    """3 ranked hooks with rank 1 as the opening line, and an intent note per group with a mid-script re-hook."""
+    out = []
+    groups = [g.get("id") for g in spec.get("groups", [])]
+    hooks = sorted(spec.get("hook_options") or [], key=lambda h: int(h.get("rank") or 9))
+    if len(hooks) < 3:
+        out.append("hook_options: give 3 ranked hook options (rank 1 = strongest), each a different form")
+    elif groups:
+        first = spec["groups"][0].get("phrases") or [{}]
+        opening = _norm(" ".join(p.get("say", "") for p in first[:2]))
+        if difflib.SequenceMatcher(None, _norm(hooks[0].get("line", "")), opening[:len(_norm(hooks[0].get("line", ""))) + 20]).ratio() < 0.6:
+            out.append("the rank-1 hook option must be the first spoken line of the script (or rank the line you opened with as 1)")
+    beats = spec.get("beats") or []
+    roles = {b.get("group"): b.get("role") for b in beats}
+    if len(groups) >= 3:
+        if not beats or any(g not in roles for g in groups):
+            out.append("beats: one intent note for every group (group, role, seconds, mechanism, why)")
+        elif roles.get(groups[0]) != "hook":
+            out.append("beats: the first group's role must be hook")
+        elif not any(roles.get(g) == "rehook" for g in groups[1:-1]):
+            out.append("add a mid-script re-hook (a new question, shift or raised consequence) in a middle group and mark its beat role rehook")
+        elif not any(r == "reveal" for r in roles.values()):
+            out.append("beats: mark where the main loop is resolved with role reveal (2-4 s before the end)")
+    return out
 
 
 def critic_text(prof, spec, fs, lane):
     lines = [{"group": g["id"], "say": p.get("say"), "caption": p.get("caption")} for g in spec["groups"] for p in g["phrases"]]
     view = {"title": spec.get("title"), "narration": lines, "graphics": spec.get("graphics", []), "shots": [{k: s.get(k) for k in ("id", "query", "at_group", "at_phrase")} for s in spec.get("shots", [])]}
+    if spec.get("hook_options"):
+        view["hook_options"] = spec["hook_options"]; view["beats"] = spec.get("beats", [])
     return brain.prompt("critic", brand_name=prof["name"], lane=lanes.name(prof, lane), lane_job=lanes.rules(prof, lane), playbook=brain.prompt("ig_playbook"),
                         factsheet=_sheet_text(fs) if fs else "(revision of an approved script: judge against its own claims)", script=json.dumps(view, ensure_ascii=False, indent=1))
 
@@ -274,7 +328,8 @@ def hook_of(spec, crit=None):
     shot = next((s for s in spec.get("shots", []) if s.get("at_group") == g0.get("id") and int(s.get("at_phrase") or 0) == 0), (spec.get("shots") or [{}])[0])
     gfx = next((g for g in spec.get("graphics", []) if g.get("at_group") == g0.get("id") and int(g.get("at_phrase") or 0) == 0), None)
     return {"say": p0.get("say", "")[:200], "text": p0.get("caption", "").replace("*", "")[:120], "visual": (shot or {}).get("query", "")[:120],
-            "graphic": (gfx or {}).get("type"), "critic": (crit or {}).get("hook")}
+            "graphic": (gfx or {}).get("type"), "critic": (crit or {}).get("hook"),
+            "form": next((h.get("form") for h in sorted(spec.get("hook_options") or [], key=lambda h: int(h.get("rank") or 9))), None)}
 
 
 def _audience_note(ctx, prof):
@@ -322,6 +377,8 @@ def stage_script(ctx, prog):
     verify = ("The Fact-Checker has already verified the facts below. Write ONLY from them; do not search again unless a fact you need is missing, and never "
               "contradict the sheet's `do_not_say` or `corrections`." if fs else "Use WebSearch/WebFetch only if the notes need a new fact.")
     block = ("\n\n## Verified fact sheet from the Fact-Checker\n" + _sheet_text(fs) if fs else "") + "\n\n" + playbook + _core_note(prof, concept) + _audience_note(ctx, prof)
+    if fs:                                   # new reels: hooks, open loops, re-hooks and intent notes (retention architecture)
+        block += "\n\n" + brain.prompt("retention")
     dp = ctx.data.get("dm_plan") if (prof.get("_dm") or {}).get("plan") else None
     if dp:                                   # the ending offer is part of the story: the reel earns it, the DM completes it
         block += (f"\n\n## The reel's call to action (added automatically as the last line; do not write it yourself)\n"
@@ -384,6 +441,8 @@ def stage_script(ctx, prog):
     out = {"title": spec["title"], "claims": spec["claims"], "lane": lane}
     if crit:
         out["critic"] = {k: crit.get(k) for k in schemas.CRITIC_KEYS + ["total", "pass", "summary"]}
+    if spec.get("hook_options"):
+        out["retention"] = {"hooks": sorted(spec["hook_options"], key=lambda h: int(h.get("rank") or 9))[:5], "beats": spec.get("beats", [])[:8]}
     if fs:
         out["factsheet"] = {"facts": len(fs.get("facts", [])), "sources": sorted({f.get("source_url") for f in fs.get("facts", [])})[:12]}
     ctx.merge_output(out)

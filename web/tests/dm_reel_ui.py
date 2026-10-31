@@ -6,7 +6,9 @@ def sql(q): return subprocess.run(["psql", "-h", "/tmp", "-p", "5433", "-U", "po
 def ok(c, n): R.append((bool(c), n)); print(("PASS " if c else "FAIL ") + n, flush=True)
 dm = {"keyword": "MEDICAL", "offer": "the 4-step DGCA medical checklist", "message": "Hi {name}, thank you for your comment.\n\nHere is the 4-step DGCA medical checklist:\n1. Get the Class 2 medical first.",
       "reply": "Sent! Check your messages for the checklist."}
-sql(f"""insert into jobs(kind,brand,status,input,output) values ('reel','weone','review','{{}}', $j${json.dumps({"title": "DGCA medical", "duration": 30, "dm": dm})}$j$)""")
+sql(f"""insert into jobs(kind,brand,status,input,output) values ('reel','weone','review','{{}}', $j${json.dumps({"title": "DGCA medical", "duration": 30, "dm": dm, "retention": {"hooks": [{"rank": 1, "line": "Medical fail, sapna khatam?", "form": "question", "why": "loss aversion"},
+    {"rank": 2, "line": "Ek test ne 3 saal kha liye", "form": "micro_story", "why": "status"}, {"rank": 3, "line": "Yeh form mat bharna jab tak", "form": "open_statement", "why": "open loop"}],
+    "beats": [{"group": "G1", "role": "hook", "seconds": "0-3", "mechanism": "loss aversion", "why": "parents' money at stake"}, {"group": "G2", "role": "rehook", "seconds": "14-18", "mechanism": "raised consequence", "why": "restarts attention"}]}})}$j$)""")
 jid = sql("select id from jobs where output->>'title'='DGCA medical' order by created_at desc limit 1")
 sql("delete from dm_log where comment_id like 'kwt%'; delete from jobs where output->>'title' in ('KW test A','KW test B')")
 for t, kw, mid, h_, reach in [("KW test A", "MEDICAL", "kwm1", 72, 2000), ("KW test B", "FEES", "kwm2", 10, 900)]:
@@ -21,6 +23,8 @@ with sync_playwright() as pw:
     pg.goto(URL); pg.fill("input[type=email]", "weoneaviation8@gmail.com"); pg.fill("input[type=password]", "secret"); pg.click("button[type=submit]")
     pg.wait_for_selector(".acct h3", timeout=60000); pg.goto(URL + f"#/production/{jid}"); pg.wait_for_selector("summary:has-text('Comment-to-DM')", timeout=20000)
     ok("viewers comment MEDICAL to get the 4-step DGCA medical checklist" in pg.inner_text("summary:has-text('Comment-to-DM')"), "review screen names the reel's keyword and offer")
+    pg.click("summary:has-text('Hook options')"); rt = pg.inner_text("details:has(summary:has-text('Hook options'))")
+    ok("Medical fail, sapna khatam?" in rt and "(used)" in rt and "rehook" in rt and "raised consequence" in rt, "review screen shows the 3 ranked hooks and the intent notes")
     pg.click("summary:has-text('Comment-to-DM')"); t = pg.inner_text("details:has(summary:has-text('Comment-to-DM'))")
     ok("Hi @viewer, thank you for your comment." in t and "Sent! Check your messages" in t, "the exact DM and public reply can be read before approving")
     pg.goto(URL + "#/account/weone"); pg.wait_for_selector("h3:text-is('Comment-to-DM')", timeout=20000); pg.wait_for_timeout(800)
