@@ -204,8 +204,11 @@ def validate_spec(spec: dict, prof: dict = None) -> dict:
 SAY_EN = ("* `say` = what the voice speaks, in clean spoken English. Write numbers, units and times as words (\"one hour ten minutes\", "
           "\"five hundred and forty one kilometres\", \"twenty six percent\"). No symbols, no abbreviations the voice could misread "
           "(say \"air traffic control\", not \"ATC\", unless the abbreviation itself is the point).")
-SAY_HI = ("* `say` = what the voice speaks: **Hindi in Devanagari**, English technical words in **English letters**, about 60-70 % English words. "
-          "Numbers and years as **English words** (`nineteen seventy-five`, `one thousand`). Use the pronunciation dictionary: write its `say` form for any listed word.\n"
+# the same spoken style as We One Aviation (its voice sounds natural because the Hindi voice reads mostly Hindi): every Hinglish account uses it
+SAY_HI = ("* `say` = what the voice speaks: **Hindi in Devanagari**, English technical words in **English letters**. Numbers and years as **English words** "
+          "(`nineteen seventy-five`, `one thousand`). Use the pronunciation dictionary: write its `say` form for any listed word. Avoid tongue-twisters and rare "
+          "Hindi words (use करीब not लगभग). Prefer Hindi words over English words that are not in the dictionary, and spell out abbreviations only when the "
+          "abbreviation itself is the point. On-screen captions may stay English-heavy; the voice line is everyday spoken Hindi.\n"
           "Pronunciation dictionary (term -> say):\n{lex}")
 
 

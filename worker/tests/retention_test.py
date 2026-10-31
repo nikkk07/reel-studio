@@ -54,4 +54,6 @@ view = reel.critic_text(reel.brandmod.LEGACY, reel.validate_spec(copy.deepcopy(G
 ok('"hook_options"' in view and '"beats"' in view, "the Hook Critic sees the ranked hooks and intent notes")
 ok(reel.hook_of(GOOD)["form"] == "open_statement", "the hook bank records the hook form for learning")
 
+ok("Prefer Hindi words over English words" in reel.SAY_HI and "60-70" not in reel.SAY_HI, "Hinglish accounts (Flying Star) speak in We One Aviation's style: everyday Hindi, English only for technical words")
+
 bad = [n for k, n in R if not k]; print(f"{len(R) - len(bad)}/{len(R)} retention checks passed" + (" | FAILED: " + "; ".join(bad) if bad else "")); sys.exit(1 if bad else 0)
