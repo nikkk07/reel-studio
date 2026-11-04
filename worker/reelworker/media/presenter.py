@@ -160,7 +160,7 @@ def _render(audio: Path, frames: int, prompt: str, seed: int, out: Path, log, ch
 
 def prep(src: Path, out: Path, dur: float) -> Path:
     """448x768 presenter -> the reel's 1296x2304 60 fps working canvas; holds the last frame if the shot runs longer."""
-    vf = ("fps=60,scale=1296:-2:flags=lanczos,crop=1296:2304:0:'(ih-oh)/2',"
+    vf = ("fps=60,scale=-2:2304:flags=lanczos,crop=1296:2304:'(iw-ow)/2':0,"
           f"tpad=stop_mode=clone:stop_duration={dur:.2f},eq=contrast=1.04:saturation=1.0,format=yuv420p")
     r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-vf", vf, "-t", f"{dur:.2f}", "-an",
                         "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", str(out)], capture_output=True, text=True)
