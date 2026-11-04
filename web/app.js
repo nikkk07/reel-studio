@@ -89,6 +89,8 @@ const createJob = (kind, input, parent = null) => rpc("create_job", { p_kind: ki
 // ---------------------------------------------------------------- accounts (brands): same studio, each account keeps its own reels
 const BRANDS_FALLBACK = [{ id: "weone", name: "We One Aviation", tagline: "DGCA ground classes, Dwarka · Delhi", website: "https://weoneaviation.in", logo: "brands/weone.png", status: "live", instagram: "we_one_aviation" }];
 try { S.brand = localStorage.getItem("rs_brand") || "weone"; } catch { S.brand = "weone"; }
+try { S.video = localStorage.getItem("rs_video") === "ai" ? "ai" : "stock"; } catch { S.video = "stock"; }
+const AI_EXTRA_SEC = 1500;   // two lip-synced presenter takes (~10-12 min each on the Mac mini M4)
 const brandOf = (id = S.brand) => (S.brands || BRANDS_FALLBACK).find((b) => b.id === id) || BRANDS_FALLBACK[0];
 const mine = (j) => (j.brand || "weone") === S.brand;
 const isLive = (id = S.brand) => brandOf(id).status === "live";
@@ -904,17 +906,24 @@ function viewCreate() {
     h("div", { cls: "create" }, left, plan)));
   if (!isLive()) { $app.querySelector(".create").replaceChildren(setupCard()); $app.querySelector(".page-head .seg")?.remove(); return; }
   const paintPlan = () => {
-    const t = S.picked; const e = etaNew(); const w = S.worker; const capHit = w?.info && w.info.reels_today >= w.info.daily_cap;
+    const t = S.picked; const e = etaNew(); if (S.video === "ai") { e.left += AI_EXTRA_SEC; e.at += AI_EXTRA_SEC * 1000; } const w = S.worker; const capHit = w?.info && w.info.reels_today >= w.info.daily_cap;
     const go_ = h("button", { cls: "btn go block", disabled: !t, onclick: async (ev) => {
       ev.currentTarget.disabled = true; askAlerts();
-      try { const j = await createJob("reel", { concept: t, source: S.mode });
+      try { const j = await createJob("reel", { concept: t, source: S.mode, video: S.video });
         toast(Date.now() - new Date(j.created_at) > 60e3 ? "This topic is already in production. Showing it." : "Reel queued. Follow it in Production.");
         S.picked = null; S.concept = null; go("production", j.id); }
       catch (err) { toast(errText(err), { err: true }); ev.currentTarget.disabled = false; }
     } }, "Create reel");
     if (!t) { plan.replaceChildren(h("h3", {}, S.brand === "legalgroup" ? "Reel plan" : "Flight plan"), h("p", { cls: "plan-empty small" }, "Pick a topic to see when it will be ready."), h("div", { cls: "plan-row" }, h("span", { cls: "faint small" }, `Typical reel: ${mins(totalSec())}`), go_)); return; }
+    const vseg = h("div", { cls: "seg vseg", role: "group", "aria-label": "Video style" },
+      h("button", { "aria-pressed": String(S.video !== "ai"), onclick: () => { S.video = "stock"; try { localStorage.setItem("rs_video", "stock"); } catch { /* */ } paintPlan(); } }, "Stock footage"),
+      h("button", { "aria-pressed": String(S.video === "ai"), onclick: () => { S.video = "ai"; try { localStorage.setItem("rs_video", "ai"); } catch { /* */ } paintPlan(); } }, "AI Video"));
+    const vnote = h("p", { cls: "tiny faint", style: "margin:6px 0 0" }, S.video === "ai"
+      ? "An AI pilot speaks the hook and the call to action, lip-synced to the voice; stock clips and graphics carry the middle. Adds about 25 minutes."
+      : "Stock clips and motion graphics under the voice.");
     plan.replaceChildren(
       h("h3", {}, t.title),
+      h("div", { cls: "plan-video" }, vseg, vnote),
       h("div", { cls: "plan-row" }, h("div", {}, h("div", { cls: "tiny muted" }, "Ready around"), h("div", { cls: "eta num" }, clock(e.at), h("small", {}, mins(e.left)))), go_),
       h("div", { cls: "legs", "aria-hidden": "true" }, STAGES.map((st) => h("i", { style: `flex:${S.est.sec[st]}` }))),
       h("div", { cls: "leg-list" }, STAGES.map((st) => [h("span", {}, STAGE_NAME[st]), h("span", { cls: "num" }, shortMins(S.est.sec[st]))])),
@@ -1217,6 +1226,8 @@ async function reviewView(j) {
       o.dm?.keyword ? h("details", { cls: "more" }, h("summary", {}, `Comment-to-DM: viewers comment ${o.dm.keyword} to get ${o.dm.offer || "the details"}`),
         h("pre", { cls: "small", style: "white-space:pre-wrap;font:inherit;margin:8px 0 0;background:var(--sunk);padding:10px 12px;border-radius:8px" }, String(o.dm.message || "").replace("{name}", "@viewer")),
         o.dm.reply ? h("p", { cls: "tiny faint", style: "margin-top:6px" }, `Public reply under their comment: “${o.dm.reply}”`) : null) : null,
+      o.ai_video && o.ai_video.presenter ? h("p", { cls: "small muted" }, "AI presenter lip-sync: ", Object.entries(o.ai_video.presenter).map(([k, v]) =>
+        `${k === "P1" ? "hook" : k === "P2" ? "call to action" : k} ${v.sync == null ? "not measured" : v.sync >= 0.25 ? "in sync" : "check closely"} (${v.sync ?? "–"})`).join(" · ")) : null,
       (o.credits || []).length ? h("details", { cls: "more" }, h("summary", {}, "Footage credits"), h("ul", {}, o.credits.map((c) => h("li", {}, c.source === "coverr" ? h("a", { href: "https://coverr.co", target: "_blank", rel: "noopener noreferrer" }, "Video by Coverr") : `${c.author}, ${c.source}`, ` (${c.licence})`)))) : null,
       o.archive_on_mac ? h("p", { cls: "tiny faint", style: "margin-top:12px;overflow-wrap:anywhere" }, `Full-quality master on the Mac: ${o.archive_on_mac}`) : null,
       h("div", { cls: "decide" }, changeBox, h("div", { cls: "row" }, dl ? h("button", { cls: "btn quiet", onclick: () => downloadReel(o, name) }, icon("down"), "Download") : null, cancelChange, change, approve))));

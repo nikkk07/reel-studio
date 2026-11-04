@@ -7,7 +7,7 @@ from .. import agents, lanes, studio
 from .. import brand as brandmod
 from .. import dm as dmlib
 from ..runner import run_stages, TransientError
-from ..media import footage, lexicon, mix, render, timeline
+from ..media import footage, lexicon, mix, presenter, render, timeline
 
 CTA_SAY = "follow करें We One Aviation।"
 CTA_CAPTION = "follow karein *We One Aviation*"
@@ -111,6 +111,37 @@ def _say(ctx):
 
 def _spec(ctx):
     return json.loads(ctx.path("spec.json").read_text(encoding="utf-8"))
+
+
+def _ai(ctx):
+    """AI Video: a lip-synced AI presenter speaks the hook and the call to action (chosen on the Create page)."""
+    return str((ctx.job.get("input") or {}).get("video") or "").lower() == "ai"
+
+
+def _vspec(ctx):
+    """The spec the video is cut from: AI Video swaps the opening and closing shots for the presenter."""
+    p = ctx.path("spec_ai.json")
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else _spec(ctx)
+
+
+def ai_spec(spec: dict, vo: dict) -> dict:
+    """Hybrid AI Video: presenter P1 speaks the hook (first part), presenter P2 the call to action (last part); stock clips and
+    graphics carry the middle. Each presenter take stays under ~10 s, the longest the Mac renders well in one piece."""
+    TL0 = timeline.build(spec, vo, "", "")
+    g = TL0["groups"]
+    if len(g) < 2:
+        return spec
+    starts = {s["id"]: s["t0"] for s in TL0["shots"]}
+    hook_end = min(g[1]["t0"] - 0.08, 9.0)
+    cta_t0 = g[-1]["t0"] - 0.08
+    mid = [s for s in spec["shots"] if s["id"] in starts and hook_end - 0.05 <= starts[s["id"]] < cta_t0 - 1.2]
+    if not mid or starts[mid[0]["id"]] > 9.6:           # keep the opening take short: cut back to a clip by ~9.6 s
+        early = [s for s in spec["shots"] if s["id"] in starts and 3.0 <= starts[s["id"]] <= 9.6 and s not in mid]
+        if early:
+            mid = [max(early, key=lambda s: starts[s["id"]])] + mid
+    P1 = {"id": "P1", "query": "AI presenter speaking to camera (hook)", "note": "AI pilot speaks the hook", "at_group": g[0]["id"], "at_phrase": 0, "presenter": "hook"}
+    P2 = {"id": "P2", "query": "AI presenter speaking to camera (call to action)", "note": "AI pilot: call to action", "at_group": g[-1]["id"], "at_phrase": 0, "presenter": "cta"}
+    return {**spec, "shots": [P1] + mid + [P2]}
 
 def _font_file():
     for p in config.FONTS_DIR.rglob("Poppins-SemiBold.ttf"):
@@ -734,9 +765,17 @@ def _pick(ctx, text, work):
 
 
 def stage_footage(ctx, prog):
-    spec = _spec(ctx); TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx), ctx.db)))
+    spec = _spec(ctx)
+    if _ai(ctx):
+        ok, why = presenter.available()
+        if not ok:
+            raise TransientError(f"AI Video: {why}")
+        spec = ai_spec(spec, _vo_map(ctx))
+        ctx.path("spec_ai.json").write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
+    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx), ctx.db)))
     need = {s["id"]: s["need"] for s in TL["shots"]}
-    shots = [s for s in spec["shots"] if s["id"] in need]
+    pres = [s for s in spec["shots"] if s.get("presenter") and s["id"] in need]
+    shots = [s for s in spec["shots"] if s["id"] in need and not s.get("presenter")]
     cands = {}; reuse = {}
     parent = _parent_dir(ctx)
     if parent and (parent / "footage.json").exists():
@@ -816,17 +855,33 @@ def stage_footage(ctx, prog):
         if not ok:
             ctx.log(f"no usable clip for {sid}; it will be merged into the previous shot", "warn")
         prog(0.35 + 0.65 * (k + 1) / len(shots))
+    if pres:                                             # AI presenter takes, after the voice model has released its memory
+        work_p = ctx.dir / "presenter"; track = presenter.voice_track(TL["groups"], TL["end"], work_p.mkdir(exist_ok=True) or work_p / "vo_track.wav")
+        t0s = {s["id"]: s for s in TL["shots"]}
+        for s in pres:
+            ctx.trace("footage", s["id"], s["note"], "wait", "AI presenter")
+        made = presenter.make([{"id": s["id"], "role": s["presenter"], "t0": t0s[s["id"]]["t0"], "need": need[s["id"]], "track": track} for s in pres],
+                              work_p, ctx.log, lambda sid, st, info: ctx.trace("footage", sid, next(x["note"] for x in pres if x["id"] == sid), st, info),
+                              ctx.check_cancel)
+        for sid, r in made.items():
+            shot_files[sid] = r["file"]
+            chosen[sid] = {"src": "ai", "id": sid, "author": "AI presenter (Phosphene, LTX-2.5)", "page": "", "licence": "LTX-2 Community License",
+                           "sync": r["sync"], "seed": r["seed"]}
+        weak = [sid for sid, r in made.items() if r["sync"] is not None and r["sync"] < 0.25]
+        ctx.merge_output({"ai_video": {"presenter": {sid: {"sync": r["sync"], "render_s": r["sec"]} for sid, r in made.items()}}})
+        if weak:
+            ctx.log(f"lip-sync is weak on {', '.join(weak)}; watch those seconds closely", "warn")
     if not shot_files:
         raise TransientError("no footage could be prepared")
     ctx.path("footage.json").write_text(json.dumps({"files": shot_files, "chosen": chosen, "picks": picks,
                                                      "cands": cands}, ensure_ascii=False, indent=1), encoding="utf-8")
     ctx.merge_output({"credits": footage.credits(chosen)})
-    if not shots_all:
+    if not shots_all and not pres:
         raise TransientError("the script has no shots")
 
 
 def build_timeline(ctx):
-    spec = _spec(ctx); fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8"))
+    spec = _vspec(ctx); fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8"))
     spec["shots"] = [s for s in spec["shots"] if s["id"] in fj["files"]]
     prof = _brand(ctx)
     TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(prof, ctx.db)))
@@ -860,7 +915,7 @@ def stage_render(ctx, prog):
 
 
 def stage_qc(ctx, prog):
-    res = json.loads(ctx.path("render", "result.json").read_text()); spec = _spec(ctx)
+    res = json.loads(ctx.path("render", "result.json").read_text()); spec = _vspec(ctx)
     TL = json.loads(ctx.path("render", "timeline.json").read_text(encoding="utf-8"))
     qdir = ctx.dir / "qc"; qdir.mkdir(exist_ok=True)
     shutil.copy(ctx.dir / "render" / "frames.jpg", qdir / "frames.jpg")
@@ -881,7 +936,7 @@ def stage_qc(ctx, prog):
     repick = [i for i in qc["issues"] if i.get("fix") == "repick_shot" and i.get("shot_id")]
     if repick and not ctx.data.get("qc_repaired"):
         fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8")); changed = False
-        spec = _spec(ctx); q = {x["id"]: x for x in spec["shots"]}; first = spec["shots"][0]["id"]
+        spec = _vspec(ctx); q = {x["id"]: x for x in spec["shots"]}; first = spec["shots"][0]["id"]
         todo = [i for i in repick if i["shot_id"] in fj.get("files", {}) and fj.get("cands", {}).get(i["shot_id"])]
         if todo:
             need = {s["id"]: s["need"] for s in TL["shots"]}; prof = _brand(ctx)
