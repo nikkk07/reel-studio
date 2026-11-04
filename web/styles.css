@@ -586,7 +586,3 @@ details.more > summary { cursor: pointer; font-size: 13.5px; color: var(--link);
 .dg-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .dg-more { color: var(--link); margin-top: auto; }
 @media (max-width: 560px) { .hbar { grid-template-columns: minmax(80px, 40%) 1fr 48px; } .kpi-v { font-size: 22px; } }
-
-.plan-video { margin: 4px 0 14px; }
-.plan-video .vseg { display: flex; width: 100%; }
-.plan-video .vseg button { flex: 1; padding: 8px 10px; font-size: 14px; }
