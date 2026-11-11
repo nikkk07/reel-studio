@@ -28,7 +28,7 @@ It installs Python 3.11 + ffmpeg (Homebrew), copies code and library to `~/ReelS
 Then in System Settings: prevent automatic sleep, start up after power failure, wake for network access, and automatic login.
 
 ### 3. Website (Vercel, deployed)
-Live at **https://weone-reelstudio.vercel.app** (project `weone-reelstudio`, team weone404's projects). `web/config.js` holds the Supabase URL and the publishable key (safe in a browser; Row Level Security protects the data).
+Live at **https://studio.weoneaviation.in** (DNS at HIOX: CNAME `studio` → Vercel; the old weone-reelstudio.vercel.app and reel-studio-hq.vercel.app redirect there) (project `weone-reelstudio`, team weone404's projects). `web/config.js` holds the Supabase URL and the publishable key (safe in a browser; Row Level Security protects the data).
 To publish a change: `cd reelstudio/web && npx vercel deploy --prod --scope weone404s-projects`.
 On a phone, open the site and use Add to Home Screen to install it like an app; allow notifications to get the "reel ready" alert.
 

@@ -30,7 +30,7 @@ with sync_playwright() as pw:
     # 1. Studio Settings: the Google app
     pg.goto(URL + "#/settings"); pg.wait_for_selector("article:has(h3:text-is('YouTube app (Google)'))", timeout=20000)
     card = "article:has(h3:text-is('YouTube app (Google)'))"; t = pg.inner_text(card)
-    ok("Not saved" in t and "https://reel-studio-hq.vercel.app/" in t and "https://weone-reelstudio.vercel.app/" in t and "Publish app" in t, "app card: redirect URIs and the 7-day Testing warning")
+    ok("Not saved" in t and "https://studio.weoneaviation.in/" in t and "Publish app" in t, "app card: redirect URIs (the studio domain) and the 7-day Testing warning")
     pg.fill(card + " input[aria-label='YouTube Client ID']", "abc"); pg.fill(card + " input[aria-label='YouTube Client Secret']", FAKE_SECRET)
     pg.click(card + " button:has-text('Save')"); pg.wait_for_timeout(1200)
     ok("Client ID looks wrong" in pg.inner_text(card), "a wrong Client ID is explained")

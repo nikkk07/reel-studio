@@ -245,7 +245,7 @@ function shell(content, { nav = true } = {}) {
   const initials = (S.session?.user?.email || "?").slice(0, 2).toUpperCase();
   const top = h("header", { cls: "top" }, h("div", { cls: "top-in" },
     studioLevel
-      ? h("a", { cls: "brand plain", href: "#/home", "aria-label": "Reel Studio dashboard" }, h("img", { src: "icons/logo-mark.png?v=2", alt: "", width: 34, height: 34, style: "margin-right:2px" }), h("div", {}, h("b", {}, "Reel Studio"), h("span", {}, "All accounts")))
+      ? h("a", { cls: "brand plain", href: "#/home", "aria-label": "Reel Studio dashboard" }, h("img", { src: "icons/logo-mark.png?v=3", alt: "", width: 34, height: 34, style: "margin-right:2px" }), h("div", {}, h("b", {}, "Reel Studio"), h("span", {}, "All accounts")))
       : h("button", { cls: "brand acct", onclick: () => go("home"), title: "Switch account", "aria-label": `${brandOf().name}. Switch account` }, brandLogo(brandOf(), 36),
           h("div", {}, h("b", {}, brandOf().name), h("span", {}, "Switch account ▾"))),
     nav && S.session ? h("nav", { cls: "nav", "aria-label": "Main" }, items.map((it) => navBtn(it, false))) : null,
@@ -309,7 +309,8 @@ function viewLogin() {
     h("label", { cls: "field", for: "em" }, "Email"), email, h("label", { cls: "field", for: "pw" }, "Password"), pass,
     h("div", { style: "height:20px" }), btn, msg);
   shell(h("section", { cls: "login" },
-    h("div", { cls: "login-art" }, h("h1", {}, "Scroll-stopping reels. Fact-checked. Ready to post."),
+    h("div", { cls: "login-art" }, h("img", { cls: "login-logo", src: "icons/logo-mark.png?v=3", alt: "Reel Studio", width: 72, height: 72 }),
+      h("h1", {}, "Scroll-stopping reels. Fact-checked. Ready to post."),
       h("p", {}, "Pick a topic or bring your own. The studio researches real sources, writes the script, records the voice and edits the reel for every brand you run, then waits for your yes."),
       routeArt()), form), { nav: false });
   email.focus();
@@ -1712,7 +1713,7 @@ function ytAppCard(refresh) {
   const app = S.settings?.youtube_app || {};
   const cid = h("input", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "Client ID (…apps.googleusercontent.com)", value: app.client_id || "", "aria-label": "YouTube Client ID", style: "margin-top:8px" });
   const sec = secretInput(app.hint ? `Client Secret (saved ${app.hint})` : "Client Secret (GOCSPX-…)", "YouTube Client Secret"); const msg = statusMsg();
-  const uris = [...new Set([LI_REDIRECT, "https://reel-studio-hq.vercel.app/", "https://weone-reelstudio.vercel.app/"])];
+  const uris = [...new Set([LI_REDIRECT, "https://studio.weoneaviation.in/"])];      // the old vercel.app addresses redirect here
   return h("article", { cls: `svc ${app.client_id ? "ok" : "no"}` },
     h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, h("img", { src: PLAT_IMG.yt, alt: "" })), h("div", {}, h("h3", {}, "YouTube app (Google)"),
       h("p", { cls: "small" }, h("i", { cls: "lamp " + (app.client_id ? "ok" : "") }), app.client_id ? `Saved · Client ID ${app.client_id.slice(0, 14)}…` : "Not saved"))),
@@ -1805,7 +1806,7 @@ async function viewSettings() {
           lines: [`Project ${SB_REF}: database, sign-in, storage, cloud posting (Edge Functions) and the schedules.`, "Keys: the Mac's service key lives in its .env; the site uses only the public key."],
           links: [["API keys", `https://supabase.com/dashboard/project/${SB_REF}/settings/api-keys`], ["Function secrets", `https://supabase.com/dashboard/project/${SB_REF}/functions/secrets`]] }),
         infoCard({ img: SVC_IMG.vercel, name: "Vercel", mono: true, state: "ok", word: `Live at ${location.hostname}`,
-          lines: ["Hosts this site (reel-studio-hq.vercel.app and weone-reelstudio.vercel.app). It holds no secrets: the site only needs the public Supabase address and key."],
+          lines: ["Hosts this site at studio.weoneaviation.in (the old vercel.app addresses redirect there). It holds no secrets: the site only needs the public Supabase address and key."],
           links: [["Environment variables", `${VERCEL_PROJECT}/settings/environment-variables`], ["Deployments", `${VERCEL_PROJECT}/deployments`]] }),
         infoCard({ img: SVC_IMG.github, name: "GitHub", mono: true, state: "ok", word: "nikkk07/reel-studio",
           lines: ["The studio's code and account profiles. No keys are stored in it."], links: [["Repository", "https://github.com/nikkk07/reel-studio"]] })));

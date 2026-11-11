@@ -698,6 +698,10 @@ dialog::backdrop { background: rgba(0, 0, 0, .25); backdrop-filter: blur(8px) sa
   .plan { background: rgba(255, 255, 255, .9); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); bottom: 0; }
 }
 
+/* sign-in: the app logo above the headline */
+.login-logo { display: block; width: 72px; height: 72px; margin: 0 0 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, .12), 0 1px 3px rgba(0, 0, 0, .06); }
+@media (max-width: 760px) { .login-logo { width: 60px; height: 60px; margin-bottom: 16px; } }
+
 /* system settings: less transparency → solid surfaces */
 @media (prefers-reduced-transparency: reduce) {
   .top, .tabbar, .menu, dialog, .plan { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
