@@ -1158,10 +1158,15 @@ function actions(j) {
   }
   return acts;
 }
+function slideStrip(paths) {
+  const imgs = paths.map((p, i) => { const im = h("img", { alt: `Slide ${i + 1} of ${paths.length}`, loading: "lazy" }); signed(p).then((u) => { if (u) im.src = u; }); return im; });
+  return h("div", { cls: "slides", tabindex: "0", role: "region", "aria-label": `Carousel, ${paths.length} slides` }, ...imgs);
+}
 async function reviewView(j) {
   const o = j.output || {}; const name = `${titleOf(j).replace(/[^\w\- ]+/g, "").trim().slice(0, 50) || "reel"}.mp4`;
   const [url, poster, dl] = await Promise.all([videoUrl(o), signed(o.thumb), videoUrl(o, name)]);
-  const video = url ? h("video", { src: url, poster, controls: true, playsinline: true, preload: "metadata" }) : h("p", { cls: "muted", style: "color:#fff;padding:20px" }, "Video not available yet. It appears here once the upload finishes.");
+  const video = o.slides?.length ? slideStrip(o.slides)          // a CRM-planned carousel: its slides, swipeable
+    : url ? h("video", { src: url, poster, controls: true, playsinline: true, preload: "metadata" }) : h("p", { cls: "muted", style: "color:#fff;padding:20px" }, "Video not available yet. It appears here once the upload finishes.");
   if (url) video.addEventListener("error", async () => { if ((video._re = (video._re || 0) + 1) > 3) return; const t = video.currentTime; const u = await videoUrl(o); if (u) { video.src = u; video.currentTime = t; } });
   const claimsBy = {}; (o.claims || []).forEach((c) => { (claimsBy[c.group || "_"] ||= []).push(c); });
   const lines = o.script || [];

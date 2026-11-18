@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from . import config, brain
 from .db import Supabase, now_iso
 from .runner import JobContext, QuotaError, TransientError, Cancelled
-from . import procs, instagram, studio
+from . import procs, instagram, studio, crm
 from urllib.parse import quote
 
 log = logging.getLogger("reelworker")
@@ -76,7 +76,7 @@ def heartbeat_loop(db: Supabase):
                 "claude_checked_at": now_iso(datetime.fromtimestamp(STATUS["claude_checked"], timezone.utc)) if STATUS["claude_checked"] else None,
                 "info": {"disk_free_gb": round(disk.free / 1e9, 1), "current": CURRENT, "reels_today": reels_today(),
                          "daily_cap": studio.daily_cap(), "blocked": STATUS.get("blocked"), "selftest": STATUS.get("selftest"),
-                         "cap_hit": reels_today() >= studio.daily_cap(), "keys": studio.sources(),
+                         "cap_hit": reels_today() >= studio.daily_cap(), "keys": studio.sources(), "crm": crm.STATUS, "library_3d": library_count(),
                          "voices": {"hi": studio.voice_model("hi"), "en": studio.voice_model("en"), "ready": STATUS.get("voices")}},
             }, upsert=True)
             if time.time() - last_prune > 3600:          # hourly: the Mac keeps only what is still needed
@@ -192,7 +192,7 @@ def run_job(db, job, handler):
     threading.Thread(target=lease_keeper, args=(db, ctx, done), daemon=True, name=f"lease-{ctx.id[:6]}").start()
     try:
         handler(ctx)
-        if job["kind"] == "reel" and not job.get("parent_id"):
+        if job["kind"] == "reel" and not job.get("parent_id") and (job.get("input") or {}).get("format") != "carousel":
             bump_reels_today()          # the daily cap counts new finished reels, not retries, revisions or cancelled ones
     except Exception as e:  # noqa: BLE001
         if isinstance(e, Cancelled) or ctx.cancelled.is_set():
@@ -246,13 +246,22 @@ def startup_check():
     log.info("startup self-check %s %s", "passed" if not fails else "FAILED", "; ".join(fails))
 
 
+def library_count():
+    try:
+        from .media import library3d
+        return len(library3d.index())
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def disk_free_gb():
     return shutil.disk_usage(config.JOBS_DIR).free / 1e9
 
 
 def lane_loop(db: Supabase, lane: str, kinds: list):
-    from .jobs import suggest, optimize, reel, onboard, learn
-    handlers = {"suggest": suggest.run, "optimize": optimize.run, "reel": reel.run, "onboard": onboard.run, "learn": learn.run}
+    from .jobs import suggest, optimize, reel, onboard, learn, content
+    handlers = {"suggest": suggest.run, "optimize": optimize.run, "reel": reel.run, "onboard": onboard.run, "learn": learn.run,
+                "content": content.run}
     while not STOP.is_set():
         try:
             cap_hit = lane == "B" and reels_today() >= studio.daily_cap()    # after the cap only revisions (Request changes) run
@@ -290,9 +299,10 @@ def main():
     threads = [threading.Thread(target=heartbeat_loop, args=(db,), name="heartbeat", daemon=True),
                threading.Thread(target=ping_loop, args=(db,), name="ping", daemon=True),
                threading.Thread(target=prefetch_voices, name="voices", daemon=True),
-               threading.Thread(target=lane_loop, args=(db, "A", ["suggest", "optimize", "onboard", "learn"]), name="laneA", daemon=True),
+               threading.Thread(target=lane_loop, args=(db, "A", ["suggest", "optimize", "onboard", "learn", "content"]), name="laneA", daemon=True),
                threading.Thread(target=lane_loop, args=(db, "B", ["reel"]), name="laneB", daemon=True),
-               threading.Thread(target=instagram.loop, args=(db, STOP), name="instagram", daemon=True)]
+               threading.Thread(target=instagram.loop, args=(db, STOP), name="instagram", daemon=True),
+               threading.Thread(target=crm.loop, args=(db, STOP), name="crm", daemon=True)]
     for t in threads:
         t.start()
     threading.Thread(target=startup_check, name="selfcheck", daemon=True).start()

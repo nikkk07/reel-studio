@@ -53,7 +53,12 @@ def search(query: str, per_source=6) -> list:
                                 thumb=v.get("thumbnail") or v.get("poster"), author="Coverr", licence="Coverr License"))
         except Exception:  # noqa: BLE001
             pass
-    return _mix(out)
+    try:                         # our own 3D clips come first: the Footage Picker sees them before any stock clip
+        from . import library3d
+        ours = library3d.search(query, 4)
+    except Exception:  # noqa: BLE001
+        ours = []
+    return ours + _mix(out)
 
 
 def _mix(cands: list) -> list:

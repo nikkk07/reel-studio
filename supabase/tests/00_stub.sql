@@ -1,0 +1,22 @@
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname='anon') then create role anon; end if;
+  if not exists (select 1 from pg_roles where rolname='authenticated') then create role authenticated; end if;
+  if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role; end if;
+end $$;
+create schema if not exists auth; create schema if not exists extensions; create schema if not exists storage;
+create table if not exists auth.users (id uuid primary key, email text);
+create or replace function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+create or replace function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+create or replace function auth.role() returns text language sql stable as $$ select 'authenticated' $$;
+create table if not exists storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+create table if not exists storage.objects (id uuid default gen_random_uuid(), bucket_id text, name text, owner uuid, metadata jsonb, created_at timestamptz default now());
+create or replace function storage.foldername(name text) returns text[] language sql as $$ select string_to_array(name, '/') $$;
+create extension if not exists pgcrypto with schema extensions;
+create schema if not exists cron; create table if not exists cron.job (jobid serial primary key, jobname text, schedule text, command text);
+create or replace function cron.schedule(n text, s text, c text) returns bigint language sql as $$ insert into cron.job(jobname, schedule, command) values (n, s, c) returning jobid $$;
+create or replace function cron.unschedule(n text) returns boolean language sql as $$ delete from cron.job where jobname = n returning true $$;
+create or replace function cron.unschedule(i bigint) returns boolean language sql as $$ delete from cron.job where jobid = i returning true $$;
+create schema if not exists net; create or replace function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 1000) returns bigint language sql as $$ select 1::bigint $$;
+create schema if not exists vault; create table if not exists vault.secrets (id uuid default gen_random_uuid(), name text unique, secret text, description text);
+create or replace view vault.decrypted_secrets as select id, name, secret as decrypted_secret, description from vault.secrets;
+create or replace function vault.create_secret(s text, n text default null, d text default null) returns uuid language sql as $$ insert into vault.secrets(name, secret, description) values (n, s, d) returning id $$;

@@ -163,7 +163,7 @@ def loop(db, stop):
         try:
             since = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
             rows = db.select("jobs", "select=id,brand,output,status&kind=eq.reel&status=in.(review,done)"
-                                     f"&updated_at=gt.{since}&or=(output->>ig_caption.is.null,output->>ig_video.is.null)&limit=5")
+                                     f"&updated_at=gt.{since}&input->>format=is.null&or=(output->>ig_caption.is.null,output->>ig_video.is.null)&limit=5")
             for job in rows:
                 o = job["output"] or {}
                 if failures.get(job["id"], 0) >= 3 or o.get("ig", {}).get("state") in ("posted", "posting"):

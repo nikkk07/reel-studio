@@ -10,7 +10,7 @@
 import json, random, re
 from datetime import datetime, timedelta, timezone
 from statistics import median
-from .. import agents, brain, lanes, schemas
+from .. import agents, brain, config, lanes, schemas
 
 IST = timezone(timedelta(hours=5, minutes=30))
 WEIGHTS = {"hook": .18, "shareability": .16, "curiosity": .12, "saveability": .10, "timeliness": .10,
@@ -194,6 +194,11 @@ def run(ctx):
         if st.get("on") is False:     # switched off after the cloud queued today's run
             ctx.log("skipped: Autopilot was switched off", "warn")
             return ctx.finish("done", autopilot={"skipped": "off", "day": inp.get("day")}, topics=[])
+    if bid == "weone" and inp.get("trigger") == "schedule" and config.get("REELSTUDIO_CRM_OWNS_PLANNED_DAYS", "1") != "0":
+        from .. import crm
+        if crm.linked() and crm.planned_reel_on(today):      # the CRM's weekly plan already posts a reel today
+            ctx.log("skipped: the CRM's content plan already has a reel for today", "warn")
+            return ctx.finish("done", autopilot={"skipped": "crm_plan", "day": today.isoformat()}, topics=[])
     made = ctx.db.select("jobs", f"select=id&kind=eq.reel&input->>autopilot=eq.{ctx.id}&limit=1")
     if made:      # crash after queuing: never make a second reel for the same run
         return ctx.finish("done", autopilot={**(ctx.job.get("output") or {}).get("autopilot", {}), "reel_id": made[0]["id"]})
@@ -203,6 +208,9 @@ def run(ctx):
     prof = brandmod.load(ctx.db, bid)
     hist = history(ctx.db, brand=bid, prof=prof)
     perf = performance_text(hist, library(ctx.db, bid, hist))
+    if bid == "weone":                  # what people search and ask (from the CRM), when the CRM is linked
+        from .. import crm
+        perf += crm.signals_text()
     recent = "\n".join(f"- {h['created']} [{h['category'] or '?'}] {h['title']}" for h in hist[:40]) or "none"
     cats = [h["category"] for h in hist if h["autopilot"] and h["category"]][:7]
     if "lane" not in ctx.data:

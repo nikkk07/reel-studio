@@ -52,6 +52,14 @@ if [ ! -f "$RS/.env" ]; then
   unset SBKEY; chmod 600 "$RS/.env"
 fi
 
+# We One CRM > Growth > Content (optional): the CRM plans the week, this Mac makes and posts it. Asked once; Enter skips.
+if ! grep -q '^CRM_CONTENT_TOKEN=' "$RS/.env" && [ -t 0 ]; then
+  read -r -s -p "CRM Reel Studio token (CRM > Connections & keys > Reel Studio (Content); Enter to skip, hidden): " CRMTOK; echo
+  if [ -n "$CRMTOK" ]; then printf 'CRM_CONTENT_TOKEN=%s\n' "$CRMTOK" >> "$RS/.env"; chmod 600 "$RS/.env"; fi
+  unset CRMTOK
+fi
+mkdir -p "$RS/library/3d"      # our own 3D/Blender clips (or set REELSTUDIO_3D_DIR in .env to another folder)
+
 say "Python environment (first run downloads ~2 GB)"
 [ -x "$RS/.venv/bin/python" ] || "$PY" -m venv "$RS/.venv"
 REQ_HASH="$(shasum "$RS/app/requirements-mac.txt" | cut -d' ' -f1)"

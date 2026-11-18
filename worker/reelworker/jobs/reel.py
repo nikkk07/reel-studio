@@ -86,6 +86,8 @@ def plan_dm(ctx, prof, concept, fs, parent=None):
         ctx.log(f"DM link {plan['link']} did not open; using the homepage", "warn"); plan["link"] = prof.get("website")
     if plan.get("source") and not _url_ok(plan["source"]):
         plan["source"] = ""
+    if (ctx.job.get("input") or {}).get("crm_item"):         # planned in the CRM: its enquiries are counted there
+        plan["campaign"] = f"content_{ctx.job['input']['crm_item']}"
     plan["message"] = dmlib.message(plan, prof)
     ctx.data["dm_plan"] = plan; ctx.save()
     ctx.path("dm_plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -983,8 +985,11 @@ AUTOPILOT_MIN_SCORE = int(config.get("REELSTUDIO_AUTOPILOT_MIN_QC", "6"))
 
 
 def run(ctx):
-    run_stages(ctx, STAGES)
     inp = ctx.job.get("input") or {}
+    if inp.get("format") == "carousel":          # a CRM-planned carousel: slides instead of a video, same review
+        from . import carousel
+        return carousel.run(ctx)
+    run_stages(ctx, STAGES)
     if inp.get("autopilot"):
         verdict, why = autopilot_gate(ctx)
         if verdict == "revise":
@@ -1001,5 +1006,7 @@ def run(ctx):
             ctx.finish("review")
             ctx.log("Autopilot: still below the quality bar after one automatic fix; held for a person to approve", "warn")
             return
+    if inp.get("ad"):          # a Meta ad video from the CRM: never posted here; the owner uses it in Ads Manager
+        ctx.merge_output({"autopilot_hold": True, "autopilot_note": "Meta ad video for the CRM: not posted to Instagram. Download it and use it in Ads Manager."})
     ctx.finish("review")
     ctx.log("ready for review")

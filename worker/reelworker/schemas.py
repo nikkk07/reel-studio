@@ -138,3 +138,15 @@ PRONCHECK = {"type": "object", "required": ["parts"],
 DMPLAN = {"type": "object", "required": ["keyword", "offer", "say_offer", "points", "link", "next_step", "reply"],
           "properties": {"keyword": S, "offer": S, "say_offer": S, "points": {"type": "array", "minItems": 3, "maxItems": 5, "items": S},
                          "link": S, "source": S, "next_step": S, "reply": S, "why": S}}
+
+
+# CRM content plan (Reel Studio 0026): carousel slides and the words on a Meta ad picture
+SLIDE = {"type": "object", "required": ["kind", "headline", "body"],
+         "properties": {"kind": {"type": "string", "enum": ["cover", "point", "proof", "cta"]}, "headline": S, "body": S, "source": S}}
+CAROUSEL = {"type": "object", "required": ["title", "slides", "claims", "caption", "hashtags"],
+            "properties": {"title": S, "slides": {"type": "array", "minItems": 5, "maxItems": 10, "items": SLIDE},
+                           "claims": {"type": "array", "items": {"type": "object", "required": ["claim", "source_url"],
+                                                                 "properties": {"claim": S, "source_url": S}}},
+                           "caption": S, "hashtags": {"type": "array", "items": S}}}
+AD_PICTURE = {"type": "object", "required": ["headline", "sub", "badge", "cta", "background"],
+              "properties": {"headline": S, "sub": S, "badge": S, "cta": S, "background": S}}

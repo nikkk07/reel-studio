@@ -18,7 +18,7 @@ def _load_env(path: Path) -> dict:
 # Runtime home is outside Desktop/Documents so the background service needs no macOS privacy permission.
 # setup_mac.sh fills it from EduReelStudio/library (fonts, voice refs, lexicon, models, logo).
 ROOT = Path(os.environ.get("REELSTUDIO_ROOT", Path.home() / "ReelStudio")).expanduser()
-ENV = {**_load_env(ROOT / ".env"), **{k: v for k, v in os.environ.items() if k.startswith(("SUPABASE_", "PEXELS_", "PIXABAY_", "REELSTUDIO_", "TELEGRAM_"))}}
+ENV = {**_load_env(ROOT / ".env"), **{k: v for k, v in os.environ.items() if k.startswith(("SUPABASE_", "PEXELS_", "PIXABAY_", "REELSTUDIO_", "TELEGRAM_", "CRM_"))}}
 
 
 def get(key: str, default=None, required=False):
@@ -55,6 +55,13 @@ DEVICE = get("REELSTUDIO_DEVICE", "auto")                          # auto | mps 
 RENDER_PROCS = int(get("REELSTUDIO_RENDER_PROCS", "0"))            # 0 = auto
 DELIVERY_MAX_MB = float(get("REELSTUDIO_DELIVERY_MAX_MB", "45"))   # Supabase free tier: 50 MB per file
 BUCKET = "reels"
+
+# We One CRM > Growth > Content (optional). The CRM plans the week; this Mac makes and posts it. Outbound only.
+CRM_CONTENT_URL = (get("CRM_CONTENT_URL", "https://syytqcadmtgowckdnbqh.supabase.co/functions/v1/crm-content") or "").rstrip("/")
+CRM_CONTENT_TOKEN = get("CRM_CONTENT_TOKEN")                        # Connections & keys in the CRM > Reel Studio (Content)
+# Our own 3D/Blender clips (mp4/mov). Name files by what they show, e.g. "cessna-172-takeoff-runway.mp4"; a .txt beside a
+# clip with the same name adds more words. They are offered to the Footage Picker before stock footage.
+LIBRARY_3D = Path(get("REELSTUDIO_3D_DIR", ROOT / "library" / "3d")).expanduser()
 
 for d in (JOBS_DIR, LOG_DIR):
     d.mkdir(parents=True, exist_ok=True)

@@ -140,11 +140,26 @@ async function step(job: Json, tok: string, uid: string, b: Brand): Promise<stri
   if (g.state === "posting" && !g.container_id && minsAgo(g.started_at) < 3) return "starting";
   // due: claim it, then create the media container
   const prev = g.state;
-  if ((!o.ig_video || !o.ig_caption) && minsAgo(o.decided_at) < 15) return "waiting for the Mac to prepare the file";
+  const carousel = o.format === "carousel";             // a CRM-planned carousel: slides instead of a video (Reel Studio 0026)
+  if (((!carousel && !o.ig_video) || !o.ig_caption) && minsAgo(o.decided_at) < 15) return "waiting for the Mac to prepare the file";
   g = { ...g, state: "posting", started_at: iso(now()), attempts: Number(g.attempts ?? 0) + (prev === "posting" ? 0 : 1) }; delete g.error;
   if (!(await setIg(job, g, prev))) return "taken";
   if (g.container_id) return "re-checking the earlier upload";      // never create a second container for the same reel
   const caption = o.ig_caption || fallbackCaption(o, b);
+  if (carousel) {
+    // each slide is its own item container (JPEG, ready at once); ids are saved as they are made, so a retry never repeats one
+    const kids: string[] = [...(g.children ?? [])]; const slides: string[] = (o.slides ?? []).slice(0, 10);
+    if (slides.length < 2) throw new IGError("a carousel needs at least 2 slides", undefined, false);
+    for (const p of slides.slice(kids.length)) {
+      const k = await ig("POST", `${API}/${uid}/media`, tok, { image_url: await mediaUrl({}, p), is_carousel_item: "true" });
+      if (!k.id) throw new IGError("Instagram did not accept a slide");
+      kids.push(k.id); g = { ...g, children: kids }; await setIg(job, g);
+    }
+    const c = await ig("POST", `${API}/${uid}/media`, tok, { media_type: "CAROUSEL", children: kids.join(","), caption });
+    if (!c.id) throw new IGError("Instagram did not accept the carousel");
+    g = { ...g, container_id: c.id, container_at: iso(now()), caption: caption.slice(0, 80) };
+    await setIg(job, g); return "carousel container created";
+  }
   const params: Json = { media_type: "REELS", video_url: await mediaUrl(o, o.ig_video ?? o.video), caption, share_to_feed: "true" };
   if (o.thumb) params.cover_url = await mediaUrl(o, o.thumb);
   if (o.title) params.audio_name = `${String(o.title).slice(0, 50)} · ${b.name}`;
@@ -156,7 +171,7 @@ async function step(job: Json, tok: string, uid: string, b: Brand): Promise<stri
 
 async function fail(job: Json, e: IGError, brand: string) {
   const g: Json = { ...(job.output?.ig ?? {}) }; const msg = e.message.slice(0, 300); const att = Number(g.attempts ?? 1);
-  if (e.drop) { delete g.container_id; delete g.container_at; }     // only a failed/expired container is discarded
+  if (e.drop) { delete g.container_id; delete g.container_at; delete g.children; }     // only a failed/expired container is discarded
   if (e.auth) { await connection(brand, true); Object.assign(g, { state: "scheduled", at: iso(new Date(Date.now() + 10 * 60e3)), attempts: Math.max(0, att - 1), error: "Waiting for Instagram to be connected again." }); }
   else if (att >= MAX_ATTEMPTS || (!e.transient && att >= 2)) Object.assign(g, { state: "failed", error: `Posting failed: ${msg}` });
   else Object.assign(g, { state: "scheduled", at: iso(new Date(Date.now() + BACKOFF_MIN[Math.min(BACKOFF_MIN.length - 1, att - 1)] * 60e3)), error: msg });

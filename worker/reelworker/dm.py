@@ -160,7 +160,7 @@ def message(plan, prof):
     name = prof["name"]
     lines = ["Hi {name}, thank you for your comment.", "", f"Here is {plan['offer']}:"]
     lines += [f"{i}. {str(p).strip()}" if str(p).strip().endswith("…") else f"{i}. {str(p).strip().rstrip('.')}." for i, p in enumerate(plan["points"][:5], 1)]
-    lines += ["", f"Read more: {tag(plan['link'], 'reel_' + str(plan.get('keyword', '')))}"]
+    lines += ["", f"Read more: {tag(plan['link'], plan.get('campaign') or 'reel_' + str(plan.get('keyword', '')))}"]
     if plan.get("source"):
         lines.append(f"Official source: {plan['source']}")
     if plan.get("next_step"):
