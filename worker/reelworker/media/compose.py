@@ -3,6 +3,7 @@
 timeline.json (built by timeline.py) drives everything; render a frame range with
     python -m reelworker.media.compose <timeline.json> <f0> <f1> <out.mp4>
 """
+from pathlib import Path
 import json, math, re, subprocess, sys
 import numpy as np, cv2, skia
 from .gfx_base import (TF, load_fonts, FPS, W, H, RED, AMBER, CYAN, WHITE, GREEN, clamp, ease_out_expo, ease_out_back,
@@ -60,6 +61,48 @@ def fit_font(key, s, size, maxw):
 
 
 # ------------------------------------------------------------------ components
+# ------------------------------------------------------------------ premium layer (presenter reels)
+SIGNAL_RED = (226, 38, 44)
+
+
+def g_behind_text(c, t, g):
+    """Huge keyword set behind the presenter (the person is drawn over it when a mask exists), serif italic or bold."""
+    p = g.get("params") or {}; s_ = str(p.get("text", ""))[:18]
+    if not s_: return
+    a = env_alpha(t, g, 0.3, 0.3)
+    if a < 0.02: return
+    key = "serif" if p.get("style", "serif") == "serif" and "serif" in TF else "black"
+    fnt = fit_font(key, s_, int(p.get("size") or 300), 1000)
+    k = ease_out_expo(prog(t, g["t0"], 0.45)); sc = 1.18 - 0.18 * k
+    y = H * float(p.get("y") or 0.31)
+    colr = SIGNAL_RED if p.get("color") in (None, "", "red") else C(p.get("color"))
+    text(c, s_, W / 2, y, fnt, colr, alpha=a, shadow=False, scale=sc)
+
+
+ICON = {"bell": "!", "chat": "?", "plane": "!", "star": "!"}         # "check" is drawn as a tick
+
+
+def g_ui_card(c, t, g):
+    """A floating notification-style card (title + one line) that slides in from a side and drifts gently."""
+    p = g.get("params") or {}
+    a = env_alpha(t, g, 0.3, 0.25)
+    if a < 0.02: return
+    right = p.get("side", "left") == "right"; k = ease_out_back(prog(t, g["t0"], 0.42), 1.4)
+    cw, chh = 600, 170; x0 = (W - 70 - cw) if right else 70
+    x = x0 + (1 - k) * (cw + 120) * (1 if right else -1); y = H * float(p.get("y") or 0.5) + 10 * math.sin((t - g["t0"]) * 2.2)
+    r = skia.RRect.MakeRectXY(skia.Rect.MakeXYWH(x, y, cw, chh), 30, 30)
+    c.drawRRect(skia.RRect.MakeRectXY(skia.Rect.MakeXYWH(x, y + 14, cw, chh), 30, 30), skia.Paint(Color4f=col((0, 0, 0), 0.22 * a), MaskFilter=skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 22)))
+    c.drawRRect(r, skia.Paint(Color4f=col((250, 250, 252), 0.96 * a), AntiAlias=True))
+    ic = SIGNAL_RED if p.get("color") in (None, "", "red") else C(p.get("color")); c.drawCircle(x + 70, y + chh / 2, 38, skia.Paint(Color4f=col(ic, a), AntiAlias=True))
+    if p.get("icon") == "check":
+        check(c, x + 70, y + chh / 2, 30, WHITE, a)
+    else:
+        text(c, ICON.get(p.get("icon"), "!"), x + 70, y + chh / 2 + 15, font("pb", 42), WHITE, alpha=a, shadow=False)
+    ft = fit_font("pb", str(p.get("title", ""))[:34], 40, cw - 150); fb = fit_font("pm", str(p.get("body", ""))[:60], 32, cw - 150)
+    text(c, str(p.get("title", ""))[:34], x + 130, y + 72, ft, (20, 22, 28), alpha=a, align="l", shadow=False)
+    text(c, str(p.get("body", ""))[:60], x + 130, y + 122, fb, (90, 96, 110), alpha=a, align="l", shadow=False)
+
+
 def g_chip(c, t, g):
     p = g["params"]; a = env_alpha(t, g)
     chip(c, words(p.get("text", ""), 42).upper(), W / 2, float(p.get("y", 470)), C(p.get("color"), AMBER), alpha=a,
@@ -176,7 +219,7 @@ def g_plane_path(c, t, g):
     text(c, str(p.get("exit_label", "EXIT")).upper()[:12], cx + 0.32 * s + 20, cy + 0.95 * s + 10, font("black", 60), AMBER, alpha=q, align="l")
     text(c, str(p.get("exit_label", "EXIT")).upper()[:12], cx - 0.92 * s, cy + 0.25 * s + 70, font("black", 48), AMBER, alpha=q)
 
-DRAW = {"chip": g_chip, "big_text": g_big_text, "counter": g_counter, "list_card": g_list_card, "quote_card": g_quote_card,
+DRAW = {"behind_text": g_behind_text, "ui_card": g_ui_card, "chip": g_chip, "big_text": g_big_text, "counter": g_counter, "list_card": g_list_card, "quote_card": g_quote_card,
         "compare": g_compare, "timer": g_timer, "flash": g_flash, "plane_path": g_plane_path}
 
 
@@ -283,10 +326,28 @@ def apply_palette(pal):
     if pal.get("secondary"): CYAN = tuple(pal["secondary"]); COLORS["cyan"] = CYAN
 
 
+CENTER = {"big_text", "counter", "list_card", "quote_card", "compare", "plane_path"}     # would cover a presenter's face
+
+
+def _serif():
+    f = Path(__file__).resolve().parents[1] / "data" / "fonts" / "DMSerifDisplay-Italic.ttf"
+    if f.exists() and "serif" not in TF:
+        TF["serif"] = skia.Typeface.MakeFromFile(str(f))
+
+
+def pace_zoom(t, s, pace):
+    """Fast style: punch-in jump cuts every ~0.7 s inside a shot (reference reels cut every 0.5-0.8 s)."""
+    if pace != "fast": return 1.0
+    seg = int(max(0.0, t - s["t0"]) / 0.7)
+    return 1.0 if seg % 2 == 0 else 1.12
+
+
 def render(TL, f0, f1, out):
-    load_fonts(TL["fonts_dir"])
+    load_fonts(TL["fonts_dir"]); _serif()
     apply_palette(TL.get("palette") or {})
     shots = {s["id"]: Shot(s["file"]) for s in TL["shots"]}
+    mattes = {s["id"]: Shot(s["matte"]) for s in TL["shots"] if s.get("matte") and Path(s["matte"]).exists()}
+    pace = TL.get("pace")
     logo = skia.Image.open(TL["logo"])
     grain = [np.random.default_rng(i).normal(0, 4.5, (H // 2, W // 2)).astype(np.float32) for i in range(6)]
     yy, xx = np.mgrid[0:H, 0:W]
@@ -298,24 +359,37 @@ def render(TL, f0, f1, out):
     for fi in range(f0, f1):
         t = fi / FPS
         s = next((s for s in TL["shots"][::-1] if t >= s["t0"]), TL["shots"][0])
-        zz = s["z0"] + (s["z1"] - s["z0"]) * clamp((t - s["t0"]) / max(0.01, s["t1"] - s["t0"]))
-        img = zoomed(shots[s["id"]].get(int((t - s["t0"]) * FPS)), zz)
-        dx, dy = shake(t, TL, fi)
-        if dx or dy:
-            img = cv2.warpAffine(img, np.float32([[1, 0, dx], [0, 1, dy]]), (W, H), borderMode=cv2.BORDER_REFLECT)
-        for ct in cuts:
-            d = t - ct
-            if -0.1 < d < 0.1:
-                k = 1 - abs(d) / 0.1; off = int(230 * k * k) * (1 if d < 0 else -1)
-                img = np.roll(img, off, axis=0); img = cv2.blur(img, (1, int(2 + 110 * k * k) | 1))
+        zz = (s["z0"] + (s["z1"] - s["z0"]) * clamp((t - s["t0"]) / max(0.01, s["t1"] - s["t0"]))) * pace_zoom(t, s, pace)
+        dx, dy = shake(t, TL, fi); idx = int((t - s["t0"]) * FPS)
+
+        def geom(fr):                               # the same zoom, shake and whip for the picture and its person mask
+            out_ = zoomed(fr, zz)
+            if dx or dy:
+                out_ = cv2.warpAffine(out_, np.float32([[1, 0, dx], [0, 1, dy]]), (W, H), borderMode=cv2.BORDER_REFLECT)
+            for ct in cuts:
+                d = t - ct
+                if -0.1 < d < 0.1:
+                    k = 1 - abs(d) / 0.1; off = int(230 * k * k) * (1 if d < 0 else -1)
+                    out_ = np.roll(out_, off, axis=0); out_ = cv2.blur(out_, (1, int(2 + 110 * k * k) | 1))
+            return out_
+        img = geom(shots[s["id"]].get(idx))
         f = img.astype(np.float32) * vig * brightness(t, TL) + cv2.resize(grain[fi % 6], (W, H))[..., None]
         rgba = cv2.cvtColor(np.clip(f, 0, 255).astype(np.uint8), cv2.COLOR_BGR2RGBA)
         c = surf.getCanvas(); c.clear(skia.ColorBLACK)
-        c.drawImage(skia.Image.fromarray(rgba, colorType=skia.kRGBA_8888_ColorType), 0, 0)
-        for g in TL["graphics"]:
-            fn = DRAW.get(g["type"])
-            if fn and g["t0"] - 0.05 <= t < g["t1"] + 0.6:
-                fn(c, t, g)
+        frame_img = skia.Image.fromarray(rgba, colorType=skia.kRGBA_8888_ColorType)
+        c.drawImage(frame_img, 0, 0)
+        live = [g for g in TL["graphics"] if g["t0"] - 0.05 <= t < g["t1"] + 0.6 and DRAW.get(g["type"])]
+        on_presenter = bool(s.get("presenter"))
+        for g in live:                              # 1) words behind the person
+            if g["type"] == "behind_text":
+                DRAW[g["type"]](c, t, g)
+        if s["id"] in mattes and any(g["type"] == "behind_text" for g in live):     # 2) the person back on top of them
+            m = geom(mattes[s["id"]].get(idx))[..., 0]
+            person = rgba.copy(); person[..., 3] = cv2.GaussianBlur(m, (5, 5), 0)
+            c.drawImage(skia.Image.fromarray(person, colorType=skia.kRGBA_8888_ColorType, alphaType=skia.kUnpremul_AlphaType), 0, 0)
+        for g in live:                              # 3) everything else (centre cards never cover the presenter's face)
+            if g["type"] != "behind_text" and not (on_presenter and g["type"] in CENTER):
+                DRAW[g["type"]](c, t, g)
         if t < TL["vo_end"] - 0.25:
             lw = 104; lh = lw * logo.height() / logo.width()
             c.drawImageRect(logo, skia.Rect.MakeXYWH(70, 220, lw, lh), skia.SamplingOptions(skia.FilterMode.kLinear), skia.Paint(Alphaf=0.92 * prog(t, 0.3, 0.4)))

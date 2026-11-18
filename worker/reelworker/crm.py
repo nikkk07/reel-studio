@@ -87,6 +87,9 @@ def job_for(item: dict):
     inp = {**base, "concept": concept_of(item)}
     if k == "reel":
         inp["post_at"] = item.get("slot")
+        fmt = str((item.get("brief") or {}).get("format") or "")
+        if fmt in ("presenter_studio", "presenter_fast"):        # the planner's choice; the Mac falls back to classic if Kaggle can't
+            inp["video"] = fmt
     elif k == "carousel":
         inp.update(format="carousel", post_at=item.get("slot"))
     elif k == "ad_video":

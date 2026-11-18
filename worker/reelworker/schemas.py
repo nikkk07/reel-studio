@@ -19,7 +19,7 @@ OPTIMIZE = {"type": "object", "required": ["title", "hook", "concept", "outline"
                            "key_facts": {"type": "array", "items": S}, "sources": {"type": "array", "items": SRC},
                            "notes_for_user": S}}
 
-GRAPHIC_TYPES = ["chip", "big_text", "counter", "list_card", "quote_card", "compare", "timer", "flash", "dim", "shake", "plane_path"]
+GRAPHIC_TYPES = ["behind_text", "ui_card", "chip", "big_text", "counter", "list_card", "quote_card", "compare", "timer", "flash", "dim", "shake", "plane_path"]
 
 HOOK_FORMS = ["question", "pattern_interrupt", "open_statement", "micro_story"]
 BEAT_ROLES = ["hook", "escalation", "rehook", "reveal", "bridge"]

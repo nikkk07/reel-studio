@@ -7,7 +7,7 @@ from .. import agents, lanes, studio
 from .. import brand as brandmod
 from .. import dm as dmlib
 from ..runner import run_stages, TransientError
-from ..media import footage, lexicon, mix, render, timeline
+from ..media import footage, lexicon, mix, presenter, render, timeline
 
 CTA_SAY = "follow करें We One Aviation।"
 CTA_CAPTION = "follow karein *We One Aviation*"
@@ -113,6 +113,86 @@ def _say(ctx):
 
 def _spec(ctx):
     return json.loads(ctx.path("spec.json").read_text(encoding="utf-8"))
+
+def _style(ctx):
+    """AI presenter style chosen for this reel: 'studio' | 'fast' | None (classic). input.video: presenter_studio | presenter_fast | ai."""
+    v = str((ctx.job.get("input") or {}).get("video") or "").lower()
+    return {"ai": "studio", "presenter_studio": "studio", "presenter_fast": "fast"}.get(v)
+
+
+def _vspec(ctx):
+    """The spec the video is cut from: with the presenter, its hook and call-to-action shots replace the first and last clips."""
+    p = ctx.path("spec_ai.json")
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else _spec(ctx)
+
+
+def ai_spec(spec: dict, vo: dict, max_s: float = None) -> dict:
+    """Presenter P1 speaks the hook (the first ~5-7 s) and P2 the call to action (the last phrases); clips, 3D shots and
+    graphics carry the middle. Each presenter shot stays within max_s, the longest one Kaggle clip covers well."""
+    max_s = max_s or presenter.MAX_S
+    TL0 = timeline.build(spec, vo, "", "")
+    g = TL0["groups"]
+    if len(g) < 2:
+        return spec
+    starts = {s["id"]: s["t0"] for s in TL0["shots"]}
+    last = g[-1]; k = 0                                  # CTA: the earliest phrase of the last group that still fits in max_s
+    while k < len(last["spans"]) - 1 and TL0["vo_end"] - last["spans"][k][0] > max_s - 0.3:
+        k += 1
+    cta_t0 = last["spans"][k][0] - 0.08
+    hook_cap = min(g[1]["t0"] - 0.08, max_s)
+    mid = [s for s in spec["shots"] if s["id"] in starts and 2.0 <= starts[s["id"]] < cta_t0 - 1.2]
+    first = min((starts[s["id"]] for s in mid), default=None)
+    if first is None or first > hook_cap:              # cut away from the presenter by hook_cap: borrow the earliest clip there
+        cand = [s for s in spec["shots"] if s["id"] in starts and starts[s["id"]] < cta_t0 - 1.2]
+        if not cand:
+            return spec
+        lead = dict(min(cand, key=lambda s: starts[s["id"]] if starts[s["id"]] >= 2.0 else 99))
+        ph = next((i for i, (a, b) in enumerate(g[0]["spans"]) if a >= 2.0), None)
+        if ph is not None and g[0]["spans"][ph][0] <= hook_cap:
+            lead.update(at_group=g[0]["id"], at_phrase=ph)
+        else:
+            lead.update(at_group=g[1]["id"], at_phrase=0)
+        mid = [lead] + [s for s in mid if s["id"] != lead["id"]]
+    P1 = {"id": "P1", "query": "AI presenter speaking to camera (hook)", "note": "AI presenter: hook", "at_group": g[0]["id"], "at_phrase": 0, "presenter": "hook"}
+    P2 = {"id": "P2", "query": "AI presenter speaking to camera (call to action)", "note": "AI presenter: call to action",
+          "at_group": last["id"], "at_phrase": k, "presenter": "cta"}
+    return {**spec, "shots": [P1] + mid + [P2]}
+
+
+def _presenter_shots(ctx, spec, vo, style):
+    """Make the presenter shots on Kaggle. Returns ({shot_id: file}, spec to cut from). Anything missing or failing: classic style."""
+    def off(why):
+        ctx.data["presenter_off"] = why; ctx.save()
+        ctx.merge_output({"ai_video": {"style": style, "off": why}})
+        ctx.log(f"AI presenter not used: {why}. This reel uses the classic style.", "warn")
+        return {}, spec
+    if ctx.data.get("presenter_off"):
+        return {}, spec
+    work = ctx.dir / "presenter"
+    if not (work / "kaggle.json").exists():           # a render already under way is always finished, even if the budget ran low since
+        ok, why = presenter.available(2)
+        if not ok:
+            return off(why)
+    aspec = ai_spec(spec, vo)
+    if aspec is spec:
+        return off("the script is too short for presenter shots")
+    TL = timeline.build(aspec, vo, "", "")
+    t = {s["id"]: s for s in TL["shots"]}
+    pres = [s for s in aspec["shots"] if s.get("presenter") and s["id"] in t]
+    work.mkdir(exist_ok=True)
+    track = presenter.voice_track(TL["groups"], TL["vo_end"] + 0.5, work / "vo_track.wav")
+    for s in pres:
+        ctx.trace("footage", s["id"], s["note"], "wait", "AI presenter")
+    try:
+        made = presenter.make([{"id": s["id"], "role": s["presenter"], "t0": t[s["id"]]["t0"], "need": t[s["id"]]["need"], "track": track} for s in pres],
+                              style, work, ctx.log, lambda sid, st, info: ctx.trace("footage", sid, next(x["note"] for x in pres if x["id"] == sid), st, info),
+                              ctx.check_cancel)
+    except presenter.Unavailable as e:
+        return off(str(e)[:200])
+    ctx.path("spec_ai.json").write_text(json.dumps(aspec, ensure_ascii=False, indent=1), encoding="utf-8")
+    ctx.merge_output({"ai_video": {"style": style, "presenter": {sid: {"gpu_h": r.get("gpu_h"), "kaggle": r.get("lane")} for sid, r in made.items()}}})
+    return {sid: r["file"] for sid, r in made.items()}, aspec
+
 
 def _font_file():
     for p in config.FONTS_DIR.rglob("Poppins-SemiBold.ttf"):
@@ -382,6 +462,8 @@ def stage_script(ctx, prog):
     verify = ("The Fact-Checker has already verified the facts below. Write ONLY from them; do not search again unless a fact you need is missing, and never "
               "contradict the sheet's `do_not_say` or `corrections`." if fs else "Use WebSearch/WebFetch only if the notes need a new fact.")
     block = ("\n\n## Verified fact sheet from the Fact-Checker\n" + _sheet_text(fs) if fs else "") + "\n\n" + playbook + _core_note(prof, concept) + _audience_note(ctx, prof)
+    if _style(ctx):
+        block += brain.prompt("presenter", style=_style(ctx))
     if fs:                                   # new reels: hooks, open loops, re-hooks and intent notes (retention architecture)
         block += "\n\n" + brain.prompt("retention")
     dp = ctx.data.get("dm_plan") if (prof.get("_dm") or {}).get("plan") else None
@@ -736,9 +818,12 @@ def _pick(ctx, text, work):
 
 
 def stage_footage(ctx, prog):
-    spec = _spec(ctx); TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx), ctx.db)))
+    spec = _spec(ctx); pres_files = {}
+    if _style(ctx):                                     # AI presenter first (hours on Kaggle); falls back to classic on any problem
+        pres_files, spec = _presenter_shots(ctx, spec, _vo_map(ctx), _style(ctx))
+    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx), ctx.db)))
     need = {s["id"]: s["need"] for s in TL["shots"]}
-    shots = [s for s in spec["shots"] if s["id"] in need]
+    shots = [s for s in spec["shots"] if s["id"] in need and not s.get("presenter")]
     cands = {}; reuse = {}
     parent = _parent_dir(ctx)
     if parent and (parent / "footage.json").exists():
@@ -818,22 +903,35 @@ def stage_footage(ctx, prog):
         if not ok:
             ctx.log(f"no usable clip for {sid}; it will be merged into the previous shot", "warn")
         prog(0.35 + 0.65 * (k + 1) / len(shots))
+    for sid, f in pres_files.items():
+        shot_files[sid] = f
+        chosen[sid] = {"src": "ai", "id": sid, "author": "AI presenter (InfiniteTalk on Kaggle)", "page": "", "licence": "AI-generated character"}
     if not shot_files:
         raise TransientError("no footage could be prepared")
     ctx.path("footage.json").write_text(json.dumps({"files": shot_files, "chosen": chosen, "picks": picks,
                                                      "cands": cands}, ensure_ascii=False, indent=1), encoding="utf-8")
     ctx.merge_output({"credits": footage.credits(chosen)})
-    if not shots_all:
+    if not shots_all and not pres_files:
         raise TransientError("the script has no shots")
 
 
 def build_timeline(ctx):
-    spec = _spec(ctx); fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8"))
+    spec = _vspec(ctx); fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8"))
     spec["shots"] = [s for s in spec["shots"] if s["id"] in fj["files"]]
     prof = _brand(ctx)
     TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(prof, ctx.db)))
     for s in TL["shots"]:
         s["file"] = fj["files"][s["id"]]
+        if (fj.get("chosen", {}).get(s["id"]) or {}).get("src") == "ai":          # presenter: a person mask lets words sit behind them
+            s["presenter"] = True
+            try:
+                from ..media import matte
+                m = matte.make(Path(s["file"]), Path(s["file"]).with_name(f"{s['id']}_matte.mp4"))
+                s["matte"] = str(m) if m else None
+            except Exception as e:  # noqa: BLE001
+                ctx.log(f"person mask for {s['id']} skipped ({str(e)[:100]}); words go in front", "warn")
+    if _style(ctx) == "fast":
+        TL["pace"] = "fast"
     if not brandmod.legacy(prof):             # the account's own look: gold/champagne accents, end card text
         TL["palette"] = prof.get("palette") or {}
         TL["end_title"] = prof.get("end_title", "FOLLOW FOR MORE"); TL["end_sub"] = prof.get("end_sub", "")
@@ -862,7 +960,7 @@ def stage_render(ctx, prog):
 
 
 def stage_qc(ctx, prog):
-    res = json.loads(ctx.path("render", "result.json").read_text()); spec = _spec(ctx)
+    res = json.loads(ctx.path("render", "result.json").read_text()); spec = _vspec(ctx)
     TL = json.loads(ctx.path("render", "timeline.json").read_text(encoding="utf-8"))
     qdir = ctx.dir / "qc"; qdir.mkdir(exist_ok=True)
     shutil.copy(ctx.dir / "render" / "frames.jpg", qdir / "frames.jpg")
@@ -883,7 +981,7 @@ def stage_qc(ctx, prog):
     repick = [i for i in qc["issues"] if i.get("fix") == "repick_shot" and i.get("shot_id")]
     if repick and not ctx.data.get("qc_repaired"):
         fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8")); changed = False
-        spec = _spec(ctx); q = {x["id"]: x for x in spec["shots"]}; first = spec["shots"][0]["id"]
+        spec = _vspec(ctx); q = {x["id"]: x for x in spec["shots"]}; first = spec["shots"][0]["id"]
         todo = [i for i in repick if i["shot_id"] in fj.get("files", {}) and fj.get("cands", {}).get(i["shot_id"])]
         if todo:
             need = {s["id"]: s["need"] for s in TL["shots"]}; prof = _brand(ctx)

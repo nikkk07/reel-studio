@@ -266,8 +266,14 @@ def run(ctx):
     concept["est_seconds"] = concept.get("est_seconds") or 35
     concept["lane"] = lane
     ctx.progress("research", 0.9)
+    extra = {}
+    if bid == "weone" and config.get("REELSTUDIO_PRESENTER_AUTOPILOT", "on") == "on":
+        from ..media import presenter          # leave Kaggle hours for the CRM's planned presenter reels: Autopilot only uses spare time
+        ok, _ = presenter.available(2)
+        if ok and presenter.budget()["left_h"] >= presenter.CLIP_H * (2 + int(config.get("REELSTUDIO_PRESENTER_RESERVE_CLIPS", "4"))):
+            extra["video"] = "presenter_studio" if lane == "core" else "presenter_fast"
     reel = ctx.db.insert("jobs", {"kind": "reel", "input": {"concept": concept, "source": "autopilot", "autopilot": ctx.id, "brand": bid,
-                                                             "category": win.get("category"), "virality": win["_score"]}})[0]
+                                                             "category": win.get("category"), "virality": win["_score"], **extra}})[0]
     pick = {"title": concept["title"], "hook": concept["hook"], "category": win.get("category"), "lane": lane, "mix": {k: mix[k] for k in ("core", "trending", "window")}, "score": win["_score"],
             "why": win.get("_why"), "trend": win.get("trend_signal"), "reel_id": reel["id"], "day": today.isoformat(),
             "summary": ctx.data["judge"].get("summary", "")}

@@ -23,6 +23,8 @@ Pronunciation dictionary (term → say):
 
 ## 4. Graphics (rendered from this library only)
 Each graphic: `type`, `at_group`/`at_phrase` (starts with that phrase), optional `until_group`/`until_phrase` (ends when that phrase starts; default: end of the group), `params`:
+* `behind_text` {text: 1-2 words ≤ 18 chars, color?: red|white|amber, style?: serif|bold, y?: 0.2–0.4} – a huge keyword set behind the speaker (premium editorial look); one per group at most.
+* `ui_card` {title ≤ 34 chars, body ≤ 60 chars, icon: bell|chat|check|plane|star, side: left|right, color?} – a floating notification-style card (a DGCA rule, a fee line, a student's question) that slides in at mid-height on one side (y?: 0.4–0.6).
 * `chip` {text, color: red|amber|cyan|green, y?: 300–1300, dot?: bool} – small label pill.
 * `big_text` {text, sub?, color?, size?: 120–260, y?} – huge headline word(s), max 2 lines of ≤ 12 chars.
 * `counter` {to, from?, prefix?, suffix?, label?, color?} – animated number (e.g. 144 people, 90 SEC).

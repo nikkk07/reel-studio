@@ -12,3 +12,4 @@ skia-python==144.0.post2
 opencv-python-headless==4.11.0.86
 pillow==12.3.0
 httpx==0.28.1
+pyobjc-framework-Vision>=10.3; sys_platform == "darwin"       # person mask for words behind the AI presenter (Apple Vision)
