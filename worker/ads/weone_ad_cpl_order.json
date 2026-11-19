@@ -111,7 +111,8 @@
     "text": "Pilot",
     "style": "serif",
     "color": "red",
-    "y": 0.3
+    "y": 0.235,
+    "size": 460
    }
   },
   {

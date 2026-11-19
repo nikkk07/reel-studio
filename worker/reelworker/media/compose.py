@@ -88,7 +88,9 @@ def g_ui_card(c, t, g):
     a = env_alpha(t, g, 0.3, 0.25)
     if a < 0.02: return
     right = p.get("side", "left") == "right"; k = ease_out_back(prog(t, g["t0"], 0.42), 1.4)
-    cw, chh = 600, 170; x0 = (W - 70 - cw) if right else 70
+    # the card grows to fit its text (up to the screen width), so a line is never cut at the edge
+    need = max(tw(font("pb", 40), str(p.get("title", ""))[:34]), tw(font("pm", 32), str(p.get("body", ""))[:60])) + 170
+    cw, chh = int(min(W - 120, max(600, need))), 170; x0 = (W - 60 - cw) if right else 60
     x = x0 + (1 - k) * (cw + 120) * (1 if right else -1); y = H * float(p.get("y") or 0.5) + 10 * math.sin((t - g["t0"]) * 2.2)
     r = skia.RRect.MakeRectXY(skia.Rect.MakeXYWH(x, y, cw, chh), 30, 30)
     c.drawRRect(skia.RRect.MakeRectXY(skia.Rect.MakeXYWH(x, y + 14, cw, chh), 30, 30), skia.Paint(Color4f=col((0, 0, 0), 0.22 * a), MaskFilter=skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 22)))
