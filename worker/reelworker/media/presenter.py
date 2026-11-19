@@ -186,8 +186,8 @@ def collect(lane, name, out_dir: Path) -> Path:
 
 
 def prep(src: Path, out: Path, dur: float) -> Path:
-    """Presenter clip -> the reel's 1296x2304 60 fps working canvas (scaled by height, centred); holds the last frame if short."""
-    vf = (f"fps={FPS_OUT},scale=-2:2304:flags=lanczos,crop=1296:2304:'(iw-ow)/2':0,"
+    """Presenter clip -> the reel's 1296x2304 60 fps working canvas (scaled to cover, centred); holds the last frame if short."""
+    vf = (f"fps={FPS_OUT},scale=1296:2304:force_original_aspect_ratio=increase:flags=lanczos,crop=1296:2304,"   # covers any aspect
           f"tpad=stop_mode=clone:stop_duration={dur:.2f},eq=contrast=1.03:saturation=1.0,format=yuv420p")
     r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-vf", vf, "-t", f"{dur:.2f}", "-an",
                         "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", str(out)], capture_output=True, text=True)
