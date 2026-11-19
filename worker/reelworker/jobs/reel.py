@@ -134,7 +134,10 @@ def ai_spec(spec: dict, vo: dict, max_s: float = None) -> dict:
     g = TL0["groups"]
     if len(g) < 2:
         return spec
-    starts = {s["id"]: s["t0"] for s in TL0["shots"]}
+    gm = {x["id"]: x for x in g}
+    # where each clip is anchored in the script (the timeline pins the first clip to 0 s, which is not where it was written)
+    starts = {s["id"]: gm[s["at_group"]]["spans"][min(s.get("at_phrase", 0), len(gm[s["at_group"]]["spans"]) - 1)][0]
+              for s in spec["shots"] if s.get("at_group") in gm}
     last = g[-1]; k = 0                                  # CTA: the earliest phrase of the last group that still fits in max_s
     while k < len(last["spans"]) - 1 and TL0["vo_end"] - last["spans"][k][0] > max_s - 0.3:
         k += 1
@@ -142,7 +145,8 @@ def ai_spec(spec: dict, vo: dict, max_s: float = None) -> dict:
     hook_cap = min(g[1]["t0"] - 0.08, max_s)
     mid = [s for s in spec["shots"] if s["id"] in starts and 2.0 <= starts[s["id"]] < cta_t0 - 1.2]
     first = min((starts[s["id"]] for s in mid), default=None)
-    if first is None or first > hook_cap:              # cut away from the presenter by hook_cap: borrow the earliest clip there
+    # the presenter speaks the whole first group when it fits; a clip only cuts in earlier when the hook runs past max_s
+    if first is None or first > min(g[1]["t0"], max_s) + 0.05:
         cand = [s for s in spec["shots"] if s["id"] in starts and starts[s["id"]] < cta_t0 - 1.2]
         if not cand:
             return spec
@@ -932,6 +936,8 @@ def build_timeline(ctx):
                 ctx.log(f"person mask for {s['id']} skipped ({str(e)[:100]}); words go in front", "warn")
     if _style(ctx) == "fast":
         TL["pace"] = "fast"
+    if spec.get("ai_label") or _style(ctx):                # ASCI: an AI presenter or AI voice is labelled for the whole video
+        TL["ai_label"] = str(spec.get("ai_label") or "Video created using AI")[:40]
     if not brandmod.legacy(prof):             # the account's own look: gold/champagne accents, end card text
         TL["palette"] = prof.get("palette") or {}
         TL["end_title"] = prof.get("end_title", "FOLLOW FOR MORE"); TL["end_sub"] = prof.get("end_sub", "")

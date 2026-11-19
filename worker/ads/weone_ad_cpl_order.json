@@ -1,0 +1,198 @@
+{
+ "title": "Pilot after 12th: check this before paying fees",
+ "voice": "female",
+ "mood": "uplifting",
+ "lane": "core",
+ "groups": [
+  {
+   "id": "g1",
+   "gap_after": 0.35,
+   "phrases": [
+    {
+     "say": "12th ke baad pilot banna hai?",
+     "caption": "12th ke baad *pilot* banna hai?"
+    },
+    {
+     "say": "Fees bharne se pehle, ye ek cheez check karo.",
+     "caption": "Fees bharne se pehle, *ye check karo*"
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "gap_after": 0.3,
+   "phrases": [
+    {
+     "say": "Sabse pehle, DGCA Class 2 medical.",
+     "caption": "Sabse pehle: *DGCA Class 2 medical*"
+    },
+    {
+     "say": "Phir DGCA ke theory exams aur RTR.",
+     "caption": "Phir *DGCA theory exams* + RTR"
+    },
+    {
+     "say": "Phir kam se kam do sau ghante ki flying.",
+     "caption": "Phir kam se kam *200 ghante* flying"
+    },
+    {
+     "say": "Aur CPL ke liye, Class 1 medical zaroori hai.",
+     "caption": "CPL ke liye *Class 1 medical* zaroori"
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "gap_after": 0.35,
+   "phrases": [
+    {
+     "say": "Medical pehle clear ho, toh time aur paisa dono safe rehte hain.",
+     "caption": "Medical pehle = *time + paisa safe*"
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "gap_after": 0.2,
+   "phrases": [
+    {
+     "say": "We One Aviation pe free career counselling book karo.",
+     "caption": "*Free career counselling* book karo"
+    },
+    {
+     "say": "Apna pura roadmap, bina kisi commitment ke.",
+     "caption": "Pura roadmap, *no commitment*"
+    }
+   ]
+  }
+ ],
+ "shots": [
+  {
+   "id": "s1",
+   "query": "doctor eye examination clinic close up",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "note": "Medical check: eye test or doctor with stethoscope. No hospital logos."
+  },
+  {
+   "id": "s2",
+   "query": "student studying books classroom exam",
+   "at_group": "g2",
+   "at_phrase": 1,
+   "note": "Student studying or writing an exam. No school logos."
+  },
+  {
+   "id": "s3",
+   "query": "small training aircraft takeoff runway",
+   "at_group": "g2",
+   "at_phrase": 2,
+   "note": "Small trainer aircraft (Cessna type) taking off. No airline livery."
+  },
+  {
+   "id": "s4",
+   "query": "pilot cockpit instruments flying",
+   "at_group": "g2",
+   "at_phrase": 3,
+   "note": "Cockpit, hands on controls. No airline logos."
+  },
+  {
+   "id": "s5",
+   "query": "student pilot walking to small aircraft",
+   "at_group": "g3",
+   "at_phrase": 0,
+   "note": "Young trainee walking to a small aircraft, hopeful mood."
+  }
+ ],
+ "graphics": [
+  {
+   "type": "behind_text",
+   "at_group": "g1",
+   "at_phrase": 0,
+   "params": {
+    "text": "Pilot",
+    "style": "serif",
+    "color": "red",
+    "y": 0.3
+   }
+  },
+  {
+   "type": "ui_card",
+   "at_group": "g1",
+   "at_phrase": 1,
+   "params": {
+    "title": "Fees se pehle",
+    "body": "Medical fit ho? Pehle ye pakka karo",
+    "icon": "bell",
+    "side": "right",
+    "y": 0.55
+   }
+  },
+  {
+   "type": "list_card",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "params": {
+    "items": [
+     {
+      "text": "DGCA Class 2 medical",
+      "ok": true
+     },
+     {
+      "text": "DGCA exams + RTR",
+      "ok": true
+     },
+     {
+      "text": "200 ghante flying",
+      "ok": true
+     },
+     {
+      "text": "Class 1 medical (CPL)",
+      "ok": true
+     }
+    ]
+   }
+  },
+  {
+   "type": "chip",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "until_group": "g3",
+   "until_phrase": 0,
+   "params": {
+    "text": "Source: DGCA",
+    "color": "white",
+    "y": 360,
+    "dot": false,
+    "size": 30
+   }
+  },
+  {
+   "type": "big_text",
+   "at_group": "g3",
+   "at_phrase": 0,
+   "params": {
+    "text": "Time + paisa\nsafe",
+    "y": 760
+   }
+  },
+  {
+   "type": "ui_card",
+   "at_group": "g4",
+   "at_phrase": 0,
+   "params": {
+    "title": "Free career counselling",
+    "body": "Eligibility + roadmap, no commitment",
+    "icon": "check",
+    "side": "left",
+    "y": 0.55,
+    "color": "green"
+   }
+  }
+ ],
+ "claims": [
+  {
+   "claim": "CPL needs Class 12 with Physics and Maths, a DGCA Class 2 medical first and a Class 1 medical for the CPL, DGCA theory exams and RTR(A), and at least 200 hours of flying.",
+   "source_url": "https://www.pilotcareer.in/how-to-become-a-pilot/pilot-training-eligibility-in-india/"
+  }
+ ],
+ "ai_label": "Video created using AI"
+}

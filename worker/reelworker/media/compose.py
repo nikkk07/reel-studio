@@ -326,6 +326,12 @@ def apply_palette(pal):
     if pal.get("secondary"): CYAN = tuple(pal["secondary"]); COLORS["cyan"] = CYAN
 
 
+def ai_label(c, s_):
+    f = font("psb", 26); w = tw(f, s_) + 40
+    c.drawRRect(skia.RRect.MakeRectXY(skia.Rect.MakeXYWH(W - 60 - w, 200, w, 46), 23, 23), skia.Paint(Color4f=col((0, 0, 0), 0.45), AntiAlias=True))
+    text(c, s_, W - 60 - w / 2, 232, f, WHITE, alpha=0.95, shadow=False)
+
+
 CENTER = {"big_text", "counter", "list_card", "quote_card", "compare", "plane_path"}     # would cover a presenter's face
 
 
@@ -390,6 +396,8 @@ def render(TL, f0, f1, out):
         for g in live:                              # 3) everything else (centre cards never cover the presenter's face)
             if g["type"] != "behind_text" and not (on_presenter and g["type"] in CENTER):
                 DRAW[g["type"]](c, t, g)
+        if TL.get("ai_label"):                     # 4) the disclosure, small and always on screen
+            ai_label(c, TL["ai_label"])
         if t < TL["vo_end"] - 0.25:
             lw = 104; lh = lw * logo.height() / logo.width()
             c.drawImageRect(logo, skia.Rect.MakeXYWH(70, 220, lw, lh), skia.SamplingOptions(skia.FilterMode.kLinear), skia.Paint(Alphaf=0.92 * prog(t, 0.3, 0.4)))

@@ -83,11 +83,13 @@ G, VO = span_vo([("g1", [1.6, 1.8, 1.5]), ("g2", [2.0, 2.2]), ("g3", [2.1, 2.0, 
 SPEC = {"groups": G, "graphics": [], "shots": [{"id": "s1", "query": "a", "at_group": "g1", "at_phrase": 0}, {"id": "s2", "query": "b", "at_group": "g2", "at_phrase": 0},
                                                 {"id": "s3", "query": "c", "at_group": "g3", "at_phrase": 0}, {"id": "s4", "query": "d", "at_group": "g4", "at_phrase": 0}]}
 A = reel.ai_spec(SPEC, VO, max_s=7.5)
+VO_G2 = reel.timeline.build(SPEC, VO, "", "")["groups"][1]["t0"]
 TLa = reel.timeline.build(A, VO, "", "")
 sh = {s["id"]: s for s in TLa["shots"]}
 ok(A["shots"][0]["id"] == "P1" and sh["P1"]["t0"] == 0 and sh["P1"]["t1"] <= 7.5 and A["shots"][-1]["id"] == "P2"
-   and TLa["vo_end"] - sh["P2"]["t0"] <= 7.5 and A["shots"][-1]["at_phrase"] > 0 and "s1" not in sh,
-   "PR07 presenter speaks the hook (≤ 7.5 s) and the call to action (starting at the phrase that keeps it ≤ 7.5 s); clips carry the middle")
+   and TLa["vo_end"] - sh["P2"]["t0"] <= 7.5 and A["shots"][-1]["at_phrase"] > 0 and "s1" not in sh
+   and abs(sh["P1"]["t1"] - VO_G2) < 0.2,
+   "PR07 presenter speaks the whole hook group (≤ 7.5 s) and the call to action (starting at the phrase that keeps it ≤ 7.5 s); clips carry the middle")
 
 # ---------------------------------------------------------------- Kaggle run
 work = ROOT / "job" / "presenter"; work.mkdir(parents=True)
