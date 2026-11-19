@@ -151,8 +151,8 @@ def prompt_for(d, style, role):
     mood = {"hook": "Speaks with confident energy, eyebrows and hands supporting the first words, natural blinking.",
             "cta": "Ends warmly with a small nod and an inviting look into the camera.",
             "proof": "Explains calmly and clearly, steady eye contact, small natural gestures."}.get(role, "")
-    place = {"studio": "Seated in a bright minimal studio, camera steady at chest height.",
-             "fast": "Standing outdoors, slight handheld camera feel, natural daylight."}.get(style, "")
+    place = (d.get("places") or {}).get(style) or {"studio": "Seated in a bright minimal studio, camera steady at chest height.",
+                                                    "fast": "Standing outdoors, slight handheld camera feel, natural daylight."}.get(style, "")
     return " ".join(x for x in (d.get("prompt", ""), place, mood, "Lips move exactly with the speech; silent when there is no speech.") if x)
 
 
