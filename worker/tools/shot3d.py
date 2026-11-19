@@ -86,7 +86,10 @@ tgt = bpy.data.objects.new("tgt", None); sc.collection.objects.link(tgt)
 tc = cam.constraints.new("TRACK_TO"); tc.target = tgt; tc.track_axis = "TRACK_NEGATIVE_Z"; tc.up_axis = "UP_Y"
 cam.data.sensor_width = 36
 sc.frame_start, sc.frame_end = 1, frames
+prefs = bpy.context.preferences.edit
 def key(o, f, **kv):
+    prefs.keyframe_new_interpolation_type = "QUAD" if o.name == "AC" else "SINE"   # aircraft speeds up; camera eases
+    prefs.keyframe_new_handle_type = "AUTO_CLAMPED"
     for k, v in kv.items():
         setattr(o, k, v); o.keyframe_insert(k, frame=f)
 
@@ -107,14 +110,6 @@ elif shot == "nose":                   # slow push-in on the cockpit windows, sh
     cam.data.lens = 85; tgt.location = (nose_x - 3.2, 0, 4.4)
     key(cam, 1, location=(nose_x + 30, -22, 3.6)); key(cam, frames, location=(nose_x + 19, -14, 4.0))
     cam.data.dof.use_dof = True; cam.data.dof.focus_object = tgt; cam.data.dof.aperture_fstop = 2.0
-for fc in (cam.animation_data.action.fcurves if cam.animation_data and cam.animation_data.action else []):
-    for kp in fc.keyframe_points:
-        kp.interpolation = "SINE"
-if root.animation_data and root.animation_data.action:
-    for fc in root.animation_data.action.fcurves:
-        for kp in fc.keyframe_points:
-            kp.interpolation = "QUAD"; kp.easing = "EASE_IN"
-
 # --- render
 eng = [e.identifier for e in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items]
 sc.render.engine = "BLENDER_EEVEE_NEXT" if "BLENDER_EEVEE_NEXT" in eng else "BLENDER_EEVEE"
