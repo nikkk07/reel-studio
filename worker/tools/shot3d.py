@@ -61,17 +61,17 @@ for t in ("NISHITA", "MULTIPLE_SCATTERING", "SINGLE_SCATTERING"):
         sky.sky_type = t; break
     except Exception:  # noqa: BLE001
         continue
-for k, v in (("sun_elevation", math.radians(6)), ("sun_rotation", math.radians(200)), ("air_density", 1.6), ("dust_density", 3.0),
+for k, v in (("sun_elevation", math.radians(3.5)), ("sun_rotation", math.radians(200)), ("air_density", 1.6), ("dust_density", 3.0),
              ("aerosol_density", 3.0), ("ozone_density", 1.2)):
     try:
         setattr(sky, k, v)
     except Exception:  # noqa: BLE001
         pass
 print("SKY", sky.sky_type)
-nt.links.new(sky.outputs[0], nt.nodes["Background"].inputs[0]); nt.nodes["Background"].inputs[1].default_value = 0.9
+nt.links.new(sky.outputs[0], nt.nodes["Background"].inputs[0]); nt.nodes["Background"].inputs[1].default_value = 1.3
 sun = bpy.data.objects.new("sun", bpy.data.lights.new("sun", "SUN")); sc.collection.objects.link(sun)
-sun.data.energy = 5.0; sun.data.color = (1.0, 0.66, 0.38); sun.data.angle = math.radians(1.5)
-sun.rotation_euler = (math.radians(84), 0, math.radians(200 + 90))
+sun.data.energy = 7.0; sun.data.color = (1.0, 0.58, 0.30); sun.data.angle = math.radians(1.5)
+sun.rotation_euler = (math.radians(86.5), 0, math.radians(200 + 90))
 
 def mat(name, col, rough=0.9):
     m = bpy.data.materials.new(name); m.use_nodes = True
@@ -80,8 +80,16 @@ def mat(name, col, rough=0.9):
 def plane(name, size, loc, m):
     bpy.ops.mesh.primitive_plane_add(size=1, location=loc); o = bpy.context.active_object; o.name = name
     o.scale = (size[0], size[1], 1); o.data.materials.append(m); return o
-plane("grass", (4000, 4000), (0, 0, -0.02), mat("grass", (0.035, 0.06, 0.02, 1)))
-plane("runway", (3000, 45), (0, 0, -0.01), mat("asphalt", (0.035, 0.035, 0.038, 1), 0.75))
+def textured(name, c1, c2, scale, rough):
+    m = mat(name, c1, rough); t = m.node_tree; b = t.nodes["Principled BSDF"]
+    nz = t.nodes.new("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = scale; nz.inputs["Detail"].default_value = 8
+    ramp = t.nodes.new("ShaderNodeValToRGB"); ramp.color_ramp.elements[0].color = c1; ramp.color_ramp.elements[1].color = c2
+    t.links.new(nz.outputs["Fac"], ramp.inputs["Fac"]); t.links.new(ramp.outputs["Color"], b.inputs["Base Color"])
+    bump = t.nodes.new("ShaderNodeBump"); bump.inputs["Strength"].default_value = 0.25
+    t.links.new(nz.outputs["Fac"], bump.inputs["Height"]); t.links.new(bump.outputs["Normal"], b.inputs["Normal"])
+    return m
+plane("grass", (4000, 4000), (0, 0, -0.02), textured("grass", (0.018, 0.035, 0.010, 1), (0.06, 0.075, 0.025, 1), 0.08, 0.95))
+plane("runway", (3000, 45), (0, 0, -0.01), textured("asphalt", (0.022, 0.022, 0.025, 1), (0.06, 0.058, 0.055, 1), 0.6, 0.7))
 paint = mat("paint", (0.85, 0.85, 0.82, 1), 0.6)
 for i in range(-50, 51):
     plane(f"cl{i}", (30, 0.9), (i * 60, 0, 0.0), paint)
@@ -104,9 +112,9 @@ def key(o, f, **kv):
         setattr(o, k, v); o.keyframe_insert(k, frame=f)
 
 if shot == "orbit":                    # slow golden-hour orbit around the parked aircraft
-    cam.data.lens = 24; aim(Vector((2, 0, 3.0)))
-    for f, ang in ((1, 22), (frames, 68)):           # front three-quarter, swinging round the nose
-        a = math.radians(ang); key(cam, f, location=(58 * math.cos(a), -58 * math.sin(a), 3.2))
+    cam.data.lens = 30; aim(Vector((2, 0, 4.0)))
+    for f, ang in ((1, 24), (frames, 62)):           # low front three-quarter, swinging round the nose
+        a = math.radians(ang); key(cam, f, location=(42 * math.cos(a), -42 * math.sin(a), 1.7))
 elif shot == "takeoff":                # rolls past a low camera and rotates into the air
     cam.data.lens = 35; cam.location = (60, -40, 1.0); aim(Vector((0, 0, 2.5)))
     k = root.location.copy()
@@ -116,7 +124,7 @@ elif shot == "takeoff":                # rolls past a low camera and rotates int
     sc.render.use_motion_blur = True
 elif shot == "nose":                   # slow push-in on the cockpit windows, shallow focus
     cam.data.lens = 85; aim(Vector((nose_x - 3.0, 0, 4.2)))
-    key(cam, 1, location=(nose_x + 30, -22, 3.6)); key(cam, frames, location=(nose_x + 19, -14, 4.0))
+    key(cam, 1, location=(nose_x + 30, -22, 2.8)); key(cam, frames, location=(nose_x + 19, -14, 3.3))
     cam.data.dof.use_dof = True; cam.data.dof.focus_object = tgt; cam.data.dof.aperture_fstop = 2.0
 # --- render
 eng = [e.identifier for e in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items]
@@ -125,7 +133,12 @@ try:
     sc.eevee.taa_render_samples = 32; sc.eevee.use_shadows = True
 except Exception:
     pass
-sc.view_settings.view_transform = "AgX"; sc.view_settings.look = "AgX - Medium High Contrast"
+sc.view_settings.view_transform = "AgX"
+for lk in ("AgX - Punchy", "AgX - High Contrast", "AgX - Medium High Contrast"):
+    try:
+        sc.view_settings.look = lk; break
+    except Exception:  # noqa: BLE001
+        continue
 sc.render.resolution_x, sc.render.resolution_y, sc.render.fps = 1080, 1920, 30
 if preview != "-":                     # one still from the middle, to check the look
     sc.frame_set(frames // 2); sc.render.filepath = preview; sc.render.image_settings.file_format = "PNG"
