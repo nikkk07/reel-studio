@@ -144,7 +144,12 @@ if preview != "-":                     # one still from the middle, to check the
     sc.frame_set(frames // 2); sc.render.filepath = preview; sc.render.image_settings.file_format = "PNG"
     bpy.ops.render.render(write_still=True)
 else:
-    sc.render.image_settings.file_format = "FFMPEG"; sc.render.ffmpeg.format = "MPEG4"; sc.render.ffmpeg.codec = "H264"
-    sc.render.ffmpeg.constant_rate_factor = "HIGH"; sc.render.filepath = out
+    import os, shutil, subprocess, tempfile         # Blender 5 moved video output: render PNG frames, join them with ffmpeg
+    tmp = tempfile.mkdtemp(prefix="shot3d_")
+    sc.render.image_settings.file_format = "PNG"; sc.render.filepath = os.path.join(tmp, "f_####")
     bpy.ops.render.render(animation=True)
+    ff = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
+    subprocess.run([ff, "-v", "error", "-y", "-framerate", "30", "-i", os.path.join(tmp, "f_%04d.png"), "-c:v", "libx264", "-preset", "slow",
+                    "-crf", "16", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], check=True)
+    shutil.rmtree(tmp, ignore_errors=True)
 print("DONE", shot, yaw, scale)
