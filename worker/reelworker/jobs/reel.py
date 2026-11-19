@@ -933,7 +933,15 @@ def build_timeline(ctx):
                 m = matte.make(Path(s["file"]), Path(s["file"]).with_name(f"{s['id']}_matte.mp4"))
                 s["matte"] = str(m) if m else None
             except Exception as e:  # noqa: BLE001
-                ctx.log(f"person mask for {s['id']} skipped ({str(e)[:100]}); words go in front", "warn")
+                ctx.log(f"person mask for {s['id']} skipped ({str(e)[:100]})", "warn")
+    bare = [s for s in TL["shots"] if s.get("presenter") and not s.get("matte")]
+    if bare:                                   # a word meant to sit behind the presenter must never be drawn over the face
+        def on_bare(g):
+            return any(g["t0"] < s["t1"] and g["t1"] > s["t0"] for s in bare)
+        drop = [g for g in TL["graphics"] if g.get("type") == "behind_text" and on_bare(g)]
+        if drop:
+            TL["graphics"] = [g for g in TL["graphics"] if g not in drop]
+            ctx.log(f"no person mask for {', '.join(s['id'] for s in bare)}: left out {len(drop)} behind-the-presenter word(s)", "warn")
     if _style(ctx) == "fast":
         TL["pace"] = "fast"
     # On-screen AI tag: on by default for presenter reels; a spec can set "ai_label": false to leave it off (the owner then

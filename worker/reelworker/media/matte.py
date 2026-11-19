@@ -24,8 +24,12 @@ def _mask_vision(Vision, Quartz, bgr):
     cs = Quartz.CGColorSpaceCreateDeviceRGB()
     prov = Quartz.CGDataProviderCreateWithData(None, rgba.tobytes(), rgba.nbytes, None)
     img = Quartz.CGImageCreate(w, h, 8, 32, w * 4, cs, Quartz.kCGImageAlphaPremultipliedLast, prov, None, False, Quartz.kCGRenderingIntentDefault)
-    req = Vision.VNGeneratePersonSegmentationRequest.alloc().init()
-    req.setQualityLevel_(Vision.VNGeneratePersonSegmentationRequestQualityLevelBalanced)
+    R = Vision.VNGeneratePersonSegmentationRequest.alloc()
+    try:                                   # macOS 26 marks plain init unavailable; the completion-handler init works everywhere
+        req = R.initWithCompletionHandler_(None)
+    except Exception:  # noqa: BLE001
+        req = R.init()
+    req.setQualityLevel_(Vision.VNGeneratePersonSegmentationRequestQualityLevelAccurate)
     handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(img, None)
     ok, err = handler.performRequests_error_([req], None)
     if not ok or not req.results():
