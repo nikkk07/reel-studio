@@ -1,0 +1,200 @@
+{
+ "title": "200 hours to a CPL: the order that saves time and money",
+ "voice": "female",
+ "mood": "dramatic",
+ "lane": "core",
+ "ai_label": false,
+ "groups": [
+  {
+   "id": "g1",
+   "gap_after": 0.3,
+   "phrases": [
+    {
+     "say": "Do sau ghante.",
+     "caption": "*200* ghante"
+    },
+    {
+     "say": "Kam se kam itni flying ke baad milta hai CPL.",
+     "caption": "Kam se kam itni flying, *tab CPL*"
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "gap_after": 0.3,
+   "phrases": [
+    {
+     "say": "Usse pehle, DGCA Class 2 medical.",
+     "caption": "Pehle: *DGCA Class 2 medical*"
+    },
+    {
+     "say": "Phir DGCA ke theory exams aur RTR.",
+     "caption": "Phir *DGCA theory exams* + RTR"
+    },
+    {
+     "say": "Aur CPL ke liye, Class 1 medical.",
+     "caption": "CPL ke liye *Class 1 medical*"
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "gap_after": 0.35,
+   "phrases": [
+    {
+     "say": "Order galat hua, toh time aur paisa dono jaate hain.",
+     "caption": "Galat order = *time + paisa gaya*"
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "gap_after": 0.2,
+   "phrases": [
+    {
+     "say": "We One Aviation pe free career counselling book karo.",
+     "caption": "*Free career counselling* book karo"
+    },
+    {
+     "say": "Sahi order, pehle din se.",
+     "caption": "Sahi order, *pehle din se*"
+    }
+   ]
+  }
+ ],
+ "shots": [
+  {
+   "id": "s1",
+   "query": "cockpit night panel instruments",
+   "at_group": "g1",
+   "at_phrase": 0,
+   "note": "3D cockpit at night, glowing instruments. No airline logos."
+  },
+  {
+   "id": "s2",
+   "query": "cessna 172 takeoff runway",
+   "at_group": "g1",
+   "at_phrase": 1,
+   "note": "Small trainer aircraft takeoff (3D library first)."
+  },
+  {
+   "id": "s3",
+   "query": "doctor eye examination clinic close up",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "note": "Medical check. No hospital logos."
+  },
+  {
+   "id": "s4",
+   "query": "student studying books classroom exam",
+   "at_group": "g2",
+   "at_phrase": 1,
+   "note": "Student writing an exam. No school logos."
+  },
+  {
+   "id": "s5",
+   "query": "pilot cockpit instruments flying",
+   "at_group": "g2",
+   "at_phrase": 2,
+   "note": "Hands on controls in a cockpit. No airline logos."
+  },
+  {
+   "id": "s6",
+   "query": "student pilot walking to small aircraft",
+   "at_group": "g4",
+   "at_phrase": 0,
+   "note": "Trainee walking to a small aircraft, hopeful."
+  }
+ ],
+ "graphics": [
+  {
+   "type": "counter",
+   "at_group": "g1",
+   "at_phrase": 0,
+   "params": {
+    "from": 0,
+    "to": 200,
+    "suffix": " HRS",
+    "label": "Minimum flying for CPL",
+    "y": 820
+   }
+  },
+  {
+   "type": "flash",
+   "at_group": "g1",
+   "at_phrase": 1,
+   "params": {}
+  },
+  {
+   "type": "list_card",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "params": {
+    "items": [
+     {
+      "text": "DGCA Class 2 medical",
+      "ok": true
+     },
+     {
+      "text": "DGCA exams + RTR",
+      "ok": true
+     },
+     {
+      "text": "Class 1 medical (CPL)",
+      "ok": true
+     }
+    ]
+   }
+  },
+  {
+   "type": "chip",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "until_group": "g3",
+   "until_phrase": 0,
+   "params": {
+    "text": "Source: DGCA",
+    "color": "white",
+    "y": 360,
+    "dot": false,
+    "size": 30
+   }
+  },
+  {
+   "type": "compare",
+   "at_group": "g3",
+   "at_phrase": 0,
+   "params": {
+    "left": {
+     "title": "Galat order",
+     "sub": "Pehle fees, baad mein medical"
+    },
+    "right": {
+     "title": "Sahi order",
+     "sub": "Pehle medical, phir training",
+     "color": "green"
+    },
+    "focus": "right"
+   }
+  },
+  {
+   "type": "ui_card",
+   "at_group": "g4",
+   "at_phrase": 0,
+   "params": {
+    "title": "Free career counselling",
+    "body": "Eligibility + roadmap, no commitment",
+    "icon": "check",
+    "side": "left",
+    "y": 0.55,
+    "color": "green"
+   }
+  }
+ ],
+ "claims": [
+  {
+   "claim": "CPL needs Class 12 with Physics and Maths, a DGCA Class 2 medical first and a Class 1 medical for the CPL, DGCA theory exams and RTR(A), and at least 200 hours of flying.",
+   "source_url": "https://www.pilotcareer.in/how-to-become-a-pilot/pilot-training-eligibility-in-india/"
+  }
+ ]
+}

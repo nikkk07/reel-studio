@@ -1,0 +1,196 @@
+{
+ "title": "Myth: no science in 12th means no pilot career",
+ "voice": "female",
+ "mood": "curious",
+ "lane": "core",
+ "ai_label": false,
+ "groups": [
+  {
+   "id": "g1",
+   "gap_after": 0.35,
+   "phrases": [
+    {
+     "say": "Science nahi li, toh pilot nahi ban sakte?",
+     "caption": "Science nahi li, toh *pilot nahi*?"
+    },
+    {
+     "say": "Ye poora sach nahi hai.",
+     "caption": "Ye *poora sach nahi*"
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "gap_after": 0.3,
+   "phrases": [
+    {
+     "say": "Abhi ke DGCA rules mein, 12th level ki Physics aur Maths chahiye.",
+     "caption": "DGCA: 12th level *Physics + Maths*"
+    },
+    {
+     "say": "Arts ya Commerce wale, ye dono NIOS se clear kar sakte hain.",
+     "caption": "Arts/Commerce: *NIOS se clear karo*"
+    },
+    {
+     "say": "Uske baad raasta sabke liye same hai.",
+     "caption": "Uske baad *raasta same*"
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "gap_after": 0.35,
+   "phrases": [
+    {
+     "say": "Medical, DGCA exams, aur kam se kam do sau ghante flying.",
+     "caption": "Medical + DGCA exams + *200 ghante*"
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "gap_after": 0.2,
+   "phrases": [
+    {
+     "say": "We One Aviation pe free career counselling book karo.",
+     "caption": "*Free career counselling* book karo"
+    },
+    {
+     "say": "Aapke stream ke hisaab se pura roadmap.",
+     "caption": "Aapke stream ka *pura roadmap*"
+    }
+   ]
+  }
+ ],
+ "shots": [
+  {
+   "id": "s1",
+   "query": "student studying physics maths books",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "note": "Student with physics/maths books. No school logos."
+  },
+  {
+   "id": "s2",
+   "query": "student writing exam open school",
+   "at_group": "g2",
+   "at_phrase": 1,
+   "note": "Student writing an exam. No board logos."
+  },
+  {
+   "id": "s3",
+   "query": "small training aircraft takeoff runway",
+   "at_group": "g2",
+   "at_phrase": 2,
+   "note": "Small trainer aircraft taking off. No airline livery."
+  },
+  {
+   "id": "s4",
+   "query": "pilot cockpit instruments flying",
+   "at_group": "g3",
+   "at_phrase": 0,
+   "note": "Cockpit, hands on controls. No airline logos."
+  }
+ ],
+ "graphics": [
+  {
+   "type": "behind_text",
+   "at_group": "g1",
+   "at_phrase": 0,
+   "params": {
+    "text": "Myth?",
+    "style": "serif",
+    "color": "red",
+    "y": 0.235,
+    "size": 420
+   }
+  },
+  {
+   "type": "ui_card",
+   "at_group": "g1",
+   "at_phrase": 1,
+   "params": {
+    "title": "Fact check",
+    "body": "Physics + Maths ka raasta NIOS se bhi hai",
+    "icon": "bell",
+    "side": "right",
+    "y": 0.55
+   }
+  },
+  {
+   "type": "compare",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "params": {
+    "left": {
+     "title": "Myth",
+     "sub": "Science nahi, toh pilot nahi"
+    },
+    "right": {
+     "title": "Fact",
+     "sub": "Physics + Maths NIOS se bhi",
+     "color": "green"
+    },
+    "focus": "right"
+   }
+  },
+  {
+   "type": "chip",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "until_group": "g3",
+   "until_phrase": 0,
+   "params": {
+    "text": "Source: DGCA",
+    "color": "white",
+    "y": 360,
+    "dot": false,
+    "size": 30
+   }
+  },
+  {
+   "type": "list_card",
+   "at_group": "g3",
+   "at_phrase": 0,
+   "params": {
+    "items": [
+     {
+      "text": "DGCA medical",
+      "ok": true
+     },
+     {
+      "text": "DGCA exams + RTR",
+      "ok": true
+     },
+     {
+      "text": "200 ghante flying",
+      "ok": true
+     }
+    ]
+   }
+  },
+  {
+   "type": "ui_card",
+   "at_group": "g4",
+   "at_phrase": 0,
+   "params": {
+    "title": "Free career counselling",
+    "body": "Eligibility + roadmap, no commitment",
+    "icon": "check",
+    "side": "left",
+    "y": 0.55,
+    "color": "green"
+   }
+  }
+ ],
+ "claims": [
+  {
+   "claim": "CPL needs Class 12 with Physics and Maths, a DGCA Class 2 medical first and a Class 1 medical for the CPL, DGCA theory exams and RTR(A), and at least 200 hours of flying.",
+   "source_url": "https://www.pilotcareer.in/how-to-become-a-pilot/pilot-training-eligibility-in-india/"
+  },
+  {
+   "claim": "Under the current rules arts and commerce students qualify by clearing Physics and Maths through open schooling (NIOS); DGCA's proposal to drop the requirement was still pending as of October 2026.",
+   "source_url": "https://www.flapone.com/blog/dgca-can-permit-any-12th-pass-to-become-a-commercial-pilot"
+  }
+ ]
+}

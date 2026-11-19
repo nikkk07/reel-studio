@@ -1,0 +1,181 @@
+{
+ "title": "Parents: 3 questions before paying pilot training fees",
+ "voice": "female",
+ "mood": "uplifting",
+ "lane": "core",
+ "ai_label": false,
+ "groups": [
+  {
+   "id": "g1",
+   "gap_after": 0.35,
+   "phrases": [
+    {
+     "say": "Aapka bachcha pilot banna chahta hai?",
+     "caption": "Aapka bachcha *pilot* banna chahta hai?"
+    },
+    {
+     "say": "Fees dene se pehle, ye teen sawaal poochhiye.",
+     "caption": "Fees se pehle *3 sawaal*"
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "gap_after": 0.3,
+   "phrases": [
+    {
+     "say": "Ek: 12th mein Physics aur Maths hai?",
+     "caption": "1. 12th mein *Physics + Maths*?"
+    },
+    {
+     "say": "Do: DGCA Class 2 medical clear hai?",
+     "caption": "2. *DGCA Class 2 medical* clear?"
+    },
+    {
+     "say": "Teen: DGCA exams aur do sau ghante flying ka plan kya hai?",
+     "caption": "3. *DGCA exams + 200 ghante* ka plan?"
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "gap_after": 0.35,
+   "phrases": [
+    {
+     "say": "Teeno ka jawab saaf ho, tabhi admission ki baat kariye.",
+     "caption": "Pehle jawab, *phir admission*"
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "gap_after": 0.2,
+   "phrases": [
+    {
+     "say": "We One Aviation pe free career counselling book kariye.",
+     "caption": "*Free career counselling* book kariye"
+    },
+    {
+     "say": "Bachche ka pura roadmap, bina kisi commitment ke.",
+     "caption": "Pura roadmap, *no commitment*"
+    }
+   ]
+  }
+ ],
+ "shots": [
+  {
+   "id": "s1",
+   "query": "teenage student studying physics maths books",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "note": "Student with physics or maths books. No school logos."
+  },
+  {
+   "id": "s2",
+   "query": "doctor eye examination clinic close up",
+   "at_group": "g2",
+   "at_phrase": 1,
+   "note": "Medical check: eye test or stethoscope. No hospital logos."
+  },
+  {
+   "id": "s3",
+   "query": "small training aircraft takeoff runway",
+   "at_group": "g2",
+   "at_phrase": 2,
+   "note": "Small trainer aircraft taking off. No airline livery."
+  },
+  {
+   "id": "s4",
+   "query": "parent and teenager talking at home table",
+   "at_group": "g3",
+   "at_phrase": 0,
+   "note": "Parent and teenager talking calmly. Indian family if available."
+  }
+ ],
+ "graphics": [
+  {
+   "type": "behind_text",
+   "at_group": "g1",
+   "at_phrase": 0,
+   "params": {
+    "text": "Pilot",
+    "style": "serif",
+    "color": "red",
+    "y": 0.235,
+    "size": 460
+   }
+  },
+  {
+   "type": "ui_card",
+   "at_group": "g1",
+   "at_phrase": 1,
+   "params": {
+    "title": "Fees se pehle",
+    "body": "Ye 3 sawaal zaroor poochhiye",
+    "icon": "bell",
+    "side": "right",
+    "y": 0.55
+   }
+  },
+  {
+   "type": "list_card",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "params": {
+    "items": [
+     {
+      "text": "12th: Physics + Maths"
+     },
+     {
+      "text": "DGCA Class 2 medical"
+     },
+     {
+      "text": "DGCA exams + 200 ghante"
+     }
+    ]
+   }
+  },
+  {
+   "type": "chip",
+   "at_group": "g2",
+   "at_phrase": 0,
+   "until_group": "g3",
+   "until_phrase": 0,
+   "params": {
+    "text": "Source: DGCA",
+    "color": "white",
+    "y": 360,
+    "dot": false,
+    "size": 30
+   }
+  },
+  {
+   "type": "big_text",
+   "at_group": "g3",
+   "at_phrase": 0,
+   "params": {
+    "text": "Pehle jawab\nphir admission",
+    "y": 760
+   }
+  },
+  {
+   "type": "ui_card",
+   "at_group": "g4",
+   "at_phrase": 0,
+   "params": {
+    "title": "Free career counselling",
+    "body": "Eligibility + roadmap, no commitment",
+    "icon": "check",
+    "side": "left",
+    "y": 0.55,
+    "color": "green"
+   }
+  }
+ ],
+ "claims": [
+  {
+   "claim": "CPL needs Class 12 with Physics and Maths, a DGCA Class 2 medical first and a Class 1 medical for the CPL, DGCA theory exams and RTR(A), and at least 200 hours of flying.",
+   "source_url": "https://www.pilotcareer.in/how-to-become-a-pilot/pilot-training-eligibility-in-india/"
+  }
+ ]
+}
