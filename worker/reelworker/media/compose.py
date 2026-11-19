@@ -275,8 +275,9 @@ def draw_end(c, t, TL, logo):
     c.drawRect(skia.Rect(0, 0, W, H), skia.Paint(Color4f=col((4, 8, 14), 0.55 * p)))
     lw = 420; lh = lw * logo.height() / logo.width(); y = 640 + (1 - p) * 60
     c.drawImageRect(logo, skia.Rect.MakeXYWH(W / 2 - lw / 2, y, lw, lh), skia.SamplingOptions(skia.FilterMode.kLinear), skia.Paint(Alphaf=p))
-    text(c, TL.get("end_title", "FOLLOW FOR MORE"), W / 2, y + lh + 110, font("black", 96), WHITE, alpha=ease_out_expo(prog(t, ta + 0.25, 0.5)))
-    text(c, TL.get("end_sub", "aviation facts, explained"), W / 2, y + lh + 175, font("pm", 44), CYAN, alpha=ease_out_expo(prog(t, ta + 0.45, 0.5)))
+    et, es = TL.get("end_title", "FOLLOW FOR MORE"), TL.get("end_sub", "aviation facts, explained")
+    text(c, et, W / 2, y + lh + 110, fit_font("black", et, 96, 960), WHITE, alpha=ease_out_expo(prog(t, ta + 0.25, 0.5)))
+    text(c, es, W / 2, y + lh + 175, fit_font("pm", es, 44, 960), CYAN, alpha=ease_out_expo(prog(t, ta + 0.45, 0.5)))
 
 
 # ------------------------------------------------------------------ video

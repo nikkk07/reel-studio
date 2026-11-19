@@ -944,6 +944,9 @@ def build_timeline(ctx):
     if not brandmod.legacy(prof):             # the account's own look: gold/champagne accents, end card text
         TL["palette"] = prof.get("palette") or {}
         TL["end_title"] = prof.get("end_title", "FOLLOW FOR MORE"); TL["end_sub"] = prof.get("end_sub", "")
+    if (ctx.job.get("input") or {}).get("ad") or spec.get("end_title"):   # an ad ends on its offer, never "follow for more"
+        TL["end_title"] = str(spec.get("end_title", "FREE CAREER COUNSELLING"))[:40]
+        TL["end_sub"] = str(spec.get("end_sub", "Eligibility + roadmap, no commitment"))[:60]
     p = ctx.path("render", "timeline.json"); p.write_text(json.dumps(TL, ensure_ascii=False, indent=1), encoding="utf-8")
     return TL, p
 
