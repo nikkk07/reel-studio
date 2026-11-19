@@ -6,10 +6,12 @@ Every 2 minutes it takes due items and turns each into a job here; every 5 minut
 
     reel      -> a reel job (posted at the planned time after the usual review and 5-minute rule)
     carousel  -> a reel job with format "carousel" (slides, Instagram only, same review)
-    ad_video  -> a reel job marked as an ad (never posted here; used in Meta Ads Manager)
+    ad_video  -> a reel job marked as an ad (never posted here; the finished video and its cover go to the CRM,
+                 which uploads them to Meta for the strategy ad they are attached to)
     ad_image  -> a "content" job: the ad pictures go back to the CRM
 """
-import hashlib, json, logging, time
+import hashlib, json, logging, subprocess, time
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import httpx
 from . import config
@@ -137,7 +139,7 @@ def report_of(job: dict):
     if st == "cancelled":
         return None if o.get("decision") == "auto_revise" else {"status": "failed", "note": "Rejected or stopped in Reel Studio"}
     if inp.get("ad"):
-        return {"status": "ready", "media": {"video": STUDIO}, "note": "Ad video ready: download it in Reel Studio and use it in Ads Manager"}
+        return {"status": "ready", "media": {"video": STUDIO}}      # the file itself is sent by push_ads
     if st == "review":
         held = o.get("hold") or o.get("autopilot_hold")
         return {"status": "held", "note": "Held in Reel Studio for a person to approve"} if held else {"status": "ready", "note": "In review (posts after the 5-minute check)"}
@@ -191,6 +193,101 @@ def sync(db) -> int:
         sent[item] = h; n += 1
     _save_sent(sent)
     return n
+
+
+# ------------------------------------------------------------------ finished ad videos -> CRM > Content > Ad creatives
+MAX_VIDEO_MB = 48                        # the CRM's content bucket takes 50 MB per file
+
+
+def _vstate():
+    p = config.APP / "state" / "crm_videos.json"
+    try:
+        return json.loads(p.read_text())
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _save_vstate(d):
+    p = config.APP / "state" / "crm_videos.json"; p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(d))
+
+
+def _ad_text(job_id: str):
+    """Title, spoken script and a one-line summary from the job's spec (what the CRM shows next to the video)."""
+    try:
+        spec = json.loads((config.JOBS_DIR / job_id / "spec.json").read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        spec = {}
+    lines = [str(ph.get("say", "")).strip() for g in spec.get("groups") or [] for ph in g.get("phrases") or []]
+    lines = [x for x in lines if x]
+    title = str(spec.get("title") or (lines[0] if lines else "") or f"Ad video {job_id[:8]}")[:120]
+    return title, "\n".join(lines)[:3000], " / ".join(lines[:2])[:600]
+
+
+def _cover(video: Path, out: Path):
+    """A full-size frame from the hook (1 s in) as the ad's thumbnail."""
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "1.0", "-i", str(video), "-frames:v", "1", "-vf", "scale=1080:1920",
+                    "-q:v", "3", str(out)], check=True, capture_output=True, timeout=120)
+    return out
+
+
+def _put(url: str, path: Path, ctype: str):
+    with open(path, "rb") as f:
+        r = httpx.put(url, content=f.read(), timeout=600, headers={"content-type": ctype, "x-upsert": "true", "User-Agent": "ReelStudio-Mac/1.0"})
+    if r.status_code >= 400:
+        raise RuntimeError(f"upload {path.name}: HTTP {r.status_code} {r.text[:160]}")
+
+
+def push_ads(db) -> int:
+    """Send each finished ad video (in review or approved) to the CRM once: the item is created for ads made here,
+    the CRM-ordered ones keep theirs; the mp4 and cover go straight to CRM storage by one-time links."""
+    since = (datetime.now(timezone.utc) - timedelta(days=21)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = db.select("jobs", f"select=id,status,input,output&input->>ad=eq.true&status=in.(review,done)&updated_at=gt.{since}"
+                             "&order=created_at.asc&limit=50")
+    st, n = _vstate(), 0
+    for job in rows:
+        jid, inp = job["id"], job.get("input") or {}
+        rec = st.get(jid) or {}
+        if rec.get("done"):
+            continue
+        try:
+            res = json.loads((config.JOBS_DIR / jid / "render" / "result.json").read_text())
+            video = Path(res["delivery"])
+        except Exception:  # noqa: BLE001
+            continue                                      # rendered elsewhere or not rendered yet
+        if not video.exists():
+            continue
+        if video.stat().st_size > MAX_VIDEO_MB * 1e6:
+            log.warning("ad %s: %.1f MB is over the CRM's %s MB limit; not sent", jid[:8], video.stat().st_size / 1e6, MAX_VIDEO_MB)
+            st[jid] = {**rec, "note": "too large"}; continue
+        try:
+            n += _push_one(jid, inp, rec, st, video, res)
+        except CRMAuth:
+            raise
+        except Exception as e:  # noqa: BLE001
+            log.warning("ad %s to CRM: %s", jid[:8], str(e)[:200])     # tried again on the next round
+    _save_vstate(st)
+    return n
+
+
+def _push_one(jid, inp, rec, st, video, res) -> int:
+    item = inp.get("crm_item") or rec.get("item")
+    if not item:
+        title, script, summary = _ad_text(jid)
+        r = call("adopt", studio_job=jid, title=title, script=script, summary=summary)
+        if not r.get("ok"):
+            raise RuntimeError(f"CRM adopt: {r.get('detail')}")
+        item = r["id"]; rec["item"] = item; st[jid] = rec; _save_vstate(st)
+    cover = _cover(video, video.parent / "cover.jpg")
+    links = call("video_upload", id=int(item))
+    _put(links["video"]["url"], video, "video/mp4")
+    _put(links["thumb"]["url"], cover, "image/jpeg")
+    r = call("video_done", id=int(item), seconds=res.get("duration"))
+    if not r.get("ok"):
+        raise RuntimeError(f"CRM video_done: {r.get('detail')}")
+    st[jid] = {**rec, "item": item, "done": True, "at": datetime.now(timezone.utc).isoformat()}; _save_vstate(st)
+    log.info("ad %s sent to CRM > Content > Ad creatives (item %s)", jid[:8], item)
+    return 1
 
 
 # ------------------------------------------------------------------ what the CRM knows, for this Mac's own Strategist
@@ -251,7 +348,7 @@ def loop(db, stop):
         try:
             take(db)
             if time.time() - last_sync > 300:
-                sync(db); last_sync = time.time()
+                sync(db); push_ads(db); last_sync = time.time()
             STATUS.update(ok=True, note=None, at=datetime.now(timezone.utc).isoformat())
         except CRMAuth as e:
             STATUS.update(ok=False, note=str(e), at=datetime.now(timezone.utc).isoformat())
