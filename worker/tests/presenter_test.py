@@ -157,5 +157,18 @@ pp = brain.prompt("presenter", style="fast")
 ok(inp.get("video") == "presenter_studio" and "video" not in inp2 and "fake urgency" in pp and "Style: fast" in pp,
    "PR16 the CRM planner picks the presenter per reel; the script rules for presenter reels are premium and honest")
 
+# ---------------------------------------------------------------- regressions from the first ad (19 Nov)
+nar = ROOT / "narrow.mp4"; ff("-f", "lavfi", "-i", "color=c=red:size=448x832:rate=25:duration=2", "-pix_fmt", "yuv420p", str(nar))
+pr = presenter.prep(nar, ROOT / "narrow_9x16.mp4", 2.5)
+cap = cv2.VideoCapture(str(pr))
+ok((int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))) == (1296, 2304),
+   "PR17 a Kaggle clip narrower than 9:16 (448x832) still fills the 1296x2304 canvas")
+TLg = {"shots": [{"id": "P1", "presenter": True, "matte": None, "t0": 0, "t1": 5}, {"id": "s1", "t0": 5, "t1": 9},
+                 {"id": "P2", "presenter": True, "matte": "m.mp4", "t0": 9, "t1": 15}],
+       "graphics": [{"type": "behind_text", "t0": 0.2, "t1": 4}, {"type": "ui_card", "t0": 1, "t1": 3}, {"type": "behind_text", "t0": 10, "t1": 12}]}
+dropped = reel.drop_unmasked_behind(TLg)
+ok(len(dropped) == 1 and [g["type"] for g in TLg["graphics"]] == ["ui_card", "behind_text"],
+   "PR18 without a person mask the behind-the-presenter word is left out (never drawn over the face); masked shots keep theirs")
+
 print(f"\n{sum(R)}/{len(R)} passed")
 sys.exit(0 if all(R) else 1)

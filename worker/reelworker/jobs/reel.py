@@ -919,6 +919,15 @@ def stage_footage(ctx, prog):
         raise TransientError("the script has no shots")
 
 
+def drop_unmasked_behind(TL) -> list:
+    """A word meant to sit behind the presenter is never drawn over the face: without a person mask it is left out."""
+    bare = [s for s in TL["shots"] if s.get("presenter") and not s.get("matte")]
+    drop = [g for g in TL["graphics"] if g.get("type") == "behind_text" and any(g["t0"] < s["t1"] and g["t1"] > s["t0"] for s in bare)]
+    if drop:
+        TL["graphics"] = [g for g in TL["graphics"] if g not in drop]
+    return drop
+
+
 def build_timeline(ctx):
     spec = _vspec(ctx); fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8"))
     spec["shots"] = [s for s in spec["shots"] if s["id"] in fj["files"]]
@@ -934,14 +943,9 @@ def build_timeline(ctx):
                 s["matte"] = str(m) if m else None
             except Exception as e:  # noqa: BLE001
                 ctx.log(f"person mask for {s['id']} skipped ({str(e)[:100]})", "warn")
-    bare = [s for s in TL["shots"] if s.get("presenter") and not s.get("matte")]
-    if bare:                                   # a word meant to sit behind the presenter must never be drawn over the face
-        def on_bare(g):
-            return any(g["t0"] < s["t1"] and g["t1"] > s["t0"] for s in bare)
-        drop = [g for g in TL["graphics"] if g.get("type") == "behind_text" and on_bare(g)]
-        if drop:
-            TL["graphics"] = [g for g in TL["graphics"] if g not in drop]
-            ctx.log(f"no person mask for {', '.join(s['id'] for s in bare)}: left out {len(drop)} behind-the-presenter word(s)", "warn")
+    drop = drop_unmasked_behind(TL)
+    if drop:
+        ctx.log(f"no person mask on a presenter shot: left out {len(drop)} behind-the-presenter word(s)", "warn")
     if _style(ctx) == "fast":
         TL["pace"] = "fast"
     # On-screen AI tag: on by default for presenter reels; a spec can set "ai_label": false to leave it off (the owner then
