@@ -112,9 +112,9 @@ def key(o, f, **kv):
         setattr(o, k, v); o.keyframe_insert(k, frame=f)
 
 if shot == "orbit":                    # slow golden-hour orbit around the parked aircraft
-    cam.data.lens = 30; aim(Vector((2, 0, 4.0)))
+    cam.data.lens = 24; aim(Vector((0, 0, 4.0)))
     for f, ang in ((1, 24), (frames, 62)):           # low front three-quarter, swinging round the nose
-        a = math.radians(ang); key(cam, f, location=(42 * math.cos(a), -42 * math.sin(a), 1.7))
+        a = math.radians(ang); key(cam, f, location=(48 * math.cos(a), -48 * math.sin(a), 1.7))
 elif shot == "takeoff":                # rolls past a low camera and rotates into the air
     cam.data.lens = 35; cam.location = (60, -40, 1.0); aim(Vector((0, 0, 2.5)))
     k = root.location.copy()
