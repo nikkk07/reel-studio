@@ -936,8 +936,11 @@ def build_timeline(ctx):
                 ctx.log(f"person mask for {s['id']} skipped ({str(e)[:100]}); words go in front", "warn")
     if _style(ctx) == "fast":
         TL["pace"] = "fast"
-    if spec.get("ai_label") or _style(ctx):                # ASCI: an AI presenter or AI voice is labelled for the whole video
-        TL["ai_label"] = str(spec.get("ai_label") or "Video created using AI")[:40]
+    # On-screen AI tag: on by default for presenter reels; a spec can set "ai_label": false to leave it off (the owner then
+    # declares the AI content when uploading, as Instagram/Facebook require under India's IT Rules 2026).
+    lab = spec.get("ai_label", "Video created using AI" if _style(ctx) else None)
+    if lab:
+        TL["ai_label"] = str(lab)[:40]
     if not brandmod.legacy(prof):             # the account's own look: gold/champagne accents, end card text
         TL["palette"] = prof.get("palette") or {}
         TL["end_title"] = prof.get("end_title", "FOLLOW FOR MORE"); TL["end_sub"] = prof.get("end_sub", "")
