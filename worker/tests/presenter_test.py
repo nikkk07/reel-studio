@@ -170,5 +170,20 @@ dropped = reel.drop_unmasked_behind(TLg)
 ok(len(dropped) == 1 and [g["type"] for g in TLg["graphics"]] == ["ui_card", "behind_text"],
    "PR18 without a person mask the behind-the-presenter word is left out (never drawn over the face); masked shots keep theirs")
 
+j2 = {"id": str(uuid.uuid4()), "kind": "reel", "status": "running", "brand": "weone", "input": {"video": "presenter_studio"}, "output": {}, "lease_owner": "mac"}
+cx2 = JobContext(DB(), j2, "mac"); (cx2.dir / "presenter").mkdir(parents=True, exist_ok=True)
+(cx2.dir / "presenter" / "kaggle.json").write_text(json.dumps({"P1": {"lane": "A", "state": "running", "t0": 0, "need": 5}}))
+_mk, _vt = presenter.make, presenter.voice_track
+presenter.voice_track = lambda *a, **k: ROOT / "vo.wav"
+def _gone(*a, **k): raise presenter.Unavailable("kaggle kernels status: No such file or directory: '/Volumes/AI-Models/tools-env/'")
+presenter.make = _gone
+try:
+    reel._presenter_shots(cx2, SPEC, VO, "studio"); raised = False
+except reel.TransientError:
+    raised = True
+presenter.make, presenter.voice_track = _mk, _vt
+ok(raised and not cx2.data.get("presenter_off"),
+   "PR19 a failed Kaggle check while clips render (SSD unplugged) is temporary: the job retries and keeps the presenter")
+
 print(f"\n{sum(R)}/{len(R)} passed")
 sys.exit(0 if all(R) else 1)

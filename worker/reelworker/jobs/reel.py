@@ -192,6 +192,12 @@ def _presenter_shots(ctx, spec, vo, style):
                               style, work, ctx.log, lambda sid, st, info: ctx.trace("footage", sid, next(x["note"] for x in pres if x["id"] == sid), st, info),
                               ctx.check_cancel)
     except presenter.Unavailable as e:
+        try:                                   # clips already rendering on Kaggle: a failed check (SSD unplugged, network) is
+            st = json.loads((work / "kaggle.json").read_text())     # temporary, never a reason to drop the presenter for good
+        except Exception:  # noqa: BLE001
+            st = {}
+        if any(v.get("state") in ("running", "done") for v in st.values()) and "stopped with" not in str(e) and "longer than" not in str(e):
+            raise TransientError(f"AI presenter check failed while its clips render on Kaggle: {str(e)[:160]}")
         return off(str(e)[:200])
     ctx.path("spec_ai.json").write_text(json.dumps(aspec, ensure_ascii=False, indent=1), encoding="utf-8")
     ctx.merge_output({"ai_video": {"style": style, "presenter": {sid: {"gpu_h": r.get("gpu_h"), "kaggle": r.get("lane")} for sid, r in made.items()}}})
