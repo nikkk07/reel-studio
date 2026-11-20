@@ -6,8 +6,9 @@ Every 2 minutes it takes due items and turns each into a job here; every 5 minut
 
     reel      -> a reel job (posted at the planned time after the usual review and 5-minute rule)
     carousel  -> a reel job with format "carousel" (slides, Instagram only, same review)
-    ad_video  -> a reel job marked as an ad (never posted here; the finished video and its cover go to the CRM,
-                 which uploads them to Meta for the strategy ad they are attached to)
+    ad_video  -> a reel job marked as an ad: the finished video and its cover go to the CRM (Ad creatives). When the owner
+                 approves and schedules it there, the CRM tells this Mac (post_tasks) and it is posted from here with the
+                 CRM's caption and AI label; the post id goes back so the CRM can run the ad on that post (CRM 120)
     ad_image  -> a "content" job: the ad pictures go back to the CRM
 """
 import hashlib, json, logging, subprocess, time
@@ -139,6 +140,20 @@ def report_of(job: dict):
     if st == "cancelled":
         return None if o.get("decision") == "auto_revise" else {"status": "failed", "note": "Rejected or stopped in Reel Studio"}
     if inp.get("ad"):
+        ig = o.get("ig") or {}
+        if st == "done" and ig.get("via") == "crm":                # posted here on the CRM's instruction (Ad studio, CRM 120)
+            if ig.get("state") == "posted" and ig.get("media_id"):
+                s = o.get("ig_stats") or {}
+                stats = {k: s.get(k) for k in ("views", "reach", "likes", "comments", "shares") if isinstance(s.get(k), (int, float))}
+                if isinstance(s.get("saved"), (int, float)):
+                    stats["saves"] = s["saved"]
+                r = {"status": "posted", "posted_at": ig.get("posted_at"), "stats": stats, "ig_media_id": str(ig["media_id"])}
+                if str(ig.get("permalink") or "").startswith("https://"):
+                    r["media"] = {"permalink": ig["permalink"]}
+                return r
+            if ig.get("state") == "failed":
+                return {"status": "ready", "ig_error": str(ig.get("error") or "Posting to Instagram failed")[:300]}
+            return None                                            # scheduled or posting: the CRM already knows (post_ack)
         return {"status": "ready", "media": {"video": STUDIO}}      # the file itself is sent by push_ads
     if st == "review":
         held = o.get("hold") or o.get("autopilot_hold")
@@ -181,6 +196,12 @@ def sync(db) -> int:
     latest = {}
     for r in rows:
         latest[str(r["input"]["crm_item"])] = r           # ascending: the last one wins (a revision replaces its parent)
+    # ad videos made here and adopted by the CRM carry their item only in the posting instruction (CRM 120)
+    for r in db.select("jobs", f"select=id,kind,status,input,output,error,created_at&output->ig->>via=eq.crm&updated_at=gt.{since}"
+                               "&order=created_at.asc&limit=100"):
+        it = ((r.get("output") or {}).get("ig") or {}).get("crm_item")
+        if it and (r.get("input") or {}).get("ad"):
+            latest[str(it)] = r
     sent, n = _sent(), 0
     for item, job in latest.items():
         rep = report_of(job)
@@ -192,6 +213,61 @@ def sync(db) -> int:
         call("update", id=int(item), **rep)
         sent[item] = h; n += 1
     _save_sent(sent)
+    return n
+
+
+# ------------------------------------------------------------------ CRM > Ad studio -> post an ad video here (CRM 120)
+OPEN_IG = ("scheduled", "queued", "cancelled", "failed")       # states this Mac may still change; posting / posted belong to ig-poster
+
+
+def _apply_post(db, t: dict):
+    """Carry out one instruction: schedule (with the CRM's time, caption and AI label) or cancel. Returns (state, note)."""
+    jid = str(t.get("studio_job") or "")
+    rows = db.select("jobs", f"select=id,kind,status,input,output&id=eq.{jid}") if jid else []
+    if not rows or not (rows[0].get("input") or {}).get("ad"):
+        return "failed", "Reel Studio no longer has this ad video"
+    job = rows[0]; o = job.get("output") or {}; ig = o.get("ig") or {}
+    if ig.get("state") in ("posting", "posted"):
+        return "too_late", None                       # under way or done: the post id reaches the CRM with the next report
+    guard = (f"id=eq.{jid}&or=(output->ig.is.null,output->ig->>state.is.null,"
+             f"output->ig->>state.in.({','.join(OPEN_IG)}))")
+    now = datetime.now(timezone.utc).isoformat()
+    if t.get("action") == "cancel":
+        if not ig or ig.get("state") == "cancelled":
+            return "cancelled", None
+        out = {**o, "ig": {**ig, "state": "cancelled", "cancelled_at": now}}
+        got = db.update("jobs", guard, {"status": "review", "output": out})
+        return ("cancelled", None) if got else ("too_late", None)
+    if t.get("action") != "schedule":
+        return "failed", f"unknown instruction {t.get('action')}"
+    if not (o.get("ig_video") or o.get("video")):
+        return "failed", "The video file is not in Reel Studio's storage any more; make it again"
+    try:
+        at = datetime.fromisoformat(str(t["post_at"]).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except Exception:  # noqa: BLE001
+        return "failed", "The CRM sent no valid time"
+    cap = str(t.get("caption") or "").strip()
+    if len(cap) < 10:
+        return "failed", "The caption is missing"
+    out = {**o, "ig_caption": cap[:2200], "ig_ai": bool(t.get("ai")), "decided_at": now, "decision": "approved_in_crm", "autopilot_hold": False,
+           "ig": {"state": "scheduled", "at": at.strftime("%Y-%m-%dT%H:%M:%SZ"), "via": "crm", "crm_item": int(t["id"]), "attempts": 0}}
+    got = db.update("jobs", guard, {"status": "done", "output": out})
+    return ("scheduled", None) if got else ("too_late", None)
+
+
+def post_tasks(db) -> int:
+    """Ask the CRM which approved ad videos to post (or stop posting) and confirm each one. Errors are retried next round."""
+    n = 0
+    for t in (call("post_tasks") or {}).get("tasks") or []:
+        try:
+            state, note = _apply_post(db, t)
+        except CRMAuth:
+            raise
+        except Exception as e:  # noqa: BLE001
+            log.warning("CRM post task %s: %s", t.get("id"), str(e)[:200]); continue
+        call("post_ack", id=int(t["id"]), sig=t.get("sig"), state=state, note=note)
+        log.info("CRM ad %s: %s %s", t.get("id"), t.get("action"), state)
+        n += 1
     return n
 
 
@@ -347,6 +423,7 @@ def loop(db, stop):
             stop.wait(300); continue
         try:
             take(db)
+            post_tasks(db)
             if time.time() - last_sync > 300:
                 sync(db); push_ads(db); last_sync = time.time()
             STATUS.update(ok=True, note=None, at=datetime.now(timezone.utc).isoformat())

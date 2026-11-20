@@ -155,7 +155,7 @@ async function step(job: Json, tok: string, uid: string, b: Brand): Promise<stri
       if (!k.id) throw new IGError("Instagram did not accept a slide");
       kids.push(k.id); g = { ...g, children: kids }; await setIg(job, g);
     }
-    const c = await ig("POST", `${API}/${uid}/media`, tok, { media_type: "CAROUSEL", children: kids.join(","), caption });
+    const c = await ig("POST", `${API}/${uid}/media`, tok, { media_type: "CAROUSEL", children: kids.join(","), caption, ...(o.ig_ai === true ? { is_ai_generated: "true" } : {}) });
     if (!c.id) throw new IGError("Instagram did not accept the carousel");
     g = { ...g, container_id: c.id, container_at: iso(now()), caption: caption.slice(0, 80) };
     await setIg(job, g); return "carousel container created";
@@ -163,6 +163,7 @@ async function step(job: Json, tok: string, uid: string, b: Brand): Promise<stri
   const params: Json = { media_type: "REELS", video_url: await mediaUrl(o, o.ig_video ?? o.video), caption, share_to_feed: "true" };
   if (o.thumb) params.cover_url = await mediaUrl(o, o.thumb);
   if (o.title) params.audio_name = `${String(o.title).slice(0, 50)} · ${b.name}`;
+  if (o.ig_ai === true) params.is_ai_generated = "true";        // Meta's AI info label (set by the CRM's Ad studio; only at creation)
   const c = await ig("POST", `${API}/${uid}/media`, tok, params);
   if (!c.id) throw new IGError("Instagram did not accept the video");
   g = { ...g, container_id: c.id, container_at: iso(now()), caption: caption.slice(0, 80) };

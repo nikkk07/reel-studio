@@ -78,4 +78,74 @@ ok(crm.push_ads(db) == 0 and not sent, "AD08 a video over 48 MB is not sent (the
 rep = crm.report_of({"kind": "reel", "status": "review", "input": {"ad": True, "crm_item": 17}, "output": {}})
 ok(rep == {"status": "ready", "media": {"video": crm.STUDIO}}, "AD09 the status report no longer says to download it by hand")
 
+# ---------------------------------------------------------------- CRM > Ad studio asks this Mac to post (CRM 120)
+class PDB:
+    """jobs with a PostgREST-like guarded PATCH: only rows whose Instagram state is still open are changed."""
+    def __init__(self, jobs): self.jobs = {j["id"]: j for j in jobs}; self.patches = []
+    def select(self, t, q=""):
+        if "id=eq." in q:
+            j = self.jobs.get(q.split("id=eq.")[1].split("&")[0]); return [j] if j else []
+        if "output->ig->>via=eq.crm" in q:
+            return [j for j in self.jobs.values() if ((j.get("output") or {}).get("ig") or {}).get("via") == "crm"]
+        return []
+    def update(self, t, m, v):
+        j = self.jobs.get(m.split("id=eq.")[1].split("&")[0]); self.patches.append((m, v))
+        st = ((j or {}).get("output") or {}).get("ig", {}).get("state")
+        if not j or ("or=(" in m and st not in (None, *crm.OPEN_IG)): return []
+        j.update(v); return [j]
+
+base = {"ig_video": "6f/ig.mp4", "thumb": "6f/thumb.jpg", "ig_caption": "Claude's caption", "autopilot_hold": True}
+pdb = PDB([{"id": "6f", "status": "review", "input": {"ad": True}, "output": dict(base)},
+           {"id": "96", "status": "done", "input": {"ad": True}, "output": {**base, "ig": {"state": "posting", "via": "crm", "crm_item": 2}}},
+           {"id": "nf", "status": "review", "input": {"ad": True}, "output": {}},
+           {"id": "rl", "status": "done", "input": {}, "output": dict(base)}])
+acks = []
+def pcall(action, **b):
+    acks.append((action, b))
+    if action == "post_tasks":
+        return {"tasks": [{"id": 1, "action": "schedule", "studio_job": "6f", "post_at": "2026-11-21T07:30:00Z", "ai": True, "sig": "a" * 32,
+                           "caption": "12th ke baad pilot? Free career counselling. #pilottraining"},
+                          {"id": 2, "action": "cancel", "studio_job": "96"},
+                          {"id": 3, "action": "schedule", "studio_job": "nf", "post_at": "2026-11-21T07:30:00Z", "caption": "long enough caption", "sig": "b" * 32},
+                          {"id": 4, "action": "schedule", "studio_job": "rl", "post_at": "2026-11-21T07:30:00Z", "caption": "long enough caption", "sig": "c" * 32}]}
+    return {"ok": True}
+crm.call = pcall
+ok(crm.post_tasks(pdb) == 4, "AD10 every posting instruction from the CRM gets an answer")
+o = pdb.jobs["6f"]["output"]; a = {b["id"]: b for x, b in acks if x == "post_ack"}
+ok(pdb.jobs["6f"]["status"] == "done" and o["ig"] == {"state": "scheduled", "at": "2026-11-21T07:30:00Z", "via": "crm", "crm_item": 1, "attempts": 0}
+   and o["ig_caption"].startswith("12th ke baad") and o["ig_ai"] is True and o["autopilot_hold"] is False and o["thumb"] == "6f/thumb.jpg"
+   and a[1] == {"id": 1, "sig": "a" * 32, "state": "scheduled", "note": None},
+   "AD11 scheduled here with the CRM's time, caption and AI label; the CRM is told which instruction was carried out")
+ok(a[2]["state"] == "too_late" and pdb.jobs["96"]["output"]["ig"]["state"] == "posting", "AD12 a post already under way is never cancelled")
+ok(a[3]["state"] == "failed" and "storage" in a[3]["note"] and a[4]["state"] == "failed" and pdb.jobs["rl"]["status"] == "done"
+   and "ig" not in pdb.jobs["rl"]["output"], "AD13 a missing file or a job that is not an ad video is refused with a reason (an ordinary reel is never touched)")
+acks.clear()
+def ccall(action, **b):
+    acks.append((action, b))
+    return {"tasks": [{"id": 1, "action": "cancel", "studio_job": "6f"}]} if action == "post_tasks" else {"ok": True}
+crm.call = ccall
+crm.post_tasks(pdb)
+ok(pdb.jobs["6f"]["status"] == "review" and pdb.jobs["6f"]["output"]["ig"]["state"] == "cancelled"
+   and [b["state"] for x, b in acks if x == "post_ack"] == ["cancelled"], "AD14 unscheduled in the CRM: the post is stopped here and the video goes back to review")
+done = {"id": "6f", "kind": "reel", "status": "done", "input": {"ad": True},
+        "output": {"ig": {"state": "posted", "via": "crm", "crm_item": 1, "media_id": "17960000000000002", "permalink": "https://www.instagram.com/reel/x/",
+                          "posted_at": "2026-11-21T07:31:00Z"}, "ig_stats": {"views": 950, "likes": 61, "saved": 12}}}
+ok(crm.report_of(done) == {"status": "posted", "posted_at": "2026-11-21T07:31:00Z", "stats": {"views": 950, "likes": 61, "saves": 12},
+                           "ig_media_id": "17960000000000002", "media": {"permalink": "https://www.instagram.com/reel/x/"}},
+   "AD15 once posted, the CRM gets the post id, link and numbers (for Use in ads)")
+fail = {**done, "output": {"ig": {"state": "failed", "via": "crm", "crm_item": 1, "error": "Posting failed: video too short"}}}
+ok(crm.report_of(fail) == {"status": "ready", "ig_error": "Posting failed: video too short"}
+   and crm.report_of({**done, "output": {"ig": {"state": "scheduled", "via": "crm", "crm_item": 1}}}) is None,
+   "AD16 a refused post goes back to the owner with the reason; while it waits nothing is re-reported")
+pdb.jobs["6f"].update(done); sent_up = []
+crm.call = lambda action, **b: sent_up.append((action, b)) or {"ok": True}
+(ROOT / "state" / "crm_sent.json").write_text("{}")
+class SDB(PDB):
+    def select(self, t, q=""):
+        if "crm_item=not.is.null" in q: return []
+        return super().select(t, q)
+sdb = SDB([pdb.jobs["6f"]])
+ok(crm.sync(sdb) == 1 and sent_up[0][1]["id"] == 1 and sent_up[0][1]["ig_media_id"] == "17960000000000002",
+   "AD17 an ad made here and adopted by the CRM reports its post under the CRM item from the instruction")
+
 print(f"\n{sum(c for c, _ in R)}/{len(R)} passed"); sys.exit(0 if all(c for c, _ in R) else 1)

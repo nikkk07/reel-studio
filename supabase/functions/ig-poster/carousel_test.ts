@@ -93,3 +93,16 @@ Deno.test("CA02 a carousel does not wait for a video file; a reel still does", a
   assertEquals(r.weone.log.j2, "waiting for the Mac to prepare the file");
   assertEquals(r.weone.log.j3, "carousel container created");
 });
+
+Deno.test("CA03 an ad video the CRM scheduled carries Meta's AI info label; a normal reel does not", async () => {
+  DB.jobs.length = 0; IG.calls.length = 0;
+  DB.jobs.push({ id: "j4", status: "done", output: { ig_video: "j4/ig.mp4", ig_caption: "Pilot after 12th? Free counselling.", ig_ai: true, decided_at: past,
+    ig: { state: "scheduled", at: past, via: "crm", crm_item: 1 } } });
+  DB.jobs.push({ id: "j5", status: "done", output: { ig_video: "j5/ig.mp4", ig_caption: "Aviation fact of the day", decided_at: past, ig: { state: "scheduled", at: past } } });
+  await tick(brand);
+  const reels = IG.calls.filter((c: J) => c.body.media_type === "REELS");
+  assertEquals(reels.length, 2);
+  assertEquals(reels.find((c: J) => c.body.caption.startsWith("Pilot")).body.is_ai_generated, "true");
+  assertEquals(reels.find((c: J) => c.body.caption.startsWith("Aviation")).body.is_ai_generated, undefined);
+  assertEquals(DB.jobs[0].output.ig.via, "crm");            // the CRM's marks survive posting (the post id goes back with them)
+});
