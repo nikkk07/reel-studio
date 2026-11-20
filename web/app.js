@@ -1399,8 +1399,47 @@ function kwTable(rows, b) {
         h("td", {}, r.early ? h("span", { cls: "muted" }, "too early") : r.per == null ? "…" : r.per === best && best > 0 ? h("b", {}, `${r.per} ★`) : String(r.per))))))),
     h("p", { cls: "tiny faint", style: "margin-top:6px" }, `Judged 2 days after posting. The CTA Strategist reads these numbers and offers more of what earned DMs. Website visits from each DM show in ${host(b.website || "") || "your site"}'s analytics under utm_campaign reel_<keyword>.`));
 }
+// Universal (0027): every comment and every new DM gets the same message once per person, "Boarding pass…" under every comment,
+// the PDF guide in the chat, phone numbers kept for the CRM.
+function dmUniversalCard(b, log, refresh) {
+  const d = S.settings?.[bkey("dm", b.id)] || {};
+  const [kind, word] = d.on ? (DM_STATE[d.state] || DM_STATE.checking) : ["no", "Off"];
+  const on = h("input", { type: "checkbox", checked: d.on ? true : null });
+  const inbox = h("input", { type: "checkbox", checked: d.inbox !== false ? true : null });
+  const pub = h("input", { type: "checkbox", checked: d.public_reply !== false ? true : null });
+  const msgIn = h("textarea", { rows: 6, maxlength: "900", "aria-label": "Message", style: "margin-top:8px;width:100%" }, d.message || "");
+  const pubs = h("textarea", { rows: 3, "aria-label": "Public replies, one per line", style: "margin-top:8px;width:100%" }, (d.public_replies || []).join("\n"));
+  const pdf = h("input", { type: "url", value: d.pdf_url || "", placeholder: "https://…/cpl-roadmap.pdf", "aria-label": "PDF link", style: "margin-top:8px" });
+  const pdfName = h("input", { type: "text", maxlength: "60", value: d.pdf_name || "", placeholder: "CPL Roadmap PDF", "aria-label": "PDF name", style: "margin-top:8px" });
+  const thanks = h("textarea", { rows: 2, maxlength: "400", "aria-label": "Thank-you after a phone number", style: "margin-top:8px;width:100%" }, d.thanks || "");
+  const cap = h("input", { type: "number", min: "1", max: "200", value: String(d.cap || 200), "aria-label": "Sends per hour", style: "margin-top:8px;width:110px" });
+  const msg = statusMsg();
+  const n = (st) => log.filter((r) => r.state === st).length;
+  return h("article", { cls: `svc conn ${kind}`, style: "grid-column:1/-1" },
+    h("div", { cls: "svc-head" }, h("span", { cls: "plat-tile svc-ico" }, h("img", { src: PLAT_IMG.ig, alt: "" }),
+        h("span", { cls: `plat-badge ${kind}`, "aria-hidden": "true" }, kind === "ok" ? "✓" : kind === "no" ? "✕" : kind === "wait" ? "…" : "!")),
+      h("div", {}, h("h3", {}, "Comment-to-DM · every comment"), h("p", { cls: `small plat-state ${kind}` }, word))),
+    h("p", { cls: "small muted" }, "Every comment counts, whatever it says. Each person gets this message once (Instagram allows one private reply per comment), and every comment gets a public reply. Spam gets nothing; angry or \"fraud\" comments are left for you. Someone who messages the account gets the same message and the PDF. A commenter who replies gets the PDF in the chat. A phone number in a reply goes to the CRM as a lead. {name} becomes their @username."),
+    d.note && d.on ? h("p", { cls: "small", style: "color:#7D1C26" }, d.note) : null,
+    h("div", { cls: "check-row", style: "margin-top:14px" }, h("label", {}, on, h("span", {}, "On")), h("label", {}, inbox, h("span", {}, "Answer new DMs too")),
+      h("label", {}, pub, h("span", {}, "Public reply under every comment"))),
+    h("label", { cls: "fld" }, h("span", {}, "Message (max 900 characters)"), msgIn),
+    h("label", { cls: "fld" }, h("span", {}, "Public replies (one per line; they take turns)"), pubs),
+    h("div", { cls: "form-grid", style: "margin-top:0" }, h("label", { cls: "fld" }, h("span", {}, "PDF link (public https)"), pdf), h("label", { cls: "fld" }, h("span", {}, "PDF name"), pdfName),
+      h("label", { cls: "fld" }, h("span", {}, "Sends per hour (max 200)"), cap)),
+    h("label", { cls: "fld" }, h("span", {}, "Thank-you when someone sends their number"), thanks),
+    h("div", { cls: "svc-btns" }, h("button", { cls: "btn primary", onclick: async () => {
+      msg.textContent = "Saving…";
+      try { await rpc("set_dm_universal", { p_brand: b.id, p: { on: on.checked, inbox: inbox.checked, public_reply: pub.checked, message: msgIn.value.trim(),
+          public_replies: pubs.value.split("\n").map((x) => x.trim()).filter(Boolean), pdf_url: pdf.value.trim(), pdf_name: pdfName.value.trim(), thanks: thanks.value.trim(), cap: Number(cap.value) || 200 } });
+        await loadSettings(); toast(on.checked ? `Every comment and DM is answered for ${b.name}, within about 2 minutes.` : "Saved (off)."); refresh(); }
+      catch (e) { msg.textContent = errText(e); } } }, "Save"), msg),
+    h("p", { cls: "small", style: "margin-top:8px" }, h("b", {}, `Last 7 days: ${n("sent")} DMs · ${n("sent") + n("public")} public replies · ${n("skipped")} skipped`),
+      log.length ? h("span", { cls: "muted" }, ` · latest: ${log.slice(0, 4).map((r) => `@${r.username} (${r.state === "skipped" ? r.reason || "skipped" : r.state}, ${ago(r.created_at)})`).join(", ")}`) : null));
+}
 function dmCard(b, log, refresh, kwRes) {
   const d = S.settings?.[bkey("dm", b.id)] || { on: false, keywords: [], message: "" };
+  if (d.mode === "universal") return dmUniversalCard(b, log, refresh);
   const [kind, word] = d.on ? (DM_STATE[d.state] || DM_STATE.checking) : ["no", "Off"];
   const kw = h("input", { type: "text", maxlength: "15", value: (d.keywords || [])[0] || "", placeholder: "Keyword, e.g. QUOTE", "aria-label": "Keyword", style: "margin-top:8px;text-transform:uppercase" });
   const msgIn = h("textarea", { rows: 5, maxlength: "900", "aria-label": "Message sent to the commenter", style: "margin-top:8px;width:100%" }, d.message || "");
@@ -1580,7 +1619,7 @@ async function viewAccount() {
     if (!body.isConnected) return;
     await Promise.all([loadSettings().catch(() => {}), loadBrands().catch(() => {}), loadOwner()]);
     const since = new Date(Date.now() - 7 * 86400e3).toISOString();
-    const dmLog = (await sb.from("dm_log").select("username,state,created_at").eq("brand", S.brand).gte("created_at", since).order("created_at", { ascending: false }).limit(200).then((r) => r.data, () => [])) || [];
+    const dmLog = (await sb.from("dm_log").select("username,state,reason,created_at").eq("brand", S.brand).gte("created_at", since).order("created_at", { ascending: false }).limit(200).then((r) => r.data, () => [])) || [];
     const kwRes = await keywordResults(S.brand);
     const b = brandOf(); const nowSig = JSON.stringify([b, PLATS.map((k) => stOf(PST[k])), stOf("website_status"), S.settings?.[bkey("dm")], dmLog.length, kwRes, S.settings?.linkedin_app, S.settings?.meta_app, S.settings?.youtube_app]);
     if (!force && nowSig === sig) return; sig = nowSig;

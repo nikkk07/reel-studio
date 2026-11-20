@@ -8,8 +8,9 @@ Deno.env.set("FB_API", "http://fb.test/v1"); Deno.env.set("PEXELS_API", "http://
 Deno.env.set("GROQ_API", "http://groq.test/v1"); Deno.env.set("COVERR_API", "http://coverr.test");
 
 type Row = Record<string, any>;
-const T: Record<string, Row[]> = { settings: [], secrets: [], jobs: [], brands: [], dm_log: [] };
-const DMS: { comment: string; text: string }[] = []; const REPLIES: string[] = []; const REPLY_TEXT: string[] = [];
+const T: Record<string, Row[]> = { settings: [], secrets: [], jobs: [], brands: [], dm_log: [], dm_person: [], dm_send: [] };
+const DMS: { comment: string; text: string; to?: string; file?: string }[] = [];
+const CONVS: Row[] = []; const MSGS: Record<string, Row> = {}; let DM_FAIL = ""; const REPLIES: string[] = []; const REPLY_TEXT: string[] = [];
 const IG_COMMENTS: Record<string, Row[]> = {}; const IG_MEDIA: Record<string, Row[]> = {}; let DM_PERM = true;
 const IG_USERS: Record<string, { id: string; username: string }> = {};       // token -> account
 const IG_POSTS: { user: string; caption: string; id: string }[] = [];
@@ -49,6 +50,12 @@ globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {})
     if (method === "GET" && (q.get("select") ?? "").startsWith("mid:"))      // per-reel DM plans by Instagram media id
       return J(rows.filter((r) => match(r, q)).map((r) => ({ mid: r.output?.ig?.media_id, dm: r.output?.dm })));
     if (method === "GET") return J(rows.filter((r) => match(r, q)).map((r) => structuredClone(r)));
+    if (method === "POST" && table === "dm_person") {        // primary key (brand, person), merged like resolution=merge-duplicates
+      const row = JSON.parse(body); const i = rows.findIndex((r) => r.brand === row.brand && r.person === row.person);
+      if (i >= 0) rows[i] = { ...rows[i], ...row }; else rows.push({ ...row, created_at: new Date().toISOString() });
+      return new Response("", { status: 201 });
+    }
+    if (method === "POST" && table === "dm_send") { rows.push({ ...JSON.parse(body), id: rows.length + 1, created_at: new Date().toISOString() }); return new Response("", { status: 201 }); }
     if (method === "POST" && table === "dm_log") {             // unique comment id, like the real table
       const row = JSON.parse(body);
       if (rows.some((r) => r.comment_id === row.comment_id)) return J({ message: "duplicate key" }, 409);
@@ -71,10 +78,17 @@ globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {})
     if (!me) return J({ error: { code: 190, message: "Invalid OAuth access token" } }, 400);
     if (u.pathname === "/v1/me") return J({ user_id: me.id, username: me.username, account_type: "BUSINESS" });
     if (u.pathname === `/v1/${me.id}/media` && method === "GET" && IG_MEDIA[me.id]) return J({ data: IG_MEDIA[me.id] });
+    if (u.pathname === "/v1/me/conversations" && method === "GET") return J({ data: CONVS });
+    if (u.pathname.startsWith("/v1/cv") && method === "GET") { const cv = CONVS.find((c) => c.id === u.pathname.split("/")[2]); return J({ messages: { data: (cv?.msgs ?? []).map((id: string) => ({ id, created_time: MSGS[id].created_time })) } }); }
+    if (u.pathname.startsWith("/v1/msg") && method === "GET") return J(MSGS[u.pathname.split("/")[2]]);
     if (u.pathname.endsWith("/comments") && method === "GET") return J({ data: IG_COMMENTS[u.pathname.split("/")[2]] ?? [] });
     if (u.pathname === `/v1/${me.id}/messages` && method === "POST") {
       if (!DM_PERM) return J({ error: { code: 10, message: "Application does not have permission for this action" } }, 403);
-      const b = JSON.parse(body); DMS.push({ comment: b.recipient.comment_id, text: b.message.text }); return J({ recipient_id: "x", message_id: "m" });
+      const b = JSON.parse(body);
+      if (DM_FAIL) return J({ error: { code: 100, message: DM_FAIL } }, 400);
+      DMS.push({ comment: b.recipient.comment_id, to: b.recipient.id, text: b.message.text, file: b.message.attachment?.payload?.url });
+      const c = Object.values(IG_COMMENTS).flat().find((x) => x.id === b.recipient.comment_id);
+      return J({ recipient_id: b.recipient.id ?? c?.from?.id ?? "x", message_id: "m" });
     }
     if (u.pathname.endsWith("/replies") && method === "POST") { REPLIES.push(u.pathname.split("/")[2]); REPLY_TEXT.push(u.searchParams.get("message") ?? ""); return J({ id: "r" }); }
     const p = new URLSearchParams(body);
@@ -105,7 +119,7 @@ const { keysTick } = await import("./keys.ts");
 const { fbCaption } = await import("./facebook.ts");
 const { commentary } = await import("./linkedin.ts");
 const { checksTick } = await import("./checks.ts");
-const { dmTick, matches, render } = await import("./dm.ts");
+const { dmTick, matches, render, classify, phoneOf, DEFAULT_PUBLIC } = await import("./dm.ts");
 const { pruneReason } = await import("./retention.ts");
 const { presign } = await import("./r2.ts");
 const st = (key: string) => T.settings.find((r) => r.key === key)?.value ?? {};
@@ -114,7 +128,8 @@ const ago = (m: number) => new Date(Date.now() - m * 60e3).toISOString();
 function reset() {
   for (const k of Object.keys(T)) T[k] = [];
   for (const k of Object.keys(IG_USERS)) delete IG_USERS[k];
-  IG_POSTS.length = 0; CALLS.length = 0; DMS.length = 0; REPLIES.length = 0; REPLY_TEXT.length = 0; DM_PERM = true;
+  IG_POSTS.length = 0; CALLS.length = 0; DMS.length = 0; REPLIES.length = 0; REPLY_TEXT.length = 0; DM_PERM = true; DM_FAIL = "";
+  CONVS.length = 0; for (const k of Object.keys(MSGS)) delete MSGS[k];
   for (const k of Object.keys(IG_COMMENTS)) delete IG_COMMENTS[k]; for (const k of Object.keys(IG_MEDIA)) delete IG_MEDIA[k];
   T.brands = [{ id: "weone", name: "We One Aviation", links: {} }, { id: "flystar", name: "Flying Star Aviator", links: {} }, { id: "bookmycharter", name: "Book My Charter", links: {} }];
 }
@@ -338,4 +353,90 @@ Deno.test("Comment-to-DM per reel: the reel's own keyword gets its own DM and re
   assert(!("k3" in by), "another reel's keyword on a post without that plan is not matched");
   assert(REPLY_TEXT.includes("Sent! Check your messages for the checklist."), "the reel's own public reply");
   assertEquals(T.dm_log.find((r) => r.comment_id === "k1")!.keyword, "MEDICAL");
+});
+
+// ---------- universal Comment-to-DM and the inbox (0027) ----------
+function weoneUniversal(extra: Row = {}) {
+  reset();
+  IG_USERS["tok-w1"] = { id: "100", username: "weoneaviation" };
+  T.secrets.push({ key: "instagram_token", value: "tok-w1", updated_at: ago(60) });
+  T.settings.push({ key: "instagram_status", value: { state: "connected", user_id: "100", username: "weoneaviation", checked_at: ago(1) } },
+    { key: "dm", value: { on: true, mode: "universal", message: "Namaste {name}! CPL details.", state: "ready", inbox: true, ...extra } });
+  IG_MEDIA["100"] = [{ id: "ad1", timestamp: ago(90).replace("Z", "+0000") }];
+}
+const conv = (id: string, msgs: [string, string, string, string, number][]) => {   // [msgId, fromId, username, text, minutesAgo]
+  CONVS.push({ id, updated_time: ago(Math.min(...msgs.map((m) => m[4]))).replace("Z", "+0000"), msgs: msgs.sort((a, b) => a[4] - b[4]).map((m) => m[0]) });
+  for (const [mid, from, username, message, m] of msgs) MSGS[mid] = { id: mid, created_time: ago(m).replace("Z", "+0000"), from: { id: from, username }, message };
+};
+
+Deno.test("Universal: spam and angry comments get nothing; links, promotions and 'fraud' are recognised; phone numbers are read", () => {
+  assertEquals(classify("check my profile for followers"), "spam");
+  assertEquals(classify("visit www.cheap.xyz"), "spam");
+  assertEquals(classify("ye sab fraud hai"), "negative");
+  assertEquals(classify("Fees kitni hai? 12th PCM done"), null);
+  assertEquals(phoneOf("mera number 98765 43210 hai"), "+919876543210");
+  assertEquals(phoneOf("+91-98765-43210"), "+919876543210");
+  assertEquals(phoneOf("roll no 1234567890 and 2026"), null, "a number that is not an Indian mobile");
+  assertEquals(DEFAULT_PUBLIC[0], "Boarding pass is in your inbox 🎫");
+});
+
+Deno.test("Universal: every comment counts; one DM per person, a public reply under every comment; spam, angry and own comments skipped", async () => {
+  weoneUniversal();
+  IG_COMMENTS["ad1"] = [
+    { id: "u1", text: "nice", timestamp: ago(9), username: "riya", from: { id: "900", username: "riya" } },
+    { id: "u2", text: "fees?", timestamp: ago(8), username: "riya", from: { id: "900", username: "riya" } },
+    { id: "u3", text: "🔥", timestamp: ago(7), username: "aman", from: { id: "901", username: "aman" } },
+    { id: "u4", text: "follow back for followers", timestamp: ago(6), username: "bot1", from: { id: "902", username: "bot1" } },
+    { id: "u5", text: "fake institute", timestamp: ago(5), username: "angry", from: { id: "903", username: "angry" } },
+    { id: "u6", text: "Boarding pass is in your inbox 🎫", timestamp: ago(4), username: "weoneaviation", from: { id: "100", username: "weoneaviation" } }];
+  await dmTick(T.brands as any, true);
+  assertEquals(DMS.map((x) => x.comment), ["u1", "u3"], "riya once (first comment), aman once");
+  assertEquals(DMS[0].text, "Namaste @riya! CPL details.");
+  assertEquals(REPLIES, ["u1", "u2", "u3"], "a public reply under each of riya's comments and aman's");
+  assert(REPLY_TEXT.every((t) => t.startsWith("Boarding pass is in your inbox")));
+  assertEquals(T.dm_log.find((r) => r.comment_id === "u2")!.state, "public");
+  assertEquals([T.dm_log.find((r) => r.comment_id === "u4")!.reason, T.dm_log.find((r) => r.comment_id === "u5")!.reason], ["spam", "negative"]);
+  assert(!T.dm_log.some((r) => r.comment_id === "u6"), "the account's own comment is never touched");
+  assertEquals(T.dm_person.map((r) => r.person).sort(), ["900", "901"]);
+  IG_COMMENTS["ad1"].push({ id: "u7", text: "again", timestamp: ago(1), username: "riya", from: { id: "900", username: "riya" } });
+  await dmTick(T.brands as any, true);
+  assertEquals(DMS.length, 2, "riya's later comment: no second DM");
+  assertEquals(REPLIES.at(-1), "u7", "but a public reply");
+});
+
+Deno.test("Universal: no DM means no 'check your inbox' reply; the hourly cap holds", async () => {
+  weoneUniversal({ cap: 3 });
+  IG_COMMENTS["ad1"] = [1, 2, 3, 4, 5].map((i) => ({ id: `x${i}`, text: "hi", timestamp: ago(10 - i), username: `p${i}`, from: { id: `80${i}`, username: `p${i}` } }));
+  await dmTick(T.brands as any, true);
+  assertEquals(DMS.length + REPLIES.length, 3, "three sends in the hour, no more");
+  weoneUniversal(); DM_FAIL = "This message is sent outside of allowed window";
+  IG_COMMENTS["ad1"] = [{ id: "y1", text: "hi", timestamp: ago(3), username: "zed", from: { id: "700", username: "zed" } }];
+  await dmTick(T.brands as any, true);
+  assertEquals(REPLIES.length, 0); assertEquals(T.dm_log[0].state, "failed");
+});
+
+Deno.test("Inbox: a new person who messages gets the welcome and the PDF once; a chat the team already runs is left alone", async () => {
+  weoneUniversal({ pdf_url: "https://files.test/cpl-roadmap.pdf", pdf_name: "CPL Roadmap PDF" });
+  IG_COMMENTS["ad1"] = [];
+  conv("cv1", [["msg1", "950", "neha", "Hi, CPL ke baare me batao", 3]]);
+  conv("cv2", [["msg2", "100", "weoneaviation", "Hello Sir, as discussed", 30], ["msg3", "951", "oldstudent", "ok thanks", 4]]);
+  await dmTick(T.brands as any, true);
+  const toNeha = DMS.filter((x) => x.to === "950");
+  assertEquals(toNeha.map((x) => x.text ?? x.file), ["Namaste @neha! CPL details.", "https://files.test/cpl-roadmap.pdf"]);
+  assert(!DMS.some((x) => x.to === "951"), "the team already talks to this person: no bot message");
+  await dmTick(T.brands as any, true);
+  assertEquals(DMS.filter((x) => x.to === "950").length, 2, "never sent twice");
+});
+
+Deno.test("Inbox: a commenter who replies gets the PDF; a phone number is kept for the CRM with a thank-you", async () => {
+  weoneUniversal({ pdf_url: "https://files.test/cpl-roadmap.pdf", pdf_name: "CPL Roadmap PDF", thanks: "Thanks {name}! A counsellor will call you today." });
+  IG_COMMENTS["ad1"] = [{ id: "z1", text: "details", timestamp: ago(20), username: "kabir", from: { id: "960", username: "kabir" } }];
+  await dmTick(T.brands as any, true);
+  assert(DMS[0].text!.includes("Reply here and we'll send you the CPL Roadmap PDF"), "the private reply invites a reply for the PDF");
+  conv("cv3", [["msg9", "100", "weoneaviation", DMS[0].text!, 19], ["msg10", "960", "kabir", "PDF please, my no. 98111 22333", 2]]);
+  await dmTick(T.brands as any, true);
+  const toKabir = DMS.filter((x) => x.to === "960").map((x) => x.text ?? x.file);
+  assertEquals(toKabir, ["Here's your CPL Roadmap PDF ✈️", "https://files.test/cpl-roadmap.pdf", "Thanks @kabir! A counsellor will call you today."]);
+  const p = T.dm_person.find((r) => r.person === "960")!;
+  assertEquals([p.phone, p.lead_state, !!p.pdf_at], ["+919811122333", "pending", true]);
 });

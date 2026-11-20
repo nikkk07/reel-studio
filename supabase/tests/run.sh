@@ -7,9 +7,11 @@ DB=rs_test_$$
 psql -q -c "CREATE DATABASE $DB" >/dev/null
 trap 'psql -q -c "DROP DATABASE IF EXISTS $DB" >/dev/null' EXIT
 psql -q -X -v ON_ERROR_STOP=1 -d $DB -f 00_stub.sql >/dev/null
-for f in ../migrations/0*.sql ../migrations/0026_crm_content.sql; do     # 0026 twice: must be re-runnable
+for f in ../migrations/0*.sql ../migrations/0026_crm_content.sql ../migrations/0027_dm_universal.sql; do     # 0026 and 0027 twice: must be re-runnable
   sed -E '/create extension( if not exists)? (pg_cron|pg_net|supabase_vault)/Id' "$f" | psql -q -X -v ON_ERROR_STOP=1 -d $DB >/dev/null 2>/tmp/rs_err.txt \
     || { echo "FAILED applying $f"; head -3 /tmp/rs_err.txt; exit 1; }
 done
 out=$(psql -q -X -d $DB -f 0026_crm_content_test.sql 2>&1 | grep -E "PASS|FAIL|ERROR" | sed 's/.*NOTICE:  //')
 echo "$out"; ! grep -qE "FAIL|ERROR" <<<"$out" && echo "ALL 0026 CHECKS PASSED"
+out=$(psql -q -X -d $DB -f 0027_dm_universal_test.sql 2>&1 | grep -E "PASS|FAIL|ERROR" | sed 's/.*NOTICE:  //')
+echo "$out"; ! grep -qE "FAIL|ERROR" <<<"$out" && echo "ALL 0027 CHECKS PASSED"

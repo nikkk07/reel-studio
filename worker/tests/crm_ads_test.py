@@ -148,4 +148,26 @@ sdb = SDB([pdb.jobs["6f"]])
 ok(crm.sync(sdb) == 1 and sent_up[0][1]["id"] == 1 and sent_up[0][1]["ig_media_id"] == "17960000000000002",
    "AD17 an ad made here and adopted by the CRM reports its post under the CRM item from the instruction")
 
+# ---------------------------------------------------------------- Instagram DM phone numbers -> CRM Leads (0027 / CRM 123)
+class LDB:
+    def __init__(self, rows): self.rows = rows; self.done = []; self.q = []
+    def select(self, t, q=""): self.q.append((t, q)); return [r for r in self.rows if r.get("lead_state") == "pending"]
+    def rpc(self, fn, **a):
+        self.done.append((fn, a))
+        for r in self.rows:
+            if r["person"] == a["p_person"]: r["lead_state"] = a["p_state"]
+ldb = LDB([{"brand": "weone", "person": "960", "username": "kabir", "phone": "+919811122333", "source": "comment", "lead_state": "pending"},
+           {"brand": "weone", "person": "961", "username": "zed", "phone": "+911234", "source": "dm", "lead_state": "pending"}])
+got = []
+def lead_call(action, **b):
+    got.append((action, b))
+    if b["phone"] == "+911234": raise RuntimeError("CRM dm_lead: HTTP 422 phone must be an Indian mobile number")
+    return {"status": "created", "lead_id": "u-1"}
+crm.call = lead_call
+ok(crm.dm_leads(ldb) == 1 and got[0] == ("dm_lead", {"username": "kabir", "phone": "+919811122333", "source": "comment"})
+   and "brand=eq.weone" in ldb.q[0][1] and [r["lead_state"] for r in ldb.rows] == ["sent", "failed"],
+   "AD18 a phone number from an Instagram chat goes to the CRM once; a refused one is marked and not retried")
+got.clear()
+ok(crm.dm_leads(ldb) == 0 and not got, "AD19 nothing is sent twice")
+
 print(f"\n{sum(c for c, _ in R)}/{len(R)} passed"); sys.exit(0 if all(c for c, _ in R) else 1)

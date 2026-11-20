@@ -271,6 +271,30 @@ def post_tasks(db) -> int:
     return n
 
 
+# ------------------------------------------------------------------ Instagram DM phone numbers -> CRM > Leads (Reel Studio 0027, CRM 123)
+def dm_leads(db) -> int:
+    """Phone numbers people sent We One Aviation's Instagram (DM automation) become CRM leads. A refused number is not retried."""
+    n = 0
+    rows = db.select("dm_person", "select=brand,person,username,phone,source&brand=eq.weone&lead_state=eq.pending&order=updated_at&limit=20") or []
+    for p in rows:
+        try:
+            r = call("dm_lead", username=p.get("username") or "", phone=p.get("phone") or "", source=p.get("source") or "comment") or {}
+        except CRMAuth:
+            raise
+        except Exception as e:  # noqa: BLE001
+            if "HTTP 422" in str(e):
+                db.rpc("dm_lead_done", p_brand=p["brand"], p_person=p["person"], p_state="failed", p_note=str(e)[:300])
+            else:
+                log.warning("CRM DM lead @%s: %s", p.get("username"), str(e)[:200])   # tried again next round
+            continue
+        ok_ = bool(r.get("lead_id"))
+        db.rpc("dm_lead_done", p_brand=p["brand"], p_person=p["person"], p_state="sent" if ok_ else "failed",
+               p_note=str(r.get("status") or r.get("error") or "")[:300])
+        log.info("CRM DM lead @%s: %s", p.get("username"), r.get("status") or r.get("error"))
+        n += ok_
+    return n
+
+
 # ------------------------------------------------------------------ finished ad videos -> CRM > Content > Ad creatives
 MAX_VIDEO_MB = 48                        # the CRM's content bucket takes 50 MB per file
 
@@ -424,6 +448,7 @@ def loop(db, stop):
         try:
             take(db)
             post_tasks(db)
+            dm_leads(db)
             if time.time() - last_sync > 300:
                 sync(db); push_ads(db); last_sync = time.time()
             STATUS.update(ok=True, note=None, at=datetime.now(timezone.utc).isoformat())
