@@ -17,18 +17,19 @@ def _is_cta(p, name="We One Aviation"):
     """Any spelling of the account's call-to-action line: English, Devanagari respelling (We One), or in the caption."""
     say, cap = p.get("say", ""), p.get("caption", "").replace("*", "")
     n = name.lower(); t = (say + " " + cap).lower()
-    named = n in t or (n == "we one aviation" and "वी वन एविएशन" in say)
+    named = n in t or (n == "we one aviation" and any(x in say for x in WE_ONE_SAY))
     return named and ("follow" in t or "फॉलो" in say)          # a factual identity line ("We One Aviation: DGCA ground classes") is kept
 
 
-ACCOUNTS = ("we one aviation", "वी वन एविएशन", "book my charter", "flying star", "legal group")
+WE_ONE_SAY = ("वुई वन एविएशन", "वी वन एविएशन")          # spoken form chosen by the owner's ear test (20 Nov), then the old one
+ACCOUNTS = ("we one aviation", *WE_ONE_SAY, "book my charter", "flying star", "legal group")
 
 
 def _other_account(p, name):
     """A line that names one of the studio's other accounts (each account's reels only ever talk about itself)."""
     t = (p.get("say", "") + " " + p.get("caption", "").replace("*", "")).lower()
     own = name.lower()
-    return any(a in t for a in ACCOUNTS if a != own and not (own == "we one aviation" and a == "वी वन एविएशन"))
+    return any(a in t for a in ACCOUNTS if a != own and not (own == "we one aviation" and a in WE_ONE_SAY))
 
 
 def _brand(ctx):
@@ -555,7 +556,7 @@ TTS_RULES = {
            "JPG -> जे पी जी, FAQ -> एफ़ ए क्यू, CPL -> सी पी एल). Abbreviations normally said as a word stay a word (NASA -> नासा).\n"
            "- Numbers, years, times and units as spoken words in Devanagari, in the language the presenter would use (24 hours -> ट्वेंटी फ़ोर आवर्स, 70% -> सेवेंटी पर्सेंट, "
            "2026 -> ट्वेंटी ट्वेंटी सिक्स). No digits at all.\n"
-           "- Names and brands respelled in Devanagari (Flying Star Aviator -> फ़्लाइंग स्टार एविएटर, Pariksha -> परीक्षा, We One Aviation -> वी वन एविएशन).\n"
+           "- Names and brands respelled in Devanagari (Flying Star Aviator -> फ़्लाइंग स्टार एविएटर, Pariksha -> परीक्षा, We One Aviation -> वुई वन एविएशन, never with a comma or pause inside the name).\n"
            "- Punctuation: only comma, । and ? . No dashes, colons, semicolons, brackets, slashes, quotes, ellipses or symbols (% ₹ & + / @). No Latin letters at all."),
     "en": ("- Plain spoken English. Abbreviations said letter by letter as separate capital letters with spaces (D G C A, P D F) unless normally said as a word (NASA). "
            "Before a number, P and B are easily confused: write them as words (PC-12 -> Pee Cee twelve).\n"
