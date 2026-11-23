@@ -209,6 +209,10 @@ def _presenter_shots(ctx, spec, vo, style):
         if any(v.get("state") in ("running", "done") for v in st.values()) and "stopped with" not in str(e) and "longer than" not in str(e):
             raise TransientError(f"AI presenter check failed while its clips render on Kaggle: {str(e)[:160]}")
         return off(str(e)[:200])
+    lost = [s["id"] for s in aspec["shots"] if s.get("presenter") and s["id"] not in made]
+    if lost:                              # one presenter shot failed on Kaggle: keep the ones that worked, clips cover the rest
+        ctx.log(f"AI presenter shot(s) {', '.join(lost)} could not be made; that part uses clips and graphics", "warn")
+        aspec = {**aspec, "shots": [s for s in aspec["shots"] if s["id"] not in lost]}
     ctx.path("spec_ai.json").write_text(json.dumps(aspec, ensure_ascii=False, indent=1), encoding="utf-8")
     ctx.merge_output({"ai_video": {"style": style, "presenter": {sid: {"gpu_h": r.get("gpu_h"), "kaggle": r.get("lane")} for sid, r in made.items()}}})
     return {sid: r["file"] for sid, r in made.items()}, aspec

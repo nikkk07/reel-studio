@@ -116,6 +116,13 @@ except presenter.Unavailable as e:
     raised = "ERROR" in str(e)
 os.environ["FAKE_KAGGLE_MODE"] = "ok"
 ok(raised, "PR11 a failed Kaggle run is reported (the reel then uses the classic style)")
+w3 = ROOT / "job3"; w3.mkdir()
+(w3 / "kaggle.json").write_text(json.dumps({"P2": {"lane": "B", "state": "failed", "t0": 0, "need": 6.0}}))
+n1 = len([1 for _ in open(ROOT / "kaggle.log")])
+part = presenter.make(shots, "studio", w3, logs.append, lambda *a: None, lambda: None)
+pushed = [json.loads(l) for l in open(ROOT / "kaggle.log")][n1:]
+ok(set(part) == {"P1"} and len([c for c in pushed if c[:2] == ["kernels", "push"]]) == 1,
+   "PR11b one shot failed: the others are kept and the failed one is not rendered (or paid for) again")
 
 # ---------------------------------------------------------------- reel falls back cleanly
 class DB:

@@ -228,8 +228,9 @@ def make(shots: list, style: str, work: Path, log, trace, check_cancel, scenes=N
     work.mkdir(parents=True, exist_ok=True)
     state_p = work / "kaggle.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}        # survives a Mac restart mid-render
-    todo = [s for s in shots if s["id"] not in st or st[s["id"]].get("state") != "done"]
-    t_start = time.time()
+    # a shot that failed before is not tried again here (it would cost hours): the reel shows clips there instead
+    todo = [s for s in shots if s["id"] not in st or st[s["id"]].get("state") not in ("done", "failed")]
+    t_start = time.time(); why = ""
     while todo:
         check_cancel()
         busy = {v["lane"] for v in st.values() if v.get("state") == "running"}
@@ -260,15 +261,18 @@ def make(shots: list, style: str, work: Path, log, trace, check_cancel, scenes=N
             elif k in ("ERROR", "CANCEL"):
                 spend((time.time() - v["t0"]) / 3600)
                 st[sid] = {**v, "state": "failed"}; state_p.write_text(json.dumps(st))
-                raise Unavailable(f"Kaggle kernel {v['lane']} stopped with {k} on {sid}")
+                why = f"Kaggle kernel {v['lane']} stopped with {k} on {sid}"; log(f"AI presenter {sid}: {why}"); trace(sid, "fail", why[:80])
             elif time.time() - v["t0"] > TIMEOUT_S:
                 spend(TIMEOUT_S / 3600)
                 st[sid] = {**v, "state": "failed"}; state_p.write_text(json.dumps(st))
-                raise Unavailable(f"Kaggle took longer than {TIMEOUT_S // 3600} h on {sid}")
+                why = f"Kaggle took longer than {TIMEOUT_S // 3600} h on {sid}"; log(f"AI presenter {sid}: {why}"); trace(sid, "fail", why[:80])
             state_p.write_text(json.dumps(st))
-        todo = [s for s in shots if st.get(s["id"], {}).get("state") != "done"]
+        todo = [s for s in shots if st.get(s["id"], {}).get("state") not in ("done", "failed")]
         if todo:
             for _ in range(max(1, POLL_S // 10)):
                 check_cancel(); time.sleep(min(10, POLL_S))
-    log(f"AI presenter: {len(shots)} shot(s) in {(time.time() - t_start) / 3600:.1f} h")
-    return {sid: v for sid, v in st.items() if v.get("state") == "done"}
+    done = {sid: v for sid, v in st.items() if v.get("state") == "done" and sid in {x["id"] for x in shots}}
+    if not done:                         # nothing usable: the reel uses the classic style
+        raise Unavailable(why or "no presenter shot could be made")
+    log(f"AI presenter: {len(done)} of {len(shots)} shot(s) in {(time.time() - t_start) / 3600:.1f} h")
+    return done
