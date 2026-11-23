@@ -76,6 +76,8 @@ def concept_of(item: dict) -> dict:
         if b.get("script"):          # the owner-approved timed script from the CRM: the Scriptwriter keeps its words
             sc = b["script"]
             c["approved_script"] = sc.get("scenes") or sc if isinstance(sc, dict) else sc
+            if isinstance(sc, dict) and isinstance(sc.get("cta"), dict) and sc["cta"].get("say"):
+                c["ad_cta"] = {"say": str(sc["cta"]["say"]), "caption": str(sc["cta"].get("caption") or "")}   # the owner's own closing line
             if isinstance(sc, dict) and sc.get("target_seconds") and not b.get("est_seconds"):
                 c["est_seconds"] = int(sc["target_seconds"])
         c["angle"] = c["angle"] or (b.get("visual_brief") or "")

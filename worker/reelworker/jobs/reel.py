@@ -489,11 +489,12 @@ def stage_script(ctx, prog):
     if fs:                                   # new reels: hooks, open loops, re-hooks and intent notes (retention architecture)
         block += "\n\n" + brain.prompt("retention")
     if inp.get("ad"):                        # a Meta lead ad from the CRM: the owner approved its script before it was ordered
-        prof = {**prof, "_dm": None, "_ad": True}
+        cta = (concept.get("ad_cta") if isinstance(concept, dict) else None) or {}
+        prof = {**prof, "_dm": None, "_ad": True, "_ad_say": cta.get("say") or None, "_ad_caption": cta.get("caption") or None}
         ok_script = (concept.get("approved_script") if isinstance(concept, dict) else None)
         block += ("\n\n## This is a Meta lead ad (Instagram/Facebook), not a normal reel\n"
                   f"* Length {int(concept.get('est_seconds') or 30)} s (25–35 s). Hook in the first 2 seconds; captions carry the message with the sound off.\n"
-                  "* The last line is added automatically and invites viewers to fill the lead form for free career counselling. Do not write a follow or comment line.\n"
+                  "* The last line (the lead-form invitation) is added automatically. Do not write a follow, comment or form line yourself.\n"
                   "* Never state fees, salaries, job guarantees or a phone number.")
         if ok_script:
             block += ("\n* The owner approved this timed script word for word. Keep every spoken line and every on-screen text exactly; "
