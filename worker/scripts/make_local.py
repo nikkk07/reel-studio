@@ -8,7 +8,7 @@ to the website. The job lives in ~/ReelStudio/jobs/<id>/ as usual; the finished 
 
 API keys (Pexels, Pixabay, ...) come from the Mac's own .env, as the worker already does when the site is unreachable.
 """
-import argparse, json, os, re, shutil, sys, uuid
+import argparse, json, logging, os, re, shutil, sys, uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -91,6 +91,7 @@ class LocalDB:
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S", stream=sys.stdout, force=True)
     a = argparse.ArgumentParser()
     a.add_argument("spec"); a.add_argument("--video", default="", choices=["", "presenter_studio", "presenter_fast"])
     a.add_argument("--brand", default="weone"); a.add_argument("--ad", action="store_true"); a.add_argument("--job")
