@@ -8,6 +8,7 @@ import json, math, re, subprocess, sys
 import numpy as np, cv2, skia
 from .gfx_base import (TF, load_fonts, FPS, W, H, RED, AMBER, CYAN, WHITE, GREEN, clamp, ease_out_expo, ease_out_back,
                        ease_io, prog, col, font, tw, text, glass, chip)
+from . import proedit
 
 COLORS = {"red": RED, "amber": AMBER, "cyan": CYAN, "green": GREEN, "white": WHITE, "violet": (170, 150, 255)}
 def C(name, default=None): return COLORS.get(str(name or "").lower(), AMBER if default is None else default)
@@ -221,8 +222,68 @@ def g_plane_path(c, t, g):
     text(c, str(p.get("exit_label", "EXIT")).upper()[:12], cx + 0.32 * s + 20, cy + 0.95 * s + 10, font("black", 60), AMBER, alpha=q, align="l")
     text(c, str(p.get("exit_label", "EXIT")).upper()[:12], cx - 0.92 * s, cy + 0.25 * s + 70, font("black", 48), AMBER, alpha=q)
 
+# ------------------------------------------------------------------ pro edit layer (opt-in graphics for ad reels)
+def _argb(c_, a):
+    return skia.ColorSetARGB(int(255 * clamp(a)), int(c_[0]), int(c_[1]), int(c_[2]))
+
+
+def g_light_leak(c, t, g):
+    """A warm film light leak / lens flare that sweeps across the frame (0.6-1.0 s, additive), e.g. over a scene change."""
+    p = g.get("params") or {}
+    d = max(0.3, g["t1"] - g["t0"]); k = (t - g["t0"]) / d
+    if not 0.0 <= k <= 1.0:
+        return
+    a = math.sin(math.pi * k) ** 1.3 * clamp(float(p.get("strength", 0.85)))
+    if a < 0.01:
+        return
+    warm = C(p.get("color"), (255, 158, 64)) if p.get("color") else (255, 158, 64)
+    rtl = p.get("from") == "right"; e = ease_io(k)
+    x = (1.25 - 1.5 * e) * W if rtl else (-0.25 + 1.5 * e) * W
+    y = H * (0.22 + 0.3 * e)
+    add = skia.BlendMode.kPlus
+    c.drawRect(skia.Rect(0, 0, W, H), skia.Paint(BlendMode=add, Shader=skia.GradientShader.MakeRadial(
+        skia.Point(x, y), W * 0.95, [_argb(warm, 0.55 * a), _argb((255, 92, 40), 0.22 * a), _argb((255, 92, 40), 0)], [0.0, 0.45, 1.0])))
+    c.drawRect(skia.Rect(0, 0, W, H), skia.Paint(BlendMode=add, Shader=skia.GradientShader.MakeRadial(     # hot core
+        skia.Point(x, y), W * 0.22, [_argb((255, 236, 200), 0.6 * a), _argb(warm, 0)], [0.0, 1.0])))
+    c.drawOval(skia.Rect.MakeXYWH(x - W * 0.9, y - 7, W * 1.8, 14), skia.Paint(BlendMode=add, Color4f=col((255, 214, 160), 0.45 * a), AntiAlias=True,
+               MaskFilter=skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 6)))                         # anamorphic streak
+    for f, r, al in ((0.55, 46, 0.16), (1.15, 90, 0.10), (1.6, 30, 0.14)):                                # ghosts mirrored through the centre
+        gx, gy = W / 2 + (W / 2 - x) * f, H / 2 + (H / 2 - y) * f
+        c.drawCircle(gx, gy, r, skia.Paint(BlendMode=add, Color4f=col((255, 190, 120), al * a), AntiAlias=True,
+                     MaskFilter=skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 8)))
+
+
+def g_scene_label(c, t, g):
+    """Small elegant location tag ("AIRPORT APRON"): a thin accent bar, a dot and letter-spaced small caps that slide in, hold, slide out."""
+    p = g.get("params") or {}; s_ = words(p.get("text", ""), 28).upper()
+    if not s_:
+        return
+    hold = min(g["t1"], g["t0"] + float(p.get("hold", 2.8)))
+    a = ease_out_expo(prog(t, g["t0"], 0.5)) * (1 - prog(t, hold - 0.35, 0.35))
+    if a < 0.02:
+        return
+    f = font("psb", int(p.get("size", 30))); sp = 5.0
+    wd = sum(tw(f, ch) + sp for ch in s_) - sp
+    right = p.get("side") == "right"; y = H * float(p.get("y") or 0.62)
+    x0 = (W - 72 - wd - 44) if right else 72
+    slide = (1 - ease_out_expo(prog(t, g["t0"], 0.6))) * 40 * (1 if right else -1)
+    colr = C(p.get("color"), AMBER)
+    c.save(); c.clipRect(skia.Rect(0, y - 70, W, y + 60))
+    bar = skia.Rect.MakeXYWH(x0 + slide, y - 46, 4, 56)
+    c.drawRect(bar, skia.Paint(Color4f=col(colr, a), AntiAlias=True))
+    c.drawCircle(x0 + slide + 22, y - 18, 5, skia.Paint(Color4f=col(colr, a), AntiAlias=True))
+    tx = x0 + slide + 40
+    for ch in s_:                                       # letter-spaced, with a soft shadow for any background
+        text(c, ch, tx, y - 6, f, WHITE, alpha=a * 0.96, align="l", shadow=True)
+        tx += tw(f, ch) + sp
+    if p.get("sub"):
+        text(c, words(p["sub"], 40), x0 + slide + 40, y + 30, font("pm", 22), (215, 220, 228), alpha=a * 0.85, align="l", shadow=True)
+    c.restore()
+
+
 DRAW = {"behind_text": g_behind_text, "ui_card": g_ui_card, "chip": g_chip, "big_text": g_big_text, "counter": g_counter, "list_card": g_list_card, "quote_card": g_quote_card,
-        "compare": g_compare, "timer": g_timer, "flash": g_flash, "plane_path": g_plane_path}
+        "compare": g_compare, "timer": g_timer, "flash": g_flash, "plane_path": g_plane_path,
+        "light_leak": g_light_leak, "scene_label": g_scene_label}
 
 
 # ------------------------------------------------------------------ captions, branding
@@ -356,7 +417,7 @@ def render(TL, f0, f1, out):
     apply_palette(TL.get("palette") or {})
     shots = {s["id"]: Shot(s["file"]) for s in TL["shots"]}
     mattes = {s["id"]: Shot(s["matte"]) for s in TL["shots"] if s.get("matte") and Path(s["matte"]).exists()}
-    pace = TL.get("pace")
+    pace = TL.get("pace"); grade = TL.get("grade")          # grade: opt-in whole-video colour look (proedit.GRADES)
     logo = skia.Image.open(TL["logo"])
     grain = [np.random.default_rng(i).normal(0, 4.5, (H // 2, W // 2)).astype(np.float32) for i in range(6)]
     yy, xx = np.mgrid[0:H, 0:W]
@@ -382,6 +443,8 @@ def render(TL, f0, f1, out):
                     out_ = np.roll(out_, off, axis=0); out_ = cv2.blur(out_, (1, int(2 + 110 * k * k) | 1))
             return out_
         img = geom(shots[s["id"]].get(idx))
+        if grade:                                   # after the picture is composed, before vignette and grain
+            img = proedit.apply_grade(img, grade)
         f = img.astype(np.float32) * vig * brightness(t, TL) + cv2.resize(grain[fi % 6], (W, H))[..., None]
         rgba = cv2.cvtColor(np.clip(f, 0, 255).astype(np.uint8), cv2.COLOR_BGR2RGBA)
         c = surf.getCanvas(); c.clear(skia.ColorBLACK)

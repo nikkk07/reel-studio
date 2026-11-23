@@ -2,6 +2,8 @@
 
 START = 0.10      # first word starts here
 TAIL = 2.0        # end card after the last word
+GRADES = ("warm_cinematic", "clean")                                                   # media/proedit.py LOOK
+SFX_TYPES = ("ambience_airport", "engine_riser", "whoosh", "impact", "ding")            # media/mix.py pro_events
 
 
 def build(spec: dict, vo: dict, fonts_dir: str, logo: str) -> dict:
@@ -58,6 +60,8 @@ def build(spec: dict, vo: dict, fonts_dir: str, logo: str) -> dict:
         if g["type"] in ("flash", "shake"):
             t1 = t0 + 0.6
         t1 = max(t1, t0 + 0.8)
+        if g["type"] == "light_leak":                   # a quick sweep, 0.6-1.0 s
+            t1 = t0 + min(1.0, max(0.6, float((g.get("params") or {}).get("dur") or 0.8)))
         item = {"type": g["type"], "t0": round(t0, 3), "t1": round(t1, 3), "params": g.get("params") or {}}
         if g["type"] == "list_card":
             starts = sorted(x[0] for x in phr.values() if t0 - 0.01 <= x[0] < t1)
@@ -78,6 +82,22 @@ def build(spec: dict, vo: dict, fonts_dir: str, logo: str) -> dict:
                     cur["reveal"] = [r for r in cur["reveal"] if r < cur["t1"]]
 
     second = groups[1]["t0"] if len(groups) > 1 else 2.0
-    return {"groups": groups, "captions": captions, "shots": out_shots, "graphics": graphics, "vo_end": round(vo_end, 3),
-            "end": round(end, 3), "note_range": [second, groups[-1]["t0"]], "fonts_dir": fonts_dir, "logo": logo,
-            "mood": spec.get("mood", "curious")}
+    out = {"groups": groups, "captions": captions, "shots": out_shots, "graphics": graphics, "vo_end": round(vo_end, 3),
+           "end": round(end, 3), "note_range": [second, groups[-1]["t0"]], "fonts_dir": fonts_dir, "logo": logo,
+           "mood": spec.get("mood", "curious")}
+    # pro edit layer (opt-in): a whole-video colour grade and place-specific sound design keyed to the script
+    if spec.get("grade") in GRADES:
+        out["grade"] = spec["grade"]
+    sfx = []
+    for x in spec.get("sfx") or []:
+        if not isinstance(x, dict) or x.get("type") not in SFX_TYPES or x.get("at_group") not in gi:
+            continue
+        a, _ = at(x["at_group"], x.get("at_phrase", 0))
+        u = x.get("until_group") if x.get("until_group") in gi else x["at_group"]
+        item = {"type": x["type"], "t0": round(a, 3), "t1": round(max(a + 0.5, group_end(u)), 3)}
+        if x.get("level") is not None:
+            item["level"] = min(1.0, max(0.0, float(x["level"])))
+        sfx.append(item)
+    if sfx:
+        out["sfx"] = sfx
+    return out

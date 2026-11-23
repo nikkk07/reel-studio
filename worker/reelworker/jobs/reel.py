@@ -197,9 +197,10 @@ def _presenter_shots(ctx, spec, vo, style):
     for s in pres:
         ctx.trace("footage", s["id"], s["note"], "wait", "AI presenter")
     try:
-        made = presenter.make([{"id": s["id"], "role": s["presenter"], "t0": t[s["id"]]["t0"], "need": t[s["id"]]["need"], "track": track} for s in pres],
+        made = presenter.make([{"id": s["id"], "role": s["presenter"], "t0": t[s["id"]]["t0"], "need": t[s["id"]]["need"], "track": track,
+                                "group": s.get("at_group")} for s in pres],
                               style, work, ctx.log, lambda sid, st, info: ctx.trace("footage", sid, next(x["note"] for x in pres if x["id"] == sid), st, info),
-                              ctx.check_cancel)
+                              ctx.check_cancel, scenes=spec.get("presenter_scenes"), places=spec.get("presenter_places"))
     except presenter.Unavailable as e:
         try:                                   # clips already rendering on Kaggle: a failed check (SSD unplugged, network) is
             st = json.loads((work / "kaggle.json").read_text())     # temporary, never a reason to drop the presenter for good
@@ -851,13 +852,35 @@ def _pick(ctx, text, work):
     return agents.call(ctx, "footage_picker", text, schemas.FOOTAGE, ["Read"], timeout=900, on_event=_say(ctx), name="footage", cwd=work)["picks"]
 
 
+def bg_swap_shots(spec: dict, made) -> list:
+    """Opt-in background swap (spec["bg_swap"] = [{"at_group", "query", "note"?}]): one background plate per presenter shot
+    in those groups. The plates go through the same search, Footage Picker and prep as every other clip (same rules)."""
+    want = {}
+    for b in spec.get("bg_swap") or []:
+        if isinstance(b, dict) and b.get("at_group") and str(b.get("query") or "").strip():
+            want.setdefault(b["at_group"], b)
+    out = []
+    for s in spec.get("shots", []):
+        b = want.get(s.get("at_group"))
+        if b and s.get("presenter") and s["id"] in made:
+            note = "background plate behind the AI presenter: a wide, steady view of the place, no person close to the camera"
+            out.append({"id": f"{s['id']}_bg", "query": str(b["query"]).strip()[:120], "at_group": s["at_group"], "at_phrase": s.get("at_phrase", 0),
+                        "bg_for": s["id"], "note": note + (f"; {str(b['note'])[:160]}" if b.get("note") else "")})
+    return out
+
+
 def stage_footage(ctx, prog):
     spec = _spec(ctx); pres_files = {}
     if _style(ctx):                                     # AI presenter first (hours on Kaggle); falls back to classic on any problem
         pres_files, spec = _presenter_shots(ctx, spec, _vo_map(ctx), _style(ctx))
     TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx), ctx.db)))
     need = {s["id"]: s["need"] for s in TL["shots"]}
-    shots = [s for s in spec["shots"] if s["id"] in need and not s.get("presenter")]
+    bgs = bg_swap_shots(spec, pres_files) if pres_files else []
+    if spec.get("bg_swap") and not bgs:
+        ctx.log("background swap asked for, but no AI presenter shot is in those groups; nothing to swap", "warn")
+    for b in bgs:
+        need[b["id"]] = need.get(b["bg_for"], 3.0)
+    shots = [s for s in spec["shots"] if s["id"] in need and not s.get("presenter")] + bgs
     cands = {}; reuse = {}
     parent = _parent_dir(ctx)
     if parent and (parent / "footage.json").exists():
@@ -942,8 +965,10 @@ def stage_footage(ctx, prog):
         chosen[sid] = {"src": "ai", "id": sid, "author": "AI presenter (InfiniteTalk on Kaggle)", "page": "", "licence": "AI-generated character"}
     if not shot_files:
         raise TransientError("no footage could be prepared")
-    ctx.path("footage.json").write_text(json.dumps({"files": shot_files, "chosen": chosen, "picks": picks,
-                                                     "cands": cands}, ensure_ascii=False, indent=1), encoding="utf-8")
+    fjd = {"files": shot_files, "chosen": chosen, "picks": picks, "cands": cands}
+    if bgs:                                             # presenter shot -> its background plate (only plates that were found)
+        fjd["bg"] = {b["bg_for"]: b["id"] for b in bgs if b["id"] in shot_files}
+    ctx.path("footage.json").write_text(json.dumps(fjd, ensure_ascii=False, indent=1), encoding="utf-8")
     ctx.merge_output({"credits": footage.credits(chosen)})
     if not shots_all and not pres_files:
         raise TransientError("the script has no shots")
@@ -956,6 +981,26 @@ def drop_unmasked_behind(TL) -> list:
     if drop:
         TL["graphics"] = [g for g in TL["graphics"] if g not in drop]
     return drop
+
+
+def swap_background(s: dict, plate, log) -> bool:
+    """Opt-in background swap for one presenter shot of the timeline: she stays, the place behind her changes (proedit.swap_shot).
+    Without a person mask (no Apple Vision) or on any error the shot stays the normal presenter shot, with a warning."""
+    if not plate or not Path(plate).exists():
+        log(f"background swap for {s['id']}: no background clip was found; the shot keeps the presenter's own background", "warn")
+        return False
+    if not s.get("matte"):
+        log(f"background swap for {s['id']}: no person mask on this machine (Apple Vision); the shot keeps the presenter's own background", "warn")
+        return False
+    try:
+        from ..media import proedit
+        f = Path(s["file"])
+        s["file"] = str(proedit.swap_shot(f, Path(s["matte"]), Path(plate), f.with_name(f"{s['id']}_swap.mp4")))
+        s["bg_swap"] = True
+        return True
+    except Exception as e:  # noqa: BLE001
+        log(f"background swap for {s['id']} skipped ({str(e)[:120]})", "warn")
+        return False
 
 
 def build_timeline(ctx):
@@ -973,6 +1018,8 @@ def build_timeline(ctx):
                 s["matte"] = str(m) if m else None
             except Exception as e:  # noqa: BLE001
                 ctx.log(f"person mask for {s['id']} skipped ({str(e)[:100]})", "warn")
+            if s["id"] in (fj.get("bg") or {}):                                       # opt-in: a new place behind her
+                swap_background(s, fj["files"].get(fj["bg"][s["id"]]), ctx.log)
     drop = drop_unmasked_behind(TL)
     if drop:
         ctx.log(f"no person mask on a presenter shot: left out {len(drop)} behind-the-presenter word(s)", "warn")

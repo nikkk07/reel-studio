@@ -59,6 +59,28 @@ def image_for(d, style, role, n=0):
     return PACK / lst[k % len(lst)]
 
 
+def _warn(log, msg):
+    try:
+        log(msg, "warn")
+    except TypeError:                  # a plain one-argument logger (tests)
+        log(msg)
+
+
+def scene_for(d, scenes, places, group, style, role, n=0, log=lambda m: None):
+    """Opt-in per-scene location (spec["presenter_scenes"] = {group id: picture in the pack}, spec["presenter_places"] =
+    {picture: "In an aviation classroom ..."}): (picture, place text or None). A shot whose group has no scene, or whose
+    picture is missing from the pack, uses the normal rotation (image_for) and the style's own place text."""
+    scenes = scenes if isinstance(scenes, dict) else {}; places = places if isinstance(places, dict) else {}
+    f = scenes.get(group) if group else None
+    if f:
+        name = Path(str(f)).name                          # a file in the pack folder, never a path out of it
+        if name and (PACK / name).is_file():
+            place = places.get(f) or places.get(name)
+            return PACK / name, (str(place).strip()[:240] or None) if place else None
+        _warn(log, f"AI presenter scene for {group}: {f} is not in the character pack {PACK}; using the normal picture")
+    return image_for(d, style, role, n), None
+
+
 # ------------------------------------------------------------------ weekly GPU budget (Kaggle resets on Sunday 00:00 UTC)
 def _week(now=None):
     now = now or datetime.now(timezone.utc)
@@ -147,11 +169,11 @@ def status(lane):
     return "UNKNOWN"
 
 
-def prompt_for(d, style, role):
+def prompt_for(d, style, role, place=None):
     mood = {"hook": "Speaks with confident energy, eyebrows and hands supporting the first words, natural blinking.",
             "cta": "Ends warmly with a small nod and an inviting look into the camera.",
             "proof": "Explains calmly and clearly, steady eye contact, small natural gestures."}.get(role, "")
-    place = (d.get("places") or {}).get(style) or {"studio": "Seated in a bright minimal studio, camera steady at chest height.",
+    place = place or (d.get("places") or {}).get(style) or {"studio": "Seated in a bright minimal studio, camera steady at chest height.",
                                                     "fast": "Standing outdoors, slight handheld camera feel, natural daylight."}.get(style, "")
     return " ".join(x for x in (d.get("prompt", ""), place, mood, "Lips move exactly with the speech; silent when there is no speech.") if x)
 
@@ -196,9 +218,10 @@ def prep(src: Path, out: Path, dur: float) -> Path:
     return out
 
 
-def make(shots: list, style: str, work: Path, log, trace, check_cancel) -> dict:
-    """shots = [{"id", "role", "t0", "need", "track"}] -> {id: {"file" (1296x2304 60 fps), "raw", "gpu_h", "lane"}}.
-    Up to two shots render at the same time (kernels A and B); the rest wait for a free kernel."""
+def make(shots: list, style: str, work: Path, log, trace, check_cancel, scenes=None, places=None) -> dict:
+    """shots = [{"id", "role", "t0", "need", "track", "group"?}] -> {id: {"file" (1296x2304 60 fps), "raw", "gpu_h", "lane"}}.
+    Up to two shots render at the same time (kernels A and B); the rest wait for a free kernel.
+    scenes/places: the spec's optional presenter_scenes / presenter_places (see scene_for)."""
     d = pack()
     if not d:
         raise Unavailable("no AI character")
@@ -218,9 +241,9 @@ def make(shots: list, style: str, work: Path, log, trace, check_cancel) -> dict:
                 break
             lane = free[0]; dur = min(s["need"], MAX_S) + 0.25
             aud = cut(s["track"], s["t0"], dur, work / f"{s['id']}.wav")
-            img = image_for(d, style, s["role"], len(st))
+            img, place = scene_for(d, scenes, places, s.get("group"), style, s["role"], len(st), log)
             trace(s["id"], "run", f"Kaggle {lane}: {dur:.1f}s talking clip")
-            t0 = submit(lane, {"name": s["id"], "prompt": prompt_for(d, style, s["role"])}, aud, img, log)
+            t0 = submit(lane, {"name": s["id"], "prompt": prompt_for(d, style, s["role"], place)}, aud, img, log)
             st[s["id"]] = {"lane": lane, "state": "running", "t0": t0, "need": s["need"]}; busy.add(lane)
             state_p.write_text(json.dumps(st))
         for sid, v in list(st.items()):

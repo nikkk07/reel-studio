@@ -14,6 +14,27 @@ def thunder(SR, d=2.6, level=0.8, seed=0):
     return level * (x * env + crack)
 
 
+def pro_events(TL: dict) -> list:
+    """Opt-in place sounds from spec["sfx"] (timeline TL["sfx"]) -> [(bus, start_s, samples)]. Bus "amb" is a bed ducked hard
+    under the voice; "fx" joins the other effects. A riser ends exactly where its phrase starts; a whoosh peaks on it."""
+    out = []
+    for e in TL.get("sfx") or []:
+        ty, t0, lv = e.get("type"), float(e["t0"]), e.get("level")
+        if ty == "ambience_airport":
+            out.append(("amb", t0, sfx.ambience_airport(max(0.5, float(e.get("t1", t0 + 3)) - t0), 0.3 if lv is None else lv)))
+        elif ty == "engine_riser":
+            d = min(2.0, t0)                                # never starts before the video does
+            if d >= 0.3:
+                out.append(("fx", t0 - d, sfx.engine_riser(d, 0.35 if lv is None else lv)))
+        elif ty == "whoosh":
+            out.append(("fx", t0 - 0.3, sfx.whoosh(0.6, level=0.3 if lv is None else lv)))
+        elif ty == "impact":
+            out.append(("fx", t0, sfx.impact(1.4, 0.6 if lv is None else lv)))
+        elif ty == "ding":
+            out.append(("fx", t0, sfx.ding(0.25 if lv is None else lv)))
+    return out
+
+
 def build(TL: dict, roomtone_path: str, out_path: str):
     import librosa
     from scipy.signal import butter, sosfilt
@@ -72,6 +93,13 @@ def build(TL: dict, roomtone_path: str, out_path: str):
             put(fx, sfx.riser(1.6, 0.22), t0 + 0.3)
     last = TL["groups"][-1]["t0"]
     put(fx, sfx.riser(1.0, 0.2), last - 1.0); put(fx, sfx.impact(1.6, 0.6), vo_end - 0.1, 0.7)
+    amb = None                                          # pro edit layer (opt-in): place sounds keyed to the script
+    for bus, t, x in pro_events(TL):
+        if bus == "amb":
+            amb = np.zeros(N) if amb is None else amb
+            put(amb, x, t)
+        else:
+            put(fx, x, t)
 
     mood = TL.get("mood", "curious")
     first2 = TL["groups"][1]["t0"] if len(TL["groups"]) > 1 else 1.5
@@ -80,6 +108,10 @@ def build(TL: dict, roomtone_path: str, out_path: str):
     put(mus, sfx.pad(END - last + 0.3, freqs=(220, 277.18, 329.63, 440), level=0.15), last - 0.2)
     duck = 1 - 0.6 * np.clip(sfx.lp_fast(np.abs(vo), 6) / 0.05, 0, 1)
     mix = vo + 0.7 * fx + 0.85 * mus * duck
+    if amb is not None:                                 # the bed drops to ~30 % while she speaks, breathes back up in real pauses
+        from scipy.ndimage import maximum_filter1d
+        hold = maximum_filter1d(sfx.lp_fast(np.abs(vo), 6), int(0.25 * SR))     # holds through the gaps between words
+        mix = mix + amb * (1 - 0.7 * np.clip(sfx.lp_fast(hold, 8) / 0.04, 0, 1))
     mix = mix[:int(END * SR)]; o = int(0.5 * SR); mix[-o:] *= np.linspace(1, 0, o)
     sf.write(out_path, np.stack([mix, mix], 1).astype(np.float32), SR, subtype="FLOAT")
     return out_path

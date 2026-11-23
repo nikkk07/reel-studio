@@ -19,7 +19,10 @@ OPTIMIZE = {"type": "object", "required": ["title", "hook", "concept", "outline"
                            "key_facts": {"type": "array", "items": S}, "sources": {"type": "array", "items": SRC},
                            "notes_for_user": S}}
 
-GRAPHIC_TYPES = ["behind_text", "ui_card", "chip", "big_text", "counter", "list_card", "quote_card", "compare", "timer", "flash", "dim", "shake", "plane_path"]
+GRAPHIC_TYPES = ["behind_text", "ui_card", "chip", "big_text", "counter", "list_card", "quote_card", "compare", "timer", "flash", "dim", "shake", "plane_path",
+                 "light_leak", "scene_label"]
+GRADES = ["warm_cinematic", "clean"]                                                    # media/proedit.py
+SFX_TYPES = ["ambience_airport", "engine_riser", "whoosh", "impact", "ding"]            # media/mix.py pro_events
 
 HOOK_FORMS = ["question", "pattern_interrupt", "open_statement", "micro_story"]
 BEAT_ROLES = ["hook", "escalation", "rehook", "reveal", "bridge"]
@@ -51,6 +54,15 @@ SPEC = {"type": "object",
             "beats": {"type": "array", "items": {
                 "type": "object", "required": ["group", "role", "mechanism", "why"],
                 "properties": {"group": S, "role": {"type": "string", "enum": BEAT_ROLES}, "seconds": S, "mechanism": S, "why": S}}},
+            # pro edit layer (all optional; a spec without them renders exactly as before)
+            "presenter_scenes": {"type": "object", "additionalProperties": S},      # group id -> picture in the character pack
+            "presenter_places": {"type": "object", "additionalProperties": S},      # picture -> place text for the InfiniteTalk prompt
+            "bg_swap": {"type": "array", "items": {
+                "type": "object", "required": ["at_group", "query"], "properties": {"at_group": S, "query": S, "note": S}}},
+            "grade": {"type": "string", "enum": GRADES},
+            "sfx": {"type": "array", "items": {
+                "type": "object", "required": ["type", "at_group"],
+                "properties": {"type": {"type": "string", "enum": SFX_TYPES}, "at_group": S, "at_phrase": I, "until_group": S, "level": N}}},
         }}
 
 FOOTAGE = {"type": "object", "required": ["picks"],

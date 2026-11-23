@@ -100,3 +100,48 @@ def radio_voice(x, sr=SR):
     """Band-limit + mild saturation for the hook's radio transmission."""
     y = bp_fast(x, 320, 3300); y = np.tanh(2.2 * y) / np.tanh(2.2)
     return y
+
+
+# ---- pro edit layer (opt-in spec["sfx"]): place sounds for ad reels, all synthesized here, nothing downloaded
+def _rms(x): return float(np.sqrt(np.mean(np.square(x)))) + 1e-12
+
+
+def ambience_airport(d, level=0.3, seed=11):
+    """Airport apron bed: low broadband hum (terminal HVAC, mains hum) + a distant jet rumble that swells on a slow LFO and a
+    faint far-off turbine whine. RMS = 0.06 x level, 0.6 s fades. mix.py ducks it hard under the voice."""
+    r = np.random.default_rng(seed); t = t_(d); n = len(t)
+    hum = lp_fast(r.standard_normal(n), 380) * 0.9 + 0.08 * np.sin(2 * np.pi * 50 * t) + 0.04 * np.sin(2 * np.pi * 100 * t)
+    lfo = 0.55 + 0.45 * np.sin(2 * np.pi * 0.07 * t + 1.3) * (0.8 + 0.2 * np.sin(2 * np.pi * 0.021 * t))
+    rumble = bp_fast(np.cumsum(r.standard_normal(n)) * 0.02 + r.standard_normal(n) * 0.3, 45, 260) * lfo
+    whine = bp_fast(r.standard_normal(n), 1700, 2300) * (0.5 + 0.5 * np.sin(2 * np.pi * 0.05 * t)) * 0.08
+    x = 0.8 * hum / _rms(hum) + 1.0 * rumble / _rms(rumble) + whine / _rms(whine) * 0.15
+    x = x / _rms(x) * 0.06 * level
+    return x * env_ad(n, min(0.6, d / 3), min(0.6, d / 3))
+
+
+def engine_riser(d=2.0, level=0.35, seed=12):
+    """Jet spool-up riser: band-passed noise sweeping up (150 Hz -> 3.5 kHz) + a rising turbine tone, peaking at the LAST
+    sample so it lands exactly on the phrase it leads into. Peak = level."""
+    r = np.random.default_rng(seed); n = int(d * SR); t = np.arange(n) / SR; u = t / d
+    from scipy.signal import butter, sosfilt
+    noise = r.standard_normal(n); swept = np.zeros(n); seg = 512
+    for i in range(0, n, seg):
+        fc = 150 * (3500 / 150) ** (i / n)
+        sos = butter(2, [max(60, fc * 0.6) / (SR / 2), min(SR / 2 - 200, fc * 1.5) / (SR / 2)], 'band', output='sos')
+        swept[i:i + seg] = sosfilt(sos, noise[i:i + seg])
+    f = 320 * (1900 / 320) ** u
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    tone = np.sin(ph) + 0.35 * np.sin(2 * ph + 0.4) + 0.12 * np.sin(3.01 * ph)
+    x = swept / (np.abs(swept).max() + 1e-9) * 0.8 + tone * 0.35
+    x *= u ** 2.2
+    x[-max(1, int(0.004 * SR)):] *= np.linspace(1, 0.6, max(1, int(0.004 * SR)))      # no click, still loud at the hit
+    return level * x / (np.abs(x).max() + 1e-9)
+
+
+def ding(level=0.25, f0=1320.0, d=1.6):
+    """Soft bell: inharmonic partials with their own decays, 3 ms attack. Peak = level."""
+    t = t_(d); x = np.zeros_like(t)
+    for ratio, amp, dec in ((1.0, 1.0, 2.2), (2.76, 0.42, 4.0), (5.40, 0.18, 7.0), (0.5, 0.25, 3.0)):
+        x += amp * np.sin(2 * np.pi * f0 * ratio * t) * np.exp(-t * dec)
+    x *= np.minimum(1, t / 0.003)
+    return level * x / (np.abs(x).max() + 1e-9)
