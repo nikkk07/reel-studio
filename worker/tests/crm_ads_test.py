@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(tempfile.mkdtemp(prefix="crmads_"))
 os.environ["REELSTUDIO_JOBS_DIR"] = str(ROOT / "jobs")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent)); import pgsel  # noqa: E402
 from reelworker import config, crm  # noqa: E402
 
 config.APP = ROOT
@@ -27,7 +28,7 @@ class DB:
     def __init__(self, jobs): self.jobs = jobs; self.q = []
     def select(self, t, q=""):
         self.q.append(q)
-        return [j for j in self.jobs if j["input"].get("ad") and j["status"] in ("review", "done")] if t == "jobs" else []
+        return pgsel.project([j for j in self.jobs if j["input"].get("ad") and j["status"] in ("review", "done")], q) if t == "jobs" else []
 
 
 sent, puts = [], []
@@ -84,9 +85,9 @@ class PDB:
     def __init__(self, jobs): self.jobs = {j["id"]: j for j in jobs}; self.patches = []
     def select(self, t, q=""):
         if "id=eq." in q:
-            j = self.jobs.get(q.split("id=eq.")[1].split("&")[0]); return [j] if j else []
+            j = self.jobs.get(q.split("id=eq.")[1].split("&")[0]); return pgsel.project([j], q) if j else []
         if "output->ig->>via=eq.crm" in q:
-            return [j for j in self.jobs.values() if ((j.get("output") or {}).get("ig") or {}).get("via") == "crm"]
+            return pgsel.project([j for j in self.jobs.values() if ((j.get("output") or {}).get("ig") or {}).get("via") == "crm"], q)
         return []
     def update(self, t, m, v):
         j = self.jobs.get(m.split("id=eq.")[1].split("&")[0]); self.patches.append((m, v))

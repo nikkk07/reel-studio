@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 os.environ["REELSTUDIO_ROOT"] = tempfile.mkdtemp(); os.environ["REELSTUDIO_BRAIN"] = "mock"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent)); import pgsel  # noqa: E402
 from reelworker import agents, config  # noqa: E402
 from reelworker import brand as brandmod  # noqa: E402
 from reelworker.runner import JobContext  # noqa: E402
@@ -43,7 +44,7 @@ class DB:
             rows = [r for r in rows if self._cond(r, k, v)]
         if order:
             col, _, d = order.partition("."); rows.sort(key=lambda r: str(r.get(col)), reverse=d.startswith("desc"))
-        return [dict(r) for r in rows[:lim] if True] if lim else [dict(r) for r in rows]
+        return pgsel.project([dict(r) for r in rows[:lim] if True] if lim else [dict(r) for r in rows], q)
     def insert(self, t, row, upsert=False):
         self.seq += 1; row = {"id": self.seq if t != "jobs" else str(uuid.uuid4()), "created_at": iso(datetime.now(timezone.utc)), **row}
         self.t[t].append(row); return [dict(row)]

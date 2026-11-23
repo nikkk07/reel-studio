@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 os.environ["REELSTUDIO_ROOT"] = tempfile.mkdtemp(); os.environ["REELSTUDIO_BRAIN"] = "mock"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent)); import pgsel  # noqa: E402
 from reelworker.runner import JobContext, Cancelled  # noqa: E402
 from reelworker import agents  # noqa: E402
 from reelworker.jobs import autopilot, reel, suggest  # noqa: E402
@@ -31,7 +32,7 @@ class DB:
                      "profile": json.load(open(Path(__file__).resolve().parents[2] / "brands/weone/profile.json"))}]
         if t != "jobs": return []
         lim = int(next((p[6:] for p in q.split("&") if p.startswith("limit=")), 999))
-        return [r for r in sorted(self.rows.values(), key=lambda r: r["created_at"], reverse=True) if self._m(r, q)][:lim]
+        return pgsel.project([r for r in sorted(self.rows.values(), key=lambda r: r["created_at"], reverse=True) if self._m(r, q)][:lim], q)
     def insert(self, t, row, upsert=False):
         if t == "job_events": self.events.append(row); return [row]
         if t != "jobs": self.__dict__.setdefault("other", []).append((t, row)); return [row]

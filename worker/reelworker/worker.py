@@ -63,7 +63,7 @@ def refresh_claude(db):
 
 # ------------------------------------------------------------------ heartbeat + claude check + housekeeping
 def heartbeat_loop(db: Supabase):
-    last_prune = 0.0
+    last_prune, last_meter = 0.0, 0.0
     while not STOP.is_set():
         try:
             if time.time() - STATUS["claude_checked"] > 1800 and not CHECKING.is_set():
@@ -78,12 +78,14 @@ def heartbeat_loop(db: Supabase):
                          "daily_cap": studio.daily_cap(), "blocked": STATUS.get("blocked"), "selftest": STATUS.get("selftest"),
                          "cap_hit": reels_today() >= studio.daily_cap(), "keys": studio.sources(), "crm": crm.STATUS, "library_3d": library_count(),
                          "voices": {"hi": studio.voice_model("hi"), "en": studio.voice_model("en"), "ready": STATUS.get("voices")}},
-            }, upsert=True)
+            }, upsert=True, minimal=True)                 # nothing comes back: the website reads it
+            if time.time() - last_meter > 300:              # every 5 min: add this Mac's data count, learn the guard level
+                db.flush_meter(); last_meter = time.time()
             if time.time() - last_prune > 3600:          # hourly: the Mac keeps only what is still needed
                 prune(db); last_prune = time.time()
         except Exception as e:  # noqa: BLE001
             log.warning("heartbeat failed: %s", e)
-        STOP.wait(15)
+        STOP.wait(15 if db.slow == 1 else 30)          # the site calls the Mac offline after 75 s without one
 
 
 RETAIN_DAYS = 3        # finished masters on the Mac (the posting copy lives in the cloud until it is posted, then 3 days)
@@ -155,7 +157,7 @@ def ping_loop(db: Supabase):
                               "reels_today": reels_today(), "daily_cap": studio.daily_cap(), "version": config.VERSION}})
         except Exception as e:  # noqa: BLE001
             log.warning("ping loop: %s", e)
-        STOP.wait(3)
+        STOP.wait(5 * db.slow)                         # "Connect" on the site is answered within ~5 s
 
 
 # ------------------------------------------------------------------ lanes
@@ -262,6 +264,7 @@ def lane_loop(db: Supabase, lane: str, kinds: list):
     from .jobs import suggest, optimize, reel, onboard, learn, content
     handlers = {"suggest": suggest.run, "optimize": optimize.run, "reel": reel.run, "onboard": onboard.run, "learn": learn.run,
                 "content": content.run}
+    idle = 0                 # empty claims in a row: an idle Mac asks less often (4 s, then up to 10 s / 15 s)
     while not STOP.is_set():
         try:
             cap_hit = lane == "B" and reels_today() >= studio.daily_cap()    # after the cap only revisions (Request changes) run
@@ -278,7 +281,9 @@ def lane_loop(db: Supabase, lane: str, kinds: list):
                 STOP.wait(5); continue
             job = db.rpc("claim_next", p_worker=config.WORKER_ID, p_kinds=kinds, p_lease_seconds=90, p_revisions_only=cap_hit)
             if not job or not job.get("id"):
-                STOP.wait(15 if cap_hit else 4); continue
+                idle += 1
+                STOP.wait((15 if cap_hit else min(4 + 2 * (idle - 1), 10 if lane == "A" else 15)) * db.slow); continue
+            idle = 0
             CURRENT[lane] = {"id": job["id"], "kind": job["kind"]}
             log.info("lane %s claimed %s %s (attempt %s)", lane, job["kind"], job["id"], job.get("attempts"))
             run_job(db, job, handlers[job["kind"]])

@@ -5,7 +5,8 @@
 // Safety: the container id is saved before publishing and a PUBLISHED container is recognised, so a reel is never
 // posted twice; failures back off 10/30/60/120 min then show Failed + Retry; an expired token pauses posting.
 
-import { SB, H, type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setSecret, bk, brands } from "./db.ts";
+import { SB, H, type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setSecret, bk, brands, preloadSettings, dropSettings,
+  flushMeter, guard, everyMin, activeReels, liteDue, fullReels } from "./db.ts";
 import { liTick } from "./linkedin.ts";
 import { fbTick } from "./facebook.ts";
 import { keysTick } from "./keys.ts";
@@ -25,7 +26,19 @@ class IGError extends Error {
 }
 
 const token = (brand: string) => secret(bk("instagram_token", brand));
-async function cronKey(): Promise<string | null> { const r = await rest("GET", "secrets?select=value&key=eq.cron_key"); return r?.[0]?.value ?? null; }
+// the cron key and the account list change rarely: kept for 10 minutes between runs of a warm function
+let keyMemo: { v: string | null; at: number } = { v: null, at: 0 };
+async function cronKey(again = false): Promise<string | null> {
+  if (again || !keyMemo.v || Date.now() - keyMemo.at > 600e3) {
+    const r = await rest("GET", "secrets?select=value&key=eq.cron_key"); keyMemo = { v: r?.[0]?.value ?? null, at: Date.now() };
+  }
+  return keyMemo.v;
+}
+let brandMemo: { v: Brand[]; at: number } = { v: [], at: 0 };
+async function brandList(): Promise<Brand[]> {
+  if (!brandMemo.v.length || Date.now() - brandMemo.at > 600e3) brandMemo = { v: await brands(), at: Date.now() };
+  return brandMemo.v;
+}
 // write jobs.output.ig only if nobody changed the state meanwhile (two overlapping calls can never both act)
 async function setIg(job: Json, ig: Json, expect?: string) {
   const out = { ...(job.output ?? {}), ig };
@@ -180,26 +193,28 @@ async function fail(job: Json, e: IGError, brand: string) {
 }
 
 // ---------------------------------------------------------------- one tick: every account with its own Instagram
-async function tickBrand(b: Brand): Promise<Json> {
-  const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&brand=eq.${b.id}&status=eq.done&output->ig->>state=in.(queued,scheduled,posting)&order=updated_at.asc&limit=50`);
-  const due = reels.filter((r) => r.output.ig.state === "posting" || r.output.ig.state === "queued" || Date.parse(r.output.ig.at ?? 0) <= Date.now());
+async function tickBrand(b: Brand, lite?: Json[]): Promise<Json> {
+  const due = await liteDue("ig", b.id, (g) => g.state === "posting" || g.state === "queued" || Date.parse(g.at ?? 0) <= Date.now(), lite);
   const st = await setting(bk("instagram_status", b.id));
   if (!due.length && !st.recheck_at && (st.state ?? "not_connected") === "not_connected") return { connected: false };
+  if (!due.length && !st.recheck_at && st.state === "connected" && minsAgo(st.checked_at) < 360) return { connected: true, due: 0 };   // nothing to do: no token read
   const [tok, uid] = await connection(b.id, st.state === "checking" || !!st.recheck_at || due.length > 0);       // "Re-check" on the site forces a fresh check
   const log: Json = {};
   if (!tok) {
-    for (const r of due) if (r.output.ig.state !== "posting" && !r.output.ig.error) await setIg(r, { ...r.output.ig, error: "Waiting for Instagram to be connected again." }, r.output.ig.state);
+    for (const r of await fullReels(due.filter((x) => x.ig.state !== "posting" && !x.ig.error), "ig"))
+      if (r.output.ig.state !== "posting" && !r.output.ig.error) await setIg(r, { ...r.output.ig, error: "Waiting for Instagram to be connected again." }, r.output.ig.state);
     return { connected: false, due: due.length };
   }
-  for (const r of due.slice(0, 3)) {
+  for (const r of await fullReels(due.slice(0, 3), "ig")) {
     try { log[r.id] = await step(r, tok, uid!, b); }
     catch (e) { const err = e instanceof IGError ? e : new IGError(String((e as Error).message ?? e)); await fail(r, err, b.id); log[r.id] = `error: ${err.message}`; }
   }
   return { connected: true, due: due.length, log };
 }
-export async function tick(list: Brand[]): Promise<Json> {
+export async function tick(list: Brand[], lite?: Json[]): Promise<Json> {
   const res: Json = {};
-  for (const b of list) { try { res[b.id] = await tickBrand(b); } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }
+  lite ??= await activeReels();
+  for (const b of list) { try { res[b.id] = await tickBrand(b, lite); } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }
   return res;
 }
 
@@ -212,8 +227,9 @@ function statsDue(o: Json): boolean {
 }
 async function statsBrand(b: Brand): Promise<Json> {
   const since = iso(new Date(Date.now() - 30 * 86400e3));
-  const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&brand=eq.${b.id}&status=eq.done&output->ig->>state=eq.posted&output->ig->>posted_at=gte.${since}&order=updated_at.asc&limit=60`);
-  const due = reels.filter((r) => r.output?.ig?.media_id && statsDue(r.output)).slice(0, 4);
+  const reels: Json[] = await rest("GET", `jobs?select=id,mid:output->ig->>media_id,posted:output->ig->>posted_at,sat:output->ig_stats->>at`
+    + `&kind=eq.reel&brand=eq.${b.id}&status=eq.done&output->ig->>state=eq.posted&output->ig->>posted_at=gte.${since}&order=updated_at.asc&limit=60`);
+  const due = (reels ?? []).filter((r) => r.mid && statsDue({ ig: { posted_at: r.posted }, ig_stats: { at: r.sat } })).slice(0, 4);
   if (!due.length) return { due: 0 };
   const [tok] = await connection(b.id, false);
   if (!tok) return { connected: false };
@@ -223,7 +239,7 @@ async function statsBrand(b: Brand): Promise<Json> {
   let comments = !(cap.comments === false && minsAgo(cap.checked_at) < 720);
   const done: Json = {};
   for (const r of due) {
-    const mid = r.output.ig.media_id; const s: Json = { at: iso(now()), hours_since_post: Math.round(minsAgo(r.output.ig.posted_at) / 6) / 10 };
+    const mid = r.mid; const s: Json = { at: iso(now()), hours_since_post: Math.round(minsAgo(r.posted) / 6) / 10 };
     try {
       if (insights) {
         try {
@@ -272,8 +288,9 @@ async function statsBrand(b: Brand): Promise<Json> {
 // ---------------------------------------------------------------- the account's past posts (also those made outside the studio): once a day
 // The learning loop reads them, so it learns from everything the audience has already responded to, not only studio reels.
 async function libraryBrand(b: Brand): Promise<Json> {
-  const LK = bk("ig_library", b.id); const lib = await setting(LK);
-  if (minsAgo(lib.at) < 24 * 60) return { due: 0 };
+  const LK = bk("ig_library", b.id);           // the library itself is large: only its date is read to decide
+  const at = (await rest("GET", `settings?select=at:value->>at&key=eq.${encodeURIComponent(LK)}`))?.[0]?.at;
+  if (minsAgo(at) < 24 * 60) return { due: 0 };
   const st = await setting(bk("instagram_status", b.id));
   if (st.state !== "connected") return { connected: false };
   const [tok, uid] = await connection(b.id, false);
@@ -295,33 +312,43 @@ async function libraryBrand(b: Brand): Promise<Json> {
   await setSetting(LK, { at: iso(now()), posts });
   return { posts: posts.length };
 }
-export async function libraryTick(list: Brand[]): Promise<Json> {
+export async function libraryTick(list: Brand[], force = false): Promise<Json> {
+  if (!force && !everyMin(30, 7)) return { skipped: true };
   const res: Json = {};
   for (const b of list) { try { const r = await libraryBrand(b); if (r.posts) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e).slice(0, 160) }; } }
   return res;
 }
 
-export async function statsTick(list: Brand[]): Promise<Json> {
+export async function statsTick(list: Brand[], force = false): Promise<Json> {
+  if (!force && !everyMin(15, 3)) return { skipped: true };       // results are due every 3 hours at the most: a check every 15 min is plenty
   const res: Json = {};
   for (const b of list) { try { const r = await statsBrand(b); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }
   return res;
 }
 
 Deno.serve(async (req) => {
-  const key = await cronKey().catch(() => null);
-  if (!key || req.headers.get("x-cron-key") !== key) return new Response("forbidden", { status: 403 });
+  const sent = req.headers.get("x-cron-key");
+  let key = await cronKey().catch(() => null);
+  if (key && sent !== key) key = await cronKey(true).catch(() => null);       // the key was changed: read it again once
+  if (!key || sent !== key) return new Response("forbidden", { status: 403 });
   const res: Json = {};
   let list: Brand[] = [];
-  try { list = await brands(); } catch (e) { return Response.json({ error: String((e as Error).message ?? e) }); }
-  try { res.instagram = await tick(list); } catch (e) { res.instagram = { error: String((e as Error).message ?? e) }; }
+  try { list = await brandList(); } catch (e) { return Response.json({ error: String((e as Error).message ?? e) }); }
+  if (!guard.known) await flushMeter();                 // a fresh start: learn the data level before deciding what runs
+  await preloadSettings();
+  let lite: Json[] | undefined;
+  try { lite = await activeReels(); } catch (e) { res.scan = { error: String((e as Error).message ?? e) }; }
+  try { res.instagram = await tick(list, lite); } catch (e) { res.instagram = { error: String((e as Error).message ?? e) }; }
   try { res.stats = await statsTick(list); } catch (e) { res.stats = { error: String((e as Error).message ?? e) }; }
-  try { res.facebook = await fbTick(list); } catch (e) { res.facebook = { error: String((e as Error).message ?? e) }; }
-  try { res.linkedin = await liTick(list); } catch (e) { res.linkedin = { error: String((e as Error).message ?? e) }; }
-  try { res.youtube = await ytTick(list); } catch (e) { res.youtube = { error: String((e as Error).message ?? e) }; }
+  try { res.facebook = await fbTick(list, lite); } catch (e) { res.facebook = { error: String((e as Error).message ?? e) }; }
+  try { res.linkedin = await liTick(list, lite); } catch (e) { res.linkedin = { error: String((e as Error).message ?? e) }; }
+  try { res.youtube = await ytTick(list, lite); } catch (e) { res.youtube = { error: String((e as Error).message ?? e) }; }
   try { res.keys = await keysTick(); } catch (e) { res.keys = { error: String((e as Error).message ?? e) }; }
   try { res.library = await libraryTick(list); } catch (e) { res.library = { error: String((e as Error).message ?? e) }; }
   try { res.checks = await checksTick(list); } catch (e) { res.checks = { error: String((e as Error).message ?? e) }; }
   try { res.dm = await dmTick(list); } catch (e) { res.dm = { error: String((e as Error).message ?? e) }; }
   try { res.retention = await retentionTick(); } catch (e) { res.retention = { error: String((e as Error).message ?? e) }; }
+  dropSettings();
+  res.data = await flushMeter();
   return Response.json(res);
 });

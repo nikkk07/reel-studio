@@ -12,17 +12,7 @@ const SIZE = 20 * 1024 * 1024;
 let REFRESH_OK = true, DROP_NEXT_PART = false, PROCESSED = false, THUMB_OK = true; const THUMBS: string[] = [];
 const UP: { sessions: Row[]; received: number; meta?: Row; parts: number; done: boolean } = { sessions: [], received: 0, parts: 0, done: false };
 
-function path(row: Row, col: string) { let v: any = row; for (const p of col.split(/->>?/)) v = v?.[p]; return v; }
-function match(row: Row, q: URLSearchParams) {
-  for (const [k, raw] of q) {
-    if (["select", "order", "limit"].includes(k)) continue;
-    const v = path(row, k); const [op, ...rest] = raw.split("."); const arg = rest.join(".");
-    if (op === "eq" && String(v ?? "") !== arg) return false;
-    if (op === "in" && !arg.slice(1, -1).split(",").includes(String(v))) return false;
-    if (op === "like" && !new RegExp("^" + arg.replace(/\*/g, ".*") + "$").test(String(v ?? ""))) return false;
-  }
-  return true;
-}
+import { match, project } from "./pgmock.ts";
 const J = (b: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json", ...headers } });
 const hdr = (init: RequestInit, k: string) => new Headers(init.headers).get(k);
 
@@ -37,8 +27,7 @@ globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {})
     const table = u.pathname.replace("/rest/v1/", ""); const rows = T[table]; const q = u.searchParams;
     const body = init.body ? String(init.body) : "";
     if (method === "GET") {
-      const sel = q.get("select") ?? "";
-      return J(rows.filter((r) => match(r, q)).map((r) => sel.startsWith("lang:") ? { lang: r.profile?.language } : structuredClone(r)));
+      return J(rows.filter((r) => match(r, q)).map((r) => project(r, q.get("select"))));
     }
     if (method === "POST") { const row = JSON.parse(body); const i = rows.findIndex((r) => r.key === row.key); if (i >= 0) rows[i] = { ...rows[i], ...row }; else rows.push(row); return new Response("", { status: 201 }); }
     if (method === "PATCH") { const patch = JSON.parse(body); const hit = rows.filter((r) => match(r, q)); hit.forEach((r) => Object.assign(r, patch)); return J(hit); }

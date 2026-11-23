@@ -140,10 +140,15 @@ def team_stats(db, days=14):
 
 def quality_problems(db, days=14):
     since = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = db.select("jobs", f"select=output&kind=eq.reel&created_at=gte.{_iso(since)}&order=created_at.desc&limit=40")
+    rows = db.select("jobs", f"select=issues:output->qc->issues,critic_total:output->critic->total,critic_summary:output->critic->summary"
+                             f"&kind=eq.reel&created_at=gte.{_iso(since)}&order=created_at.desc&limit=40")
     out = []
-    for r in rows:
-        o = r.get("output") or {}
+    for r in rows:              # only the QC issues and the critic's verdict are read, never the whole reel
+        o = {}
+        if r.get("issues") is not None:
+            o["qc"] = {"issues": r["issues"]}
+        if r.get("critic_total") is not None or r.get("critic_summary") is not None:
+            o["critic"] = {"total": r.get("critic_total"), "summary": r.get("critic_summary") or ""}
         out += [f"[QC] {i.get('problem', '')[:200]}" for i in (o.get("qc") or {}).get("issues", [])[:3]]
         out += [f"[critic {(o.get('critic') or {}).get('total')}] {(o.get('critic') or {}).get('summary', '')[:200]}"] if o.get("critic") else []
     return out[:30]

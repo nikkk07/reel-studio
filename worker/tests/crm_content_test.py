@@ -7,6 +7,7 @@ ROOT = tempfile.mkdtemp()
 os.environ.update(REELSTUDIO_ROOT=ROOT, REELSTUDIO_BRAIN="mock", REELSTUDIO_3D_DIR=f"{ROOT}/3d", CRM_CONTENT_TOKEN="t" * 40)
 os.environ.setdefault("REELSTUDIO_FONTS_DIR", "/tmp/rsfonts")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent)); import pgsel  # noqa: E402
 from reelworker import config, crm, dm, agents  # noqa: E402
 from reelworker.runner import JobContext  # noqa: E402
 from reelworker.jobs import carousel, content  # noqa: E402
@@ -26,9 +27,9 @@ class DB:
         if t == "brands": return [{"id": "weone", "name": "We One Aviation", "website": "https://weoneaviation.in", "instagram": "we_one_aviation", "logo_asset": None, "profile": WP}]
         if t == "jobs" and "input->>crm_item=eq." in q:
             i = q.split("input->>crm_item=eq.")[1].split("&")[0]
-            return [j for j in self.jobs if str(j["input"].get("crm_item")) == i and j["status"] not in ("failed", "cancelled")]
+            return pgsel.project([j for j in self.jobs if str(j["input"].get("crm_item")) == i and j["status"] not in ("failed", "cancelled")], q)
         if t == "jobs" and "crm_item=not.is.null" in q:
-            return sorted([j for j in self.jobs if j["input"].get("crm_item")], key=lambda j: j["created_at"])
+            return pgsel.project(sorted([j for j in self.jobs if j["input"].get("crm_item")], key=lambda j: j["created_at"]), q)
         return []
     def insert(self, t, row, upsert=False):
         row = {"id": str(uuid.uuid4()), **row}; self.ins.append((t, row))

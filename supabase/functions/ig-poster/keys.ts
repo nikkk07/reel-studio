@@ -77,7 +77,7 @@ export async function keysTick(): Promise<Json> {
   if (due(meta) && meta.app_id) {
     const [sec] = await secret("meta_app_secret");
     const verdict: Verdict = sec ? await check("meta", sec, meta) : { state: "bad", note: "No App Secret saved." };
-    const fresh = await setting("meta_app");                 // never mark a newer save with an older result
+    const fresh = await setting("meta_app", true);                 // never mark a newer save with an older result
     if (fresh.updated_at === meta.updated_at)
       await rest("POST", "settings", { key: "meta_app", value: { ...fresh, ...verdict, checked_at: iso(now()) }, updated_at: iso(now()) }, "resolution=merge-duplicates,return=minimal");
     out.meta = verdict.state;
@@ -86,7 +86,7 @@ export async function keysTick(): Promise<Json> {
   if (due(r2s) && r2s.account_id && r2s.bucket) {
     const c = await r2conf(false);
     const verdict: Json = c ? await r2check(c) : { state: "bad", note: "No R2 keys saved." };
-    const fresh = await setting("r2");
+    const fresh = await setting("r2", true);
     if (fresh.updated_at === r2s.updated_at)
       await rest("POST", "settings", { key: "r2", value: { ...fresh, ...verdict, checked_at: iso(now()) }, updated_at: iso(now()) }, "resolution=merge-duplicates,return=minimal");
     out.r2 = verdict.state;

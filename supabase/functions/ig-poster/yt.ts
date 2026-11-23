@@ -3,7 +3,7 @@
 // Safety: the upload session and the bytes YouTube confirmed are saved after every part, so a timeout or a lost response
 // resumes (YouTube is asked how much it has) instead of uploading a second copy. A vertical video of up to 3 minutes
 // is a Short automatically. Uploads have their own quota (100 a day per Google project), far above the studio's reels.
-import { SB, H, type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setPart, bk } from "./db.ts";
+import { SB, H, type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setPart, bk, activeReels, liteDue, fullReels } from "./db.ts";
 import { mediaSize, mediaRange } from "./media.ts";
 
 const YT = Deno.env.get("YT_API") ?? "https://www.googleapis.com/youtube/v3";
@@ -174,9 +174,8 @@ async function fail(job: Json, e: YTError, brand: string) {
   await setPart(job, "yt", g);
 }
 
-async function ytBrand(b: Brand): Promise<Json> {
-  const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&brand=eq.${b.id}&status=eq.done&output->yt->>state=in.(scheduled,uploading,processing)&order=updated_at.asc&limit=20`);
-  const due = reels.filter((r) => r.output.yt.state !== "scheduled" || Date.parse(r.output.yt.at ?? 0) <= Date.now());
+async function ytBrand(b: Brand, lite?: Json[]): Promise<Json> {
+  const due = await liteDue("yt", b.id, (g) => g.state !== "scheduled" || Date.parse(g.at ?? 0) <= Date.now(), lite);
   if (!due.length) return { due: 0 };
   const st = await setting(bk("youtube_status", b.id));
   const lang = (await rest("GET", `brands?select=lang:profile->>language&id=eq.${encodeURIComponent(b.id)}`))?.[0]?.lang;
@@ -187,12 +186,13 @@ async function ytBrand(b: Brand): Promise<Json> {
     const err = e as YTError;
     if (err.auth && st.state === "connected") await setSetting(bk("youtube_status", b.id), { ...st, state: "expired", checked_at: iso(now()),
       note: "Google sign-in for YouTube expired or was removed. Tap Reconnect YouTube in this account's Settings. (If the Google app is still in Testing, Google ends sign-ins after 7 days: publish the app.)" });
-    for (const r of due) if (r.output.yt.state === "scheduled" && !r.output.yt.error)
-      await setPart(r, "yt", { ...r.output.yt, error: `Waiting for YouTube: ${err.message}` }, "scheduled");
+    for (const r of await fullReels(due.filter((x) => x.yt.state === "scheduled" && !x.yt.error), "yt"))
+      if (r.output.yt.state === "scheduled" && !r.output.yt.error)
+        await setPart(r, "yt", { ...r.output.yt, error: `Waiting for YouTube: ${err.message}` }, "scheduled");
     return { connected: false, due: due.length };
   }
   const log: Json = {};
-  for (const r of due.slice(0, 2)) {
+  for (const r of await fullReels(due.slice(0, 2), "yt")) {
     const g = r.output.yt;
     if (g.state === "scheduled" && g.resume) {          // a retry continues where it stopped
       const next = { ...g, state: g.resume, attempts: Number(g.attempts ?? 0) + 1 }; delete next.resume; delete next.error;
@@ -207,9 +207,10 @@ async function ytBrand(b: Brand): Promise<Json> {
   }
   return { connected: true, due: due.length, log };
 }
-export async function ytTick(list: Brand[]): Promise<Json> {
+export async function ytTick(list: Brand[], lite?: Json[]): Promise<Json> {
   const res: Json = {};
-  for (const b of list) { try { const r = await ytBrand(b); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e).slice(0, 160) }; } }
+  lite ??= await activeReels();
+  for (const b of list) { try { const r = await ytBrand(b, lite); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e).slice(0, 160) }; } }
   return res;
 }
 

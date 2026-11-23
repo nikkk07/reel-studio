@@ -23,21 +23,15 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     if (p.startsWith("/storage/v1/object/sign/reels/")) return json({ signedURL: `/object/sign/reels/${p.split("/reels/")[1]}?token=t` });
     const table = p.split("/rest/v1/")[1];
     const q = url.searchParams;
-    if (table === "jobs" && method === "GET") {
-      const st = q.get("output->ig->>state") ?? "";
-      return json(DB.jobs.filter((j: J) => j.status === "done" && (!st || st.includes(j.output?.ig?.state))));
-    }
+    if (table === "jobs" && method === "GET") return json(DB.jobs.filter((j: J) => match(j, q)).map((j: J) => project(j, q.get("select"))));
     if (table === "jobs" && method === "PATCH") {
       const id = q.get("id")!.slice(3); const j = DB.jobs.find((x: J) => x.id === id);
       const exp = q.get("output->ig->>state");
       if (!j || (exp && `eq.${j.output?.ig?.state}` !== exp)) return json([]);
       Object.assign(j, JSON.parse(String(init!.body))); return json([j]);
     }
-    if (table === "settings" && method === "GET") {
-      const k = q.get("key") ?? "";
-      if (k.startsWith("like.")) return json(Object.entries(DB.settings).map(([key, value]) => ({ key, value })));
-      const v = DB.settings[decodeURIComponent(k.slice(3))]; return json(v ? [{ value: v }] : []);
-    }
+    if (table === "settings" && method === "GET")
+      return json(Object.entries(DB.settings).map(([key, value]) => ({ key, value })).filter((r) => match(r, q)).map((r) => project(r, q.get("select"))));
     if (table === "settings" && method === "POST") { const b = JSON.parse(String(init!.body)); DB.settings[b.key] = b.value; return new Response(null, { status: 201 }); }
     if (table === "secrets" && method === "GET") { const v = DB.secrets[decodeURIComponent((q.get("key") ?? "").slice(3))]; return json(v ? [v] : []); }
     return json([]);
@@ -58,11 +52,12 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   return json({ error: { code: 100, message: "unknown" } }, 400);
 }) as typeof fetch;
 
+const { match, project } = await import("./pgmock.ts");
 const { tick } = await import("./index.ts");
 const brand = [{ id: "weone", name: "We One Aviation" }];
 
 Deno.test("CA01 a carousel posts as 3 slide items + 1 CAROUSEL container, then publishes once", async () => {
-  DB.jobs.push({ id: "j1", status: "done", output: { format: "carousel", slides: ["j1/slide_01.jpg", "j1/slide_02.jpg", "j1/slide_03.jpg"],
+  DB.jobs.push({ id: "j1", kind: "reel", brand: "weone", status: "done", output: { format: "carousel", slides: ["j1/slide_01.jpg", "j1/slide_02.jpg", "j1/slide_03.jpg"],
     ig_caption: "CPL ka kharcha, line by line", decided_at: past, ig: { state: "scheduled", at: past, attempts: 0 } } });
   IG.fail_slide = 2;                                   // the 2nd slide fails once: the retry must not repeat slide 1
   await tick(brand);
@@ -87,8 +82,8 @@ Deno.test("CA01 a carousel posts as 3 slide items + 1 CAROUSEL container, then p
 Deno.test("CA02 a carousel does not wait for a video file; a reel still does", async () => {
   DB.jobs.length = 0; IG.calls.length = 0;
   const fresh = new Date().toISOString();
-  DB.jobs.push({ id: "j2", status: "done", output: { video: "j2/reel.mp4", ig_caption: "x", decided_at: fresh, ig: { state: "scheduled", at: past } } });
-  DB.jobs.push({ id: "j3", status: "done", output: { format: "carousel", slides: ["a.jpg", "b.jpg"], ig_caption: "y", decided_at: fresh, ig: { state: "scheduled", at: past } } });
+  DB.jobs.push({ id: "j2", kind: "reel", brand: "weone", status: "done", output: { video: "j2/reel.mp4", ig_caption: "x", decided_at: fresh, ig: { state: "scheduled", at: past } } });
+  DB.jobs.push({ id: "j3", kind: "reel", brand: "weone", status: "done", output: { format: "carousel", slides: ["a.jpg", "b.jpg"], ig_caption: "y", decided_at: fresh, ig: { state: "scheduled", at: past } } });
   const r = await tick(brand);
   assertEquals(r.weone.log.j2, "waiting for the Mac to prepare the file");
   assertEquals(r.weone.log.j3, "carousel container created");
@@ -96,9 +91,9 @@ Deno.test("CA02 a carousel does not wait for a video file; a reel still does", a
 
 Deno.test("CA03 an ad video the CRM scheduled carries Meta's AI info label; a normal reel does not", async () => {
   DB.jobs.length = 0; IG.calls.length = 0;
-  DB.jobs.push({ id: "j4", status: "done", output: { ig_video: "j4/ig.mp4", ig_caption: "Pilot after 12th? Free counselling.", ig_ai: true, decided_at: past,
+  DB.jobs.push({ id: "j4", kind: "reel", brand: "weone", status: "done", output: { ig_video: "j4/ig.mp4", ig_caption: "Pilot after 12th? Free counselling.", ig_ai: true, decided_at: past,
     ig: { state: "scheduled", at: past, via: "crm", crm_item: 1 } } });
-  DB.jobs.push({ id: "j5", status: "done", output: { ig_video: "j5/ig.mp4", ig_caption: "Aviation fact of the day", decided_at: past, ig: { state: "scheduled", at: past } } });
+  DB.jobs.push({ id: "j5", kind: "reel", brand: "weone", status: "done", output: { ig_video: "j5/ig.mp4", ig_caption: "Aviation fact of the day", decided_at: past, ig: { state: "scheduled", at: past } } });
   await tick(brand);
   const reels = IG.calls.filter((c: J) => c.body.media_type === "REELS");
   assertEquals(reels.length, 2);

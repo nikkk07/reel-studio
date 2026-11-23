@@ -38,12 +38,31 @@ def engagement(s):
     return round(100 * (4 * (s.get("shares") or 0) + 3 * (s.get("saved") or 0) + 2 * (s.get("comments") or 0) + (s.get("likes") or 0)) / reach, 2)
 
 
+# only the fields history() reads, never scripts, reviews or renders (120 reels: a few KB instead of several MB)
+HIST_COLS = ("id,status,created_at,title:output->>title,thumb:output->>thumb,ig_stats:output->ig_stats,ig:output->ig,"
+             "critic_total:output->critic->total,critic_words:output->critic->words,qc_score:output->qc->score,hook:output->hook,"
+             "duration:output->duration,concept:input->concept,category:input->category,lane:input->lane,ap:input->autopilot")
+
+
+def _hist_parts(r: dict):
+    """(output, input) rebuilt from a light history row, with the same keys history() reads."""
+    o = {k: r.get(k) for k in ("title", "thumb", "ig_stats", "ig", "hook", "duration") if r.get(k) is not None}
+    if r.get("critic_total") is not None or r.get("critic_words") is not None:
+        o["critic"] = {"total": r.get("critic_total"), "words": r.get("critic_words")}
+    if r.get("qc_score") is not None:
+        o["qc"] = {"score": r.get("qc_score")}
+    i = {k: r.get(k) for k in ("concept", "category", "lane") if r.get(k) is not None}
+    if r.get("ap") is not None:
+        i["autopilot"] = r["ap"]
+    return o, i
+
+
 def history(db, days=60, brand="weone", prof=None):
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = db.select("jobs", f"select=id,status,input,output,created_at&kind=eq.reel&brand=eq.{brand}&created_at=gte.{since}&order=created_at.desc&limit=120")
+    rows = db.select("jobs", f"select={HIST_COLS}&kind=eq.reel&brand=eq.{brand}&created_at=gte.{since}&order=created_at.desc&limit=120")
     out = []
     for r in rows:
-        o, i = r.get("output") or {}, r.get("input") or {}
+        o, i = _hist_parts(r)
         title = o.get("title") or (i.get("concept") or {}).get("title")
         if not title:
             continue

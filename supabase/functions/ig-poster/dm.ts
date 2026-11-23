@@ -7,7 +7,7 @@
 // Runs every 2 minutes in the cloud, so it works while the Mac is off.
 // Safety: a comment is claimed in dm_log (unique comment id) BEFORE the message is sent, so it is never messaged twice;
 // at most 30 messages an hour per account; the account's own comments and replies are ignored.
-import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, bk } from "./db.ts";
+import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, bk, everyMin } from "./db.ts";
 
 const API = Deno.env.get("IG_API") ?? "https://graph.instagram.com/v26.0";
 const HOURLY_CAP = 30;                  // keyword mode default; universal mode: dm.cap (at most 200 sends an hour)
@@ -266,7 +266,7 @@ async function dmBrand(b: Brand): Promise<Json> {
 }
 
 export async function dmTick(list: Brand[], force = false): Promise<Json> {
-  if (!force && new Date().getUTCMinutes() % 2 !== 0) return { skipped: true };
+  if (!force && !everyMin(2)) return { skipped: true };          // every 2 min; slower when the data guard is on
   const res: Json = {};
   for (const b of list) { try { const r = await dmBrand(b); if (!r.off) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e).slice(0, 160) }; } }
   return res;

@@ -1,6 +1,6 @@
 // Facebook Page Reels (Graph API video_reels): start -> upload (Facebook fetches our signed file URL) -> finish(PUBLISHED)
 // -> wait until published. State lives in jobs.output.fb; each step is saved, so a lost response is checked, never repeated.
-import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setPart, bk } from "./db.ts";
+import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setPart, bk, activeReels, liteDue, fullReels } from "./db.ts";
 import { mediaUrl } from "./media.ts";
 
 const FB = Deno.env.get("FB_API") ?? "https://graph.facebook.com/v26.0";
@@ -93,18 +93,18 @@ async function fail(job: Json, e: FBError, brand: string) {
   await setPart(job, "fb", g);
 }
 
-async function fbBrand(b: Brand): Promise<Json> {
-  const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&brand=eq.${b.id}&status=eq.done&output->fb->>state=in.(scheduled,uploading,processing)&order=updated_at.asc&limit=20`);
-  const due = reels.filter((r) => r.output.fb.state !== "scheduled" || Date.parse(r.output.fb.at ?? 0) <= Date.now());
+async function fbBrand(b: Brand, lite?: Json[]): Promise<Json> {
+  const due = await liteDue("fb", b.id, (g) => g.state !== "scheduled" || Date.parse(g.at ?? 0) <= Date.now(), lite);
   if (!due.length) return { due: 0 };
   const st = await setting(bk("facebook_status", b.id)); const [tok] = await secret(bk("facebook_page_token", b.id));
   if (!tok || !st.page_id || st.state === "not_connected") {
-    for (const r of due) if (r.output.fb.state === "scheduled" && !r.output.fb.error)
-      await setPart(r, "fb", { ...r.output.fb, error: "Waiting for Facebook to be connected." }, "scheduled");
+    for (const r of await fullReels(due.filter((x) => x.fb.state === "scheduled" && !x.fb.error), "fb"))
+      if (r.output.fb.state === "scheduled" && !r.output.fb.error)
+        await setPart(r, "fb", { ...r.output.fb, error: "Waiting for Facebook to be connected." }, "scheduled");
     return { connected: false, due: due.length };
   }
   const log: Json = {}; let worked = false;
-  for (const r of due.slice(0, 3)) {
+  for (const r of await fullReels(due.slice(0, 3), "fb")) {
     try { log[r.id] = await step(r, tok, st.page_id, b); worked = true; }
     catch (e) { const err = e instanceof FBError ? e : new FBError(String((e as Error).message ?? e)); await fail(r, err, b.id); log[r.id] = `error: ${err.message}`; }
   }
@@ -147,8 +147,9 @@ export async function fbCheck(b: Brand): Promise<string | null> {
     return "kept";
   }
 }
-export async function fbTick(list: Brand[]): Promise<Json> {
+export async function fbTick(list: Brand[], lite?: Json[]): Promise<Json> {
   const res: Json = {};
-  for (const b of list) { try { const r = await fbBrand(b); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }
+  lite ??= await activeReels();
+  for (const b of list) { try { const r = await fbBrand(b, lite); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }
   return res;
 }

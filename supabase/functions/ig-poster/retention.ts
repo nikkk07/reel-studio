@@ -6,7 +6,7 @@
 //  * never while a post is scheduled or in progress: the platforms still need the file
 // The thumbnail and every number (views, results, script, hook) stay, so dashboards and learning keep working.
 // Older reels kept two copies (reel.mp4 + ig.mp4): the extra copy is removed and the posting copy used everywhere.
-import { type Json, SB, H, rest, minsAgo } from "./db.ts";
+import { type Json, SB, H, rest, minsAgo, everyMin } from "./db.ts";
 import { r2conf, r2list, r2delete } from "./r2.ts";
 
 const DAY = 1440;
@@ -31,6 +31,13 @@ export function pruneReason(j: Json, nowMs = Date.now()): string | null {
   return mins(j.created_at) > 7 * DAY ? "older than 7 days" : null;
 }
 
+// a light row back into the shape pruneReason reads (output.<key> and output.<platform>.state / posted_at)
+export function liteJob(r: Json): Json {
+  const o: Json = {};
+  for (const k of ["store", "storage_prefix", "pruned", "decided_at", "video", "ig_video"]) if (r[k] != null) o[k] = r[k];
+  for (const p of PLATS) if (r[`${p}_state`] != null) o[p] = { state: r[`${p}_state`], posted_at: r[`${p}_posted`] ?? undefined };
+  return { id: r.id, status: r.status, created_at: r.created_at, updated_at: r.updated_at, output: o };
+}
 async function sbList(prefix: string): Promise<string[]> {
   const r = await fetch(`${SB}/storage/v1/object/list/reels`, { method: "POST", headers: H, body: JSON.stringify({ prefix, limit: 100 }) });
   if (!r.ok) throw new Error(`storage list failed (${r.status})`);
@@ -44,8 +51,12 @@ async function sbDelete(paths: string[]) {
 const merge = (id: string, patch: Json) => rest("POST", "rpc/merge_reel_output", { p_job: id, p_patch: patch }, "return=minimal");
 
 export async function retentionTick(force = false): Promise<Json> {
-  if (!force && new Date().getUTCMinutes() % 10 !== 0) return { skipped: true };       // every 10 minutes is plenty
-  const rows: Json[] = await rest("GET", "jobs?select=id,status,created_at,updated_at,output&kind=eq.reel&output->>storage_prefix=not.is.null&output->>pruned=is.null&order=created_at.asc&limit=200");
+  if (!force && !everyMin(10)) return { skipped: true };       // every 10 minutes is plenty
+  // only the fields the rules look at (never scripts, critiques or stats): a few hundred bytes per reel
+  const sel = ["store", "storage_prefix", "pruned", "decided_at", "video", "ig_video"].map((k) => `${k}:output->>${k}`)
+    .concat(PLATS.flatMap((p) => [`${p}_state:output->${p}->>state`, `${p}_posted:output->${p}->>posted_at`])).join(",");
+  const rows: Json[] = ((await rest("GET", `jobs?select=id,status,created_at,updated_at,${sel}&kind=eq.reel&output->>storage_prefix=not.is.null&output->>pruned=is.null&order=created_at.asc&limit=200`)) ?? [])
+    .map(liteJob);
   const res: Json = { deleted: [], deduped: [] }; let budget = 8;
   const r2 = rows.some((j) => j.output?.store === "r2") ? await r2conf(false) : null;
   for (const j of rows) {

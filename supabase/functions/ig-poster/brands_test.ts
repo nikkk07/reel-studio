@@ -14,24 +14,9 @@ const CONVS: Row[] = []; const MSGS: Record<string, Row> = {}; let DM_FAIL = "";
 const IG_COMMENTS: Record<string, Row[]> = {}; const IG_MEDIA: Record<string, Row[]> = {}; let DM_PERM = true;
 const IG_USERS: Record<string, { id: string; username: string }> = {};       // token -> account
 const IG_POSTS: { user: string; caption: string; id: string }[] = [];
-const CALLS: string[] = [];
+const CALLS: string[] = []; const READS: string[] = []; const STATS: Row[] = []; const EGRESS: Row[] = []; let EG_LEVEL = 0;
 
-function path(row: Row, col: string) {          // output->ig->>state
-  const parts = col.split(/->>?/); let v: any = row;
-  for (const p of parts) v = v?.[p];
-  return v;
-}
-function match(row: Row, q: URLSearchParams) {
-  for (const [k, raw] of q) {
-    if (["select", "order", "limit"].includes(k)) continue;
-    const v = path(row, k); const [op, ...rest] = raw.split("."); const arg = rest.join(".");
-    if (op === "eq" && String(v ?? "") !== arg) return false;
-    if (op === "gte" && !(String(v ?? "") >= arg)) return false;
-    if (op === "in" && !arg.slice(1, -1).split(",").includes(String(v))) return false;
-    if (op === "like" && !new RegExp("^" + arg.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$").test(String(v ?? ""))) return false;
-  }
-  return true;
-}
+import { match, project } from "./pgmock.ts";
 const J = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
 
 globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {}) => {
@@ -45,11 +30,10 @@ globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {})
       if ((s.value[a.p_name]?.updated_at ?? null) === a.p_saved_at) s.value[a.p_name] = { ...s.value[a.p_name], ...a.p_status };
       return new Response(null, { status: 204 });
     }
-    if (u.pathname === "/rest/v1/rpc/set_reel_stats") return new Response(null, { status: 204 });
+    if (u.pathname === "/rest/v1/rpc/set_reel_stats") { STATS.push(JSON.parse(body)); return new Response(null, { status: 204 }); }
+    if (u.pathname === "/rest/v1/rpc/add_egress") { EGRESS.push(JSON.parse(body)); return J({ used: 1, budget: 2, reqs: 3, level: EG_LEVEL }); }
     const table = u.pathname.replace("/rest/v1/", ""); const rows = T[table]; const q = u.searchParams;
-    if (method === "GET" && (q.get("select") ?? "").startsWith("mid:"))      // per-reel DM plans by Instagram media id
-      return J(rows.filter((r) => match(r, q)).map((r) => ({ mid: r.output?.ig?.media_id, dm: r.output?.dm })));
-    if (method === "GET") return J(rows.filter((r) => match(r, q)).map((r) => structuredClone(r)));
+    if (method === "GET") { READS.push(`${table}?select=${q.get("select") ?? "*"}${q.get("id") ? `&id=${q.get("id")}` : ""}`); return J(rows.filter((r) => match(r, q)).map((r) => project(r, q.get("select")))); }
     if (method === "POST" && table === "dm_person") {        // primary key (brand, person), merged like resolution=merge-duplicates
       const row = JSON.parse(body); const i = rows.findIndex((r) => r.brand === row.brand && r.person === row.person);
       if (i >= 0) rows[i] = { ...rows[i], ...row }; else rows.push({ ...row, created_at: new Date().toISOString() });
@@ -113,8 +97,11 @@ globalThis.fetch = async (input: string | URL | Request, init: RequestInit = {})
   return J({ error: "no route " + u.href }, 599);
 };
 
-(Deno as any).serve = () => ({ finished: Promise.resolve(), shutdown() {} });     // the module registers its handler on import
-const { tick } = await import("./index.ts");
+let HANDLER: (r: Request) => Promise<Response> = async () => new Response();
+(Deno as any).serve = (h: any) => { HANDLER = h; return { finished: Promise.resolve(), shutdown() {} }; };     // the module registers its handler on import
+const { tick, statsTick } = await import("./index.ts");
+const { guard, everyMin } = await import("./db.ts");
+const { liteJob } = await import("./retention.ts");
 const { keysTick } = await import("./keys.ts");
 const { fbCaption } = await import("./facebook.ts");
 const { commentary } = await import("./linkedin.ts");
@@ -128,12 +115,12 @@ const ago = (m: number) => new Date(Date.now() - m * 60e3).toISOString();
 function reset() {
   for (const k of Object.keys(T)) T[k] = [];
   for (const k of Object.keys(IG_USERS)) delete IG_USERS[k];
-  IG_POSTS.length = 0; CALLS.length = 0; DMS.length = 0; REPLIES.length = 0; REPLY_TEXT.length = 0; DM_PERM = true; DM_FAIL = "";
+  IG_POSTS.length = 0; CALLS.length = 0; READS.length = 0; STATS.length = 0; EGRESS.length = 0; EG_LEVEL = 0; DMS.length = 0; REPLIES.length = 0; REPLY_TEXT.length = 0; DM_PERM = true; DM_FAIL = "";
   CONVS.length = 0; for (const k of Object.keys(MSGS)) delete MSGS[k];
   for (const k of Object.keys(IG_COMMENTS)) delete IG_COMMENTS[k]; for (const k of Object.keys(IG_MEDIA)) delete IG_MEDIA[k];
   T.brands = [{ id: "weone", name: "We One Aviation", links: {} }, { id: "flystar", name: "Flying Star Aviator", links: {} }, { id: "bookmycharter", name: "Book My Charter", links: {} }];
 }
-const reel = (id: string, brand: string) => ({ id, brand, kind: "reel", status: "done", updated_at: ago(1),
+const reel = (id: string, brand: string): Row => ({ id, brand, kind: "reel", status: "done", updated_at: ago(1),
   output: { title: `T ${id}`, video: `${id}/reel.mp4`, ig_video: `${id}/ig.mp4`, ig_caption: `Caption ${id}`, decided_at: ago(20), ig: { state: "scheduled", at: ago(1), attempts: 0 } } });
 
 Deno.test("each account posts with its own Instagram token, never another account's", async () => {
@@ -439,4 +426,90 @@ Deno.test("Inbox: a commenter who replies gets the PDF; a phone number is kept f
   assertEquals(toKabir, ["Here's your CPL Roadmap PDF ✈️", "https://files.test/cpl-roadmap.pdf", "Thanks @kabir! A counsellor will call you today."]);
   const p = T.dm_person.find((r) => r.person === "960")!;
   assertEquals([p.phone, p.lead_state, !!p.pdf_at], ["+919811122333", "pending", true]);
+});
+
+// ---------------------------------------------------------------- data guard (Supabase egress): every minute stays small
+const BIG = { script: "x".repeat(50000), critic: { notes: "y".repeat(20000) }, ig_stats: { at: ago(30), top_comments: ["z".repeat(160)] } };
+const fullReads = () => READS.filter((r) => /^jobs\?select=(id,output|\*)(&|$)/.test(r) || r.startsWith("jobs?select=id,status,created_at,updated_at,output"));
+
+Deno.test("EG01 a reel scheduled for later is never read in full; a due one is read alone", async () => {
+  reset();
+  IG_USERS["tok-weone"] = { id: "100", username: "we_one_aviation" };
+  T.secrets.push({ key: "instagram_token", value: "tok-weone", updated_at: ago(60) });
+  T.settings.push({ key: "instagram_status", value: { state: "connected", user_id: "100", username: "we_one_aviation", checked_at: ago(1) } });
+  const later = reel("w-later", "weone"); later.output = { ...later.output, ...BIG, ig: { state: "scheduled", at: new Date(Date.now() + 3600e3).toISOString(), attempts: 0 } };
+  T.jobs.push(later);
+  await tick(T.brands as any);
+  assertEquals(fullReads(), [], "only the light list was read");
+  assertEquals(T.jobs[0].output.ig.state, "scheduled");
+  T.jobs.push(reel("w-now", "weone")); READS.length = 0;
+  for (let i = 0; i < 3; i++) await tick(T.brands as any);
+  assert(fullReads().length >= 1 && fullReads().every((r) => r === "jobs?select=id,output&id=in.(w-now)"), `only the due reel: ${fullReads()}`);
+  assertEquals(T.jobs.find((j) => j.id === "w-now")!.output.ig.state, "posted");
+  assertEquals(T.jobs.find((j) => j.id === "w-later")!.output.ig.state, "scheduled");
+  assertEquals(T.jobs.find((j) => j.id === "w-later")!.output.script.length, 50000, "nothing else in the reel was touched");
+});
+
+Deno.test("EG02 a whole run: one settings read, no full reels, results checked every 15 min, the meter is added", async () => {
+  reset();
+  T.secrets.push({ key: "cron_key", value: "ck" }, { key: "instagram_token", value: "tok-weone", updated_at: ago(60) });
+  IG_USERS["tok-weone"] = { id: "100", username: "we_one_aviation" };
+  T.settings.push({ key: "instagram_status", value: { state: "connected", user_id: "100", username: "we_one_aviation", checked_at: ago(1) } },
+    { key: "facebook_status@flystar", value: { state: "connected", checked_at: ago(1) } }, { key: "website_status", value: { state: "connected", url: "", checked_at: ago(1) } },
+    { key: "studio_keys", value: {} }, { key: "ig_library", value: { at: ago(60), posts: Array.from({ length: 50 }, (_, i) => ({ id: String(i), caption: "c".repeat(200) })) } });
+  const posted = reel("p1", "weone"); posted.output = { ...posted.output, ...BIG, ig_stats: { at: ago(400) }, ig: { state: "posted", media_id: "m77", posted_at: ago(600) } };
+  T.jobs.push(posted);
+  for (let i = 0; i < 3; i++) {
+    const r = await HANDLER(new Request("http://fn.test/", { method: "POST", headers: { "x-cron-key": "ck" } }));
+    assertEquals(r.status, 200);
+  }
+  const settingsReads = READS.filter((r) => r.startsWith("settings"));
+  assert(settingsReads.filter((r) => r === "settings?select=key,value").length <= 3, `one preload per run: ${settingsReads}`);
+  assert(settingsReads.filter((r) => r === "settings?select=value").length <= 3, `no read per account per check: ${settingsReads}`);
+  assert(!settingsReads.some((r) => r.includes("ig_library") || r === "settings?select=value&key=eq.ig_library"), "the library is never read whole");
+  assertEquals(fullReads(), [], "nothing was due, so no reel was read in full");
+  assert(EGRESS.length >= 3 && EGRESS.every((e) => e.p_part === "poster"), "every run adds its count");
+  assert(EGRESS.slice(1).every((e) => e.p_bytes > 0 && e.p_reqs > 0));
+  const bad = await HANDLER(new Request("http://fn.test/", { method: "POST", headers: { "x-cron-key": "wrong" } }));
+  assertEquals(bad.status, 403);
+  // results: narrow fields, and the saved stats are computed from them
+  READS.length = 0;
+  await statsTick(T.brands as any, true);
+  assertEquals(fullReads(), []);
+  assertEquals(STATS.length, 1); assertEquals(STATS[0].p_job, "p1"); assertEquals(STATS[0].p_stats.hours_since_post, 10);
+});
+
+Deno.test("EG03 the guard level stretches slow jobs; strict never stops posting", async () => {
+  reset();
+  const t0 = Date.UTC(2026, 10, 23, 10, 0) ;
+  const runs = (mins: number, off = 0) => Array.from({ length: 120 }, (_, i) => everyMin(mins, off, t0 + i * 60e3)).filter(Boolean).length;
+  guard.level = 0; assertEquals(runs(15, 3), 8);
+  guard.level = 1; assertEquals(runs(15, 3), 4);
+  guard.level = 2; assertEquals(runs(15, 3), 2);
+  T.secrets.push({ key: "cron_key", value: "ck" }, { key: "instagram_token", value: "tok-weone", updated_at: ago(60) });
+  IG_USERS["tok-weone"] = { id: "100", username: "we_one_aviation" };
+  T.settings.push({ key: "instagram_status", value: { state: "connected", user_id: "100", username: "we_one_aviation", checked_at: ago(1) } });
+  T.jobs.push(reel("s1", "weone")); EG_LEVEL = 2;
+  for (let i = 0; i < 3; i++) await HANDLER(new Request("http://fn.test/", { method: "POST", headers: { "x-cron-key": "ck" } }));
+  assertEquals(guard.level, 2, "the level from the database is kept for the next run");
+  assertEquals(T.jobs[0].output.ig.state, "posted", "posting is never held back");
+  guard.level = 0;
+});
+
+Deno.test("EG04 retention reads light rows and decides exactly as on the full reel", () => {
+  const old = new Date(Date.now() - 5 * 86400e3).toISOString();
+  const cases = [
+    { id: "a", status: "done", created_at: old, updated_at: old, output: { ...BIG, storage_prefix: "a", store: "r2", decided_at: old, ig: { state: "posted", posted_at: old }, fb: { state: "off" } } },
+    { id: "b", status: "done", created_at: old, updated_at: old, output: { ...BIG, storage_prefix: "b", ig: { state: "scheduled", at: old } } },
+    { id: "c", status: "failed", created_at: old, updated_at: old, output: { ...BIG, storage_prefix: "c", video: "c/reel.mp4", ig_video: "c/ig.mp4" } },
+    { id: "d", status: "review", created_at: ago(60), updated_at: ago(60), output: { storage_prefix: "d" } },
+  ];
+  for (const j of cases) {
+    const sel = ["store", "storage_prefix", "pruned", "decided_at", "video", "ig_video"].map((k) => `${k}:output->>${k}`)
+      .concat(["ig", "fb", "li", "yt"].flatMap((p) => [`${p}_state:output->${p}->>state`, `${p}_posted:output->${p}->>posted_at`])).join(",");
+    const lite = liteJob(project(j, `id,status,created_at,updated_at,${sel}`));
+    assertEquals(pruneReason(lite), pruneReason(j), j.id);
+    assertEquals(lite.output.video ?? null, (j.output as Row).video ?? null);
+    assert(JSON.stringify(lite).length < 600, "a few hundred bytes");
+  }
 });

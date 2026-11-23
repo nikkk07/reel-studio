@@ -188,17 +188,39 @@ def _save_sent(d):
     p.write_text(json.dumps(d))
 
 
+# only what report_of() reads (never scripts, reviews or renders): a few hundred bytes per job instead of tens of KB
+SYNC_COLS = ("id,kind,status,error,created_at,ci:input->>crm_item,ad:input->ad,decision:output->>decision,hold:output->hold,"
+             "ahold:output->autopilot_hold,ig:output->ig,ig_stats:output->ig_stats")
+
+
+def _sync_row(r: dict) -> dict:
+    """A light row back into the job shape report_of() reads."""
+    inp = {k: v for k, v in (("crm_item", r.get("ci")), ("ad", r.get("ad"))) if v is not None}
+    out = {k: v for k, v in (("decision", r.get("decision")), ("hold", r.get("hold")), ("autopilot_hold", r.get("ahold")),
+                             ("ig", r.get("ig")), ("ig_stats", r.get("ig_stats"))) if v is not None}
+    return {"id": r["id"], "kind": r["kind"], "status": r["status"], "error": r.get("error"), "created_at": r.get("created_at"), "input": inp, "output": out}
+
+
+_SYNC = {"sig": None}
+
+
 def sync(db) -> int:
-    """Report every CRM job of the last 3 weeks whose state changed since the last report (newest job per item)."""
+    """Report every CRM job of the last 3 weeks whose state changed since the last report (newest job per item).
+    Two tiny reads first: when no CRM job changed since the last full pass, nothing else is read."""
     since = (datetime.now(timezone.utc) - timedelta(days=21)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = db.select("jobs", f"select=id,kind,status,input,output,error,created_at&input->>crm_item=not.is.null&updated_at=gt.{since}"
-                             "&order=created_at.asc&limit=300")
+    newest = [db.select("jobs", f"select=updated_at&{f}&updated_at=gt.{since}&order=updated_at.desc&limit=1")
+              for f in ("input->>crm_item=not.is.null", "output->ig->>via=eq.crm")]
+    sig = json.dumps([(r[0]["updated_at"] if r else None) for r in newest])
+    if sig == _SYNC["sig"]:
+        return 0
+    rows = [_sync_row(r) for r in db.select("jobs", f"select={SYNC_COLS}&input->>crm_item=not.is.null&updated_at=gt.{since}"
+                                                    "&order=created_at.asc&limit=300")]
     latest = {}
     for r in rows:
         latest[str(r["input"]["crm_item"])] = r           # ascending: the last one wins (a revision replaces its parent)
     # ad videos made here and adopted by the CRM carry their item only in the posting instruction (CRM 120)
-    for r in db.select("jobs", f"select=id,kind,status,input,output,error,created_at&output->ig->>via=eq.crm&updated_at=gt.{since}"
-                               "&order=created_at.asc&limit=100"):
+    for r in map(_sync_row, db.select("jobs", f"select={SYNC_COLS}&output->ig->>via=eq.crm&updated_at=gt.{since}"
+                                              "&order=created_at.asc&limit=100")):
         it = ((r.get("output") or {}).get("ig") or {}).get("crm_item")
         if it and (r.get("input") or {}).get("ad"):
             latest[str(it)] = r
@@ -213,6 +235,7 @@ def sync(db) -> int:
         call("update", id=int(item), **rep)
         sent[item] = h; n += 1
     _save_sent(sent)
+    _SYNC["sig"] = sig                                     # every report went out: skip until a CRM job changes again
     return n
 
 
@@ -342,11 +365,11 @@ def push_ads(db) -> int:
     """Send each finished ad video (in review or approved) to the CRM once: the item is created for ads made here,
     the CRM-ordered ones keep theirs; the mp4 and cover go straight to CRM storage by one-time links."""
     since = (datetime.now(timezone.utc) - timedelta(days=21)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = db.select("jobs", f"select=id,status,input,output&input->>ad=eq.true&status=in.(review,done)&updated_at=gt.{since}"
+    rows = db.select("jobs", f"select=id,status,ci:input->>crm_item&input->>ad=eq.true&status=in.(review,done)&updated_at=gt.{since}"
                              "&order=created_at.asc&limit=50")
     st, n = _vstate(), 0
     for job in rows:
-        jid, inp = job["id"], job.get("input") or {}
+        jid, inp = job["id"], ({"crm_item": job["ci"]} if job.get("ci") else {})
         rec = st.get(jid) or {}
         if rec.get("done"):
             continue
@@ -458,4 +481,4 @@ def loop(db, stop):
         except Exception as e:  # noqa: BLE001
             STATUS.update(ok=False, note=str(e)[:200], at=datetime.now(timezone.utc).isoformat())
             log.warning("CRM link: %s", str(e)[:200])
-        stop.wait(120)
+        stop.wait(120 * getattr(db, "slow", 1))

@@ -162,14 +162,18 @@ def loop(db, stop):
     while not stop.is_set():
         try:
             since = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
-            rows = db.select("jobs", "select=id,brand,output,status&kind=eq.reel&status=in.(review,done)"
+            # a light list first (never scripts or results); the full reel only for one this Mac will actually prepare
+            rows = db.select("jobs", "select=id,state:output->ig->>state,vid:output->>ig_video,cap:output->>ig_caption&kind=eq.reel&status=in.(review,done)"
                                      f"&updated_at=gt.{since}&input->>format=is.null&or=(output->>ig_caption.is.null,output->>ig_video.is.null)&limit=5")
-            for job in rows:
-                o = job["output"] or {}
-                if failures.get(job["id"], 0) >= 3 or o.get("ig", {}).get("state") in ("posted", "posting"):
+            for lite in rows:
+                if failures.get(lite["id"], 0) >= 3 or lite.get("state") in ("posted", "posting"):
                     continue
-                if o.get("ig_video") and not o.get("ig_caption") and time.time() < quiet_until:
+                if lite.get("vid") and not lite.get("cap") and time.time() < quiet_until:
                     continue          # only the caption is missing and Claude is at its limit: try after the reset
+                full = db.select("jobs", f"select=id,brand,output,status&id=eq.{lite['id']}")
+                if not full:
+                    continue
+                job = full[0]
                 try:
                     if prepare(db, job):
                         log.info("[%s] Instagram file/caption ready", job["id"][:8])
@@ -181,4 +185,4 @@ def loop(db, stop):
                     log.warning("[%s] Instagram preparation failed (%s)", job["id"][:8], str(e)[:200])
         except Exception as e:  # noqa: BLE001
             log.warning("instagram prep loop: %s", str(e)[:300])
-        stop.wait(float(config.get("REELSTUDIO_IG_TICK", "60")))
+        stop.wait(float(config.get("REELSTUDIO_IG_TICK", "60")) * getattr(db, "slow", 1))

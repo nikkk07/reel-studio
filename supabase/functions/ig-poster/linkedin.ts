@@ -2,7 +2,7 @@
 // State lives in jobs.output.li:  scheduled -> uploading (parts) -> processing -> posting -> posted
 // Safety: progress (video urn, uploaded parts) is saved after every part, so a timeout resumes instead of restarting;
 // before creating a post, the page's recent posts are checked for this video, so a lost response never double-posts.
-import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setSecret, setPart, bk } from "./db.ts";
+import { type Json, type Brand, now, iso, minsAgo, rest, setting, setSetting, secret, setSecret, setPart, bk, activeReels, liteDue, fullReels } from "./db.ts";
 import { mediaSize, mediaRange } from "./media.ts";
 
 const LI_API = Deno.env.get("LI_API") ?? "https://api.linkedin.com/rest";
@@ -149,18 +149,18 @@ async function fail(job: Json, e: LIError, brand: string) {
   await setPart(job, "li", g);
 }
 
-async function liBrand(b: Brand): Promise<Json> {
-  const reels: Json[] = await rest("GET", `jobs?select=id,output&kind=eq.reel&brand=eq.${b.id}&status=eq.done&output->li->>state=in.(scheduled,uploading,processing,posting)&order=updated_at.asc&limit=20`);
-  const due = reels.filter((r) => r.output.li.state !== "scheduled" || Date.parse(r.output.li.at ?? 0) <= Date.now());
+async function liBrand(b: Brand, lite?: Json[]): Promise<Json> {
+  const due = await liteDue("li", b.id, (g) => g.state !== "scheduled" || Date.parse(g.at ?? 0) <= Date.now(), lite);
   if (!due.length) return { due: 0 };
   const [tok, st] = await connection(b.id);
   if (!tok || !st.org_urn) {
-    for (const r of due) if (r.output.li.state === "scheduled" && !r.output.li.error)
-      await setPart(r, "li", { ...r.output.li, error: "Waiting for LinkedIn to be connected." }, "scheduled");
+    for (const r of await fullReels(due.filter((x) => x.li.state === "scheduled" && !x.li.error), "li"))
+      if (r.output.li.state === "scheduled" && !r.output.li.error)
+        await setPart(r, "li", { ...r.output.li, error: "Waiting for LinkedIn to be connected." }, "scheduled");
     return { connected: false, due: due.length };
   }
   const log: Json = {}; let worked = false;
-  for (const r of due.slice(0, 2)) {
+  for (const r of await fullReels(due.slice(0, 2), "li")) {
     try { log[r.id] = await step(r, tok, st, b); worked = true; }
     catch (e) { const err = e instanceof LIError ? e : new LIError(String((e as Error).message ?? e)); await fail(r, err, b.id); log[r.id] = `error: ${err.message}`; }
   }
@@ -184,8 +184,9 @@ export async function liCheck(b: Brand): Promise<string | null> {
   return v.state;
 }
 
-export async function liTick(list: Brand[]): Promise<Json> {
+export async function liTick(list: Brand[], lite?: Json[]): Promise<Json> {
   const res: Json = {};
-  for (const b of list) { try { const r = await liBrand(b); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }
+  lite ??= await activeReels();
+  for (const b of list) { try { const r = await liBrand(b, lite); if (r.due) res[b.id] = r; } catch (e) { res[b.id] = { error: String((e as Error).message ?? e) }; } }
   return res;
 }

@@ -2,11 +2,27 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
 // stay signed in across refreshes and restarts: session kept in this browser's storage and renewed automatically
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });   // supabase-js 2.45.4, pinned with SRI
+// Data meter: Supabase's Free plan lets 5 GB a month leave the project. Every response this page receives is counted (its size
+// on the wire, plus a small allowance for headers) and added to the shared count every few minutes; the answer is the guard
+// level (0 normal, 1 saver, 2 strict) that slows every refresh down by itself long before the limit.
+const METER = { bytes: 0, reqs: 0, off: 0 };
+let lastPoll = Date.now();          // the last background read (poll); declared early: pages opened at start-up set it
+async function meteredFetch(input, init) {
+  const r = await fetch(input, init);
+  try {
+    METER.reqs++; const n = Number(r.headers.get("content-length"));
+    if (n > 0) METER.bytes += 400 + n;
+    else r.clone().arrayBuffer().then((b) => { METER.bytes += 400 + Math.ceil(b.byteLength / 3); }, () => { METER.bytes += 400; });
+  } catch { /* counting never breaks a request */ }
+  return r;
+}
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+  global: { fetch: meteredFetch } });   // supabase-js 2.45.4, pinned with SRI
 const $app = document.getElementById("app");
 const S = { session: null, route: "create", worker: null, reels: [], est: null, seenReview: null, mode: "suggest", picked: null,
   concept: null, open: {}, sel: {}, timers: [], installEvt: null, checkedAt: 0,
-  confirm: {}, busy: {}, drafts: {}, changeOpen: {}, net: { ok: true, since: 0 }, pending: {}, waiters: {}, tick: {}, idea: "", steer: "" };
+  confirm: {}, busy: {}, drafts: {}, changeOpen: {}, net: { ok: true, since: 0 }, pending: {}, waiters: {}, tick: {}, idea: "", steer: "",
+  guard: { level: 0 } };
 try { Object.assign(S.pending, JSON.parse(sessionStorage.getItem("rs_pending") || "{}")); } catch { /* */ }
 const savePending = () => { try { sessionStorage.setItem("rs_pending", JSON.stringify(S.pending)); } catch { /* */ } };
 
@@ -80,7 +96,15 @@ function toast(msg, opts = {}) {
   const t = h("div", { cls: "toast" + (opts.err ? " err" : "") }, h("span", {}, msg), opts.action ? h("button", { onclick: () => { opts.action.fn(); t.remove(); } }, opts.action.label) : null);
   box.append(t); setTimeout(() => t.remove(), opts.ms || 5000);
 }
-function every(ms, fn) { fn(); S.timers.push(setInterval(fn, ms)); }
+function every(ms, fn) { fn(); pageEvery(ms, fn); }
+let lastInput = Date.now();
+for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) addEventListener(ev, () => { lastInput = Date.now(); }, { passive: true, capture: true });
+const slowBy = () => [1, 2, 4][S.guard?.level || 0] * (Date.now() - lastInput > 15 * 60e3 ? 4 : 1);     // idle 15 min: 4x slower
+// a page's background refresh: never while the tab is hidden, slower when nobody is using it or the data guard is on
+function pageEvery(ms, fn) {
+  let last = Date.now();
+  S.timers.push(setInterval(() => { if (document.hidden || Date.now() - last < ms * slowBy() - 400) return; last = Date.now(); fn(); }, Math.min(ms, 3000)));
+}
 function clearTimers() { S.timers.forEach(clearInterval); S.timers = []; }
 
 // ---------------------------------------------------------------- data
@@ -127,24 +151,43 @@ async function events(id, n = 10) { const { data } = await sb.from("job_events")
 async function loadWorker() { const { data } = await sb.from("workers").select("*").order("last_seen", { ascending: false }).limit(1); S.worker = (data || [])[0] || null; return S.worker; }
 const COLS = "id,brand,kind,status,stage,progress,input,output,error,not_before,created_at,updated_at,attempts,parent_id,lease_owner,lease_expires_at";
 const normTitle = (j) => String(j.input?.concept?.title || j.output?.title || "").trim().toLowerCase();
+// the small, fast-changing columns: read on every refresh (a few hundred bytes per reel)
+const LITE = "id,brand,kind,status,stage,progress,error,not_before,created_at,updated_at,attempts,parent_id,lease_owner,lease_expires_at";
+const reelCache = new Map();         // id -> { row: full row, at: when it was read }
 async function loadReels() {
   // live reels and recent stopped ones are fetched separately, so old history can never push a running reel off the list;
-  // on any error the last good list is kept (a dropped connection must not make reels disappear)
+  // on any error the last good list is kept (a dropped connection must not make reels disappear).
+  // The light list comes first; the full reel (script, review, results) is read only when it is new, changed status or stage,
+  // or changed more than a minute after the last full read.
   const since = new Date(Date.now() - 12 * 3600e3).toISOString();     // stopped / failed reels leave the list after 12 hours
   const [live, stopped] = await Promise.all([
-    sb.from("jobs").select(COLS).eq("kind", "reel").in("status", [...ACTIVE, "review"]).order("created_at", { ascending: true }).limit(50),
-    sb.from("jobs").select(COLS).eq("kind", "reel").in("status", ["failed", "cancelled"]).gte("updated_at", since).order("updated_at", { ascending: false }).limit(12)]);
+    sb.from("jobs").select(LITE).eq("kind", "reel").in("status", [...ACTIVE, "review"]).order("created_at", { ascending: true }).limit(50),
+    sb.from("jobs").select(LITE).eq("kind", "reel").in("status", ["failed", "cancelled"]).gte("updated_at", since).order("updated_at", { ascending: false }).limit(12)]);
   const err = live.error || stopped.error; if (err) throw err;
-  const busyTitles = new Set(live.data.map(normTitle).filter(Boolean));
-  S.reels = [...live.data, ...stopped.data.filter((j) => !["reject", "auto_revise"].includes(j.output?.decision) && !busyTitles.has(normTitle(j)))];
+  const lite = [...live.data, ...stopped.data];
+  const need = lite.filter((r) => { const c = reelCache.get(r.id);
+    return !c || c.row.status !== r.status || c.row.stage !== r.stage || (c.row.updated_at !== r.updated_at && Date.now() - c.at > 60e3); }).map((r) => r.id);
+  if (need.length) {
+    const { data, error } = await sb.from("jobs").select(COLS).in("id", need); if (error) throw error;
+    for (const r of data || []) reelCache.set(r.id, { row: r, at: Date.now() });
+  }
+  for (const id of [...reelCache.keys()]) if (!lite.some((r) => r.id === id)) reelCache.delete(id);
+  const full = (r) => { const c = reelCache.get(r.id); return c ? { ...c.row, ...r } : null; };
+  const liveRows = live.data.map(full).filter(Boolean), stoppedRows = stopped.data.map(full).filter(Boolean);
+  const busyTitles = new Set(liveRows.map(normTitle).filter(Boolean));
+  S.reels = [...liveRows, ...stoppedRows.filter((j) => !["reject", "auto_revise"].includes(j.output?.decision) && !busyTitles.has(normTitle(j)))];
   return S.reels;
 }
 const stopping = (j) => j.status === "cancelled" && j.lease_owner && new Date(j.lease_expires_at) > Date.now();
-function patchLocal(row) { if (!row || !row.id) return; const i = S.reels.findIndex((x) => x.id === row.id); if (i >= 0) S.reels[i] = { ...S.reels[i], ...row }; else if (row.kind === "reel") S.reels.push(row); }
+function patchLocal(row) { if (!row || !row.id) return; reelCache.delete(row.id); const i = S.reels.findIndex((x) => x.id === row.id); if (i >= 0) S.reels[i] = { ...S.reels[i], ...row }; else if (row.kind === "reel") S.reels.push(row); }
 const isAuthErr = (e) => e && (e.code === "PGRST301" || e.code === "PGRST303" || /jwt expired|invalid jwt|jwt.*(malformed|signature)/i.test(e.message || ""));
+const signCache = new Map();      // the same link for 50 minutes: the browser reuses the image it already has
 async function signed(path, download) {
   if (!path) return null;
-  const { data } = await sb.storage.from("reels").createSignedUrl(path, 3600, download ? { download } : undefined); return data?.signedUrl || null;
+  const c = !download && signCache.get(path); if (c && c.until > Date.now()) return c.url;
+  const { data } = await sb.storage.from("reels").createSignedUrl(path, 3600, download ? { download } : undefined);
+  const u = data?.signedUrl || null; if (u && !download) signCache.set(path, { url: u, until: Date.now() + 50 * 60e3 });
+  return u;
 }
 // a reel's video: Cloudflare R2 (a 7-day link saved with the reel) or Supabase (signed here); gone once retention removed it
 async function videoUrl(o, name) {
@@ -252,8 +295,36 @@ function shell(content, { nav = true } = {}) {
     h("div", { cls: "spacer" }), lamps,
     S.session ? h("button", { cls: "who", "aria-label": "Account menu", onclick: toggleMenu }, initials) : null));
   const tab = nav && S.session ? h("nav", { cls: "tabbar", "aria-label": "Main", style: `grid-template-columns:repeat(${items.length},1fr)` }, items.map((it) => navBtn(it, true))) : null;
-  $app.replaceChildren(top, h("main", { id: "main" }, content), tab || "");
+  $app.replaceChildren(top, h("main", { id: "main" }, S.session ? guardNote() : "", content), tab || "");
   updateTitle();
+}
+// the data guard, shown on every page while it is on (it changes rarely; updated in place, never by redrawing the page)
+const dataSize = (b) => b == null ? "–" : b >= 1073741824 ? `${(b / 1073741824).toFixed(2)} GB` : `${Math.max(0, Math.round(b / 1048576))} MB`;
+function guardNote() {
+  const g = S.guard || {}; if (!g.level) return h("div", { id: "guard" });
+  const pct = g.budget ? Math.round((g.used / g.budget) * 100) : null;
+  return h("div", { id: "guard" }, h("div", { cls: "banner " + (g.level >= 2 ? "warn" : "info"), style: "margin-bottom:14px" },
+    g.level >= 2 ? `Data saver (strict): ${pct}% of the cloud data budget for the last 30 days is used. Posting and reels in progress continue; pages refresh rarely and results update less often.`
+      : `Data saver: ${pct}% of the cloud data budget for the last 30 days is used, so pages refresh less often. Nothing stops.`));
+}
+function paintGuard() { const el = document.getElementById("guard"); if (el) el.replaceWith(guardNote()); }
+function dataCard(refresh) {
+  const g = S.guard || {}; const known = !!g.at && g.budget;
+  const pct = known ? Math.min(100, Math.round((g.used / g.budget) * 100)) : null;
+  const state = !known ? "no" : g.level >= 2 ? "warn" : g.level === 1 ? "wait" : "ok";
+  const word = !known ? "Counting starts with the next update" : `${dataSize(g.used)} of ${dataSize(g.budget)} used (${pct}%)${g.level >= 2 ? ", strict saver on" : g.level === 1 ? ", saver on" : ""}`;
+  const mbIn = h("input", { type: "number", min: "500", max: "1000000", step: "100", value: known ? String(Math.round(g.budget / 1048576)) : "4000", style: "width:110px", "aria-label": "Budget in MB for 30 days" });
+  return h("article", { cls: `svc ${state}` },
+    h("div", { cls: "svc-head" }, h("span", { cls: "svc-logo" }, h("img", { src: SVC_IMG.supabase, alt: "" })), h("div", {}, h("h3", {}, "Cloud data"),
+      h("p", { cls: "small" }, h("i", { cls: "lamp " + (state === "warn" ? "bad" : state === "no" ? "" : state) }), word))),
+    known ? h("progress", { max: "100", value: String(pct), style: "width:100%;margin:6px 0 2px", "aria-label": `${pct}% of the data budget used` }) : null,
+    h("p", { cls: "small muted" }, "Supabase's free plan lets 5 GB a month leave the project. The site, the cloud poster and the Mac count what they read and slow down by themselves: at 60% of the budget they refresh half as often, at 85% a quarter as often. Posting and reels in progress never stop."),
+    h("p", { cls: "small muted" }, "Videos are stored on Cloudflare R2, which has no data charge. Supabase's own usage page is the exact figure."),
+    S.owner ? h("div", { cls: "svc-btns" }, h("label", { cls: "small", style: "display:flex;gap:8px;align-items:center" }, "Budget for 30 days", mbIn, "MB"),
+      h("button", { cls: "btn quiet", onclick: async (e) => { e.currentTarget.disabled = true;
+        try { const r = await rpc("set_egress_budget", { p_mb: Math.round(Number(mbIn.value)) }); if (r) S.guard = { ...r, at: Date.now() }; paintGuard(); toast("Data budget saved."); }
+        catch (err) { toast(errText(err), { err: true }); } refresh(); } }, "Save")) : null,
+    h("div", { cls: "svc-btns" }, h("a", { cls: "btn quiet", href: `https://supabase.com/dashboard/project/${SB_REF}/settings/billing/usage`, target: "_blank", rel: "noopener noreferrer" }, icon("ext", 16), "Usage in Supabase")));
 }
 function toggleMenu(e) {
   e.stopPropagation(); const old = document.querySelector(".menu"); if (old) { old.remove(); return; }
@@ -502,7 +573,7 @@ async function viewInsights() {
   shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Insights"),
     h("p", {}, `${brandOf().name}: real results from Instagram, what holds viewers in the first seconds, and what the system is learning.`))), body));
   const b = brandOf();
-  const [rows] = await Promise.all([perfRows(b.id), loadSettings().catch(() => {})]);
+  const [rows] = await Promise.all([perfRows(b.id), loadSettings().catch(() => {}), loadBigSettings().catch(() => {})]);
   const since = new Date(Date.now() - 7 * 86400e3).toISOString(), prev = new Date(Date.now() - 14 * 86400e3).toISOString();
   const dmr = (await sb.from("dm_log").select("created_at").eq("brand", b.id).eq("state", "sent").gte("created_at", prev).then((r) => r.data, () => [])) || [];
   const dms = [dmr.filter((r) => r.created_at >= since).length, dmr.filter((r) => r.created_at < since).length];
@@ -539,7 +610,7 @@ async function viewDashboard() {
     const since = new Date(Date.now() - 30 * 86400e3).toISOString(); const week = Date.now() - 7 * 86400e3;
     const [, { data: rows }, , { data: ap }, { data: bk_ }] = await Promise.all([loadBrands(),
       sb.from("jobs").select("id,brand,status,created_at,updated_at,ig:output->ig->>state,posted:output->ig->>posted_at").eq("kind", "reel").gte("created_at", since).limit(500),
-      loadSettings().catch(() => {}),
+      Promise.all([loadSettings(), loadBigSettings()]).catch(() => {}),
       sb.from("jobs").select("status,brand,input").eq("kind", "suggest").eq("input->>autopilot", "true").order("created_at", { ascending: false }).limit(40),
       sb.from("jobs").select("brand,slot:output->>post_slot").eq("kind", "reel").eq("status", "done").not("output->>post_slot", "is", null).gte("output->>post_slot", new Date().toISOString()).limit(100)]);
     const all = rows || []; const st = (b) => all.filter((j) => (j.brand || "weone") === b); const booked = bk_ || [];
@@ -589,14 +660,14 @@ async function viewDashboard() {
       h("span", { cls: "small muted" }, "Account Intelligence studies its website, socials, competitors and market, then writes its strategy."))]);
   };
   await paint().catch(() => {});
-  S.timers.push(setInterval(() => paint().catch(() => {}), 15000));
+  pageEvery(60000, () => paint().catch(() => {}));
 }
 // home: how every account is doing, side by side (refreshed when the page opens; results change a few times a day)
 async function homePerf(box) {
   box.replaceChildren(h("div", { cls: "skeleton", style: "height:220px;margin-top:20px" }));
   const prev = new Date(Date.now() - 14 * 86400e3).toISOString(), since = new Date(Date.now() - 7 * 86400e3).toISOString();
   const [rows, dmr] = await Promise.all([perfRows(), sb.from("dm_log").select("brand,created_at").eq("state", "sent").gte("created_at", prev).then((r) => r.data || [], () => [])]);
-  await loadSettings().catch(() => {});
+  await Promise.all([loadSettings().catch(() => {}), loadBigSettings().catch(() => {})]);
   const live = (S.brands || BRANDS_FALLBACK).filter((b) => b.status === "live");
   const mine = (bid) => rows.filter((r) => (r.brand || "weone") === bid);
   const posted30 = (bid) => mine(bid).filter((r) => r.posted && Date.parse(r.posted) > Date.now() - 30 * 86400e3 && r.st?.views != null);
@@ -743,7 +814,7 @@ async function viewAgents() {
     if (body.isConnected) body.replaceChildren(intel, learnBox || "", ...groups.filter(Boolean));
   };
   await paint().catch((e) => body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(e)))));
-  S.timers.push(setInterval(() => paint().catch(() => {}), 20000));
+  pageEvery(120000, () => paint().catch(() => {}));
 }
 
 function setupCard() {
@@ -890,7 +961,10 @@ function autopilotPanel() {
       lastLine || "");
   };
   paint().catch(() => {});
-  const iv = setInterval(() => { if (!box.isConnected && box._painted) return clearInterval(iv); if (!box.contains(document.activeElement)) paint().catch(() => {}); }, 8000);
+  let last = Date.now();
+  const iv = setInterval(() => { if (!box.isConnected && box._painted) return clearInterval(iv);
+    if (document.hidden || Date.now() - last < (S.apLast && ACTIVE.includes(S.apLast.status) ? 10e3 : 60e3) * slowBy() - 400) return;
+    last = Date.now(); if (!box.contains(document.activeElement)) paint().catch(() => {}); }, 3000);
   S.timers.push(iv);
   return box;
 }
@@ -1273,15 +1347,30 @@ function viewProduction() {
   prodBox = h("div", { cls: "strips" }, h("div", { cls: "skeleton" })); stripCache.clear();
   const banner = h("div"); const paintBanner = () => banner.replaceChildren(systemBanner() || "");
   shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Production"), h("p", {}, "Every reel in progress, with its route, live log and ETA. Tap a stage to see each step."))), banner, prodBox));
-  paintBanner(); S.timers.push(setInterval(paintBanner, 6000));
+  paintBanner(); S.timers.push(setInterval(() => { if (!document.hidden) paintBanner(); }, 6000));
   refreshProduction();
-  S.timers.push(setInterval(() => refreshProduction(), 5000));
+  lastPoll = Date.now(); poll().then(() => refreshProduction()).catch(() => {});     // opening the page always shows the latest state
+  S.timers.push(setInterval(() => { if (!document.hidden) refreshProduction(); }, 5000));     // local only: the data comes from poll()
 }
 
 // ---------------------------------------------------------------- library + Instagram auto-posting
+const BIG_SETTINGS = ["ig_library", "digest"];
+const isBig = (k) => BIG_SETTINGS.some((b) => k === b || k.startsWith(`${b}@`));
+let bigAt = 0, settingsAt = 0;
 async function loadSettings() {
-  const { data, error } = await sb.from("settings").select("key,value"); if (error) throw error;
-  S.settings = Object.fromEntries((data || []).map((r) => [r.key, r.value])); return S.settings;
+  let q = sb.from("settings").select("key,value");
+  for (const b of BIG_SETTINGS) q = q.not("key", "like", `${b}*`);
+  const { data, error } = await q; if (error) throw error;
+  const kept = Object.fromEntries(Object.entries(S.settings || {}).filter(([k]) => isBig(k)));
+  S.settings = { ...kept, ...Object.fromEntries((data || []).map((r) => [r.key, r.value])) }; settingsAt = Date.now();
+  return S.settings;
+}
+// the post library and the weekly digests: large, and they change once a day
+async function loadBigSettings(force = false) {
+  if (!force && Date.now() - bigAt < 30 * 60e3) return;
+  const { data, error } = await sb.from("settings").select("key,value").or(BIG_SETTINGS.flatMap((b) => [`key.eq.${b}`, `key.like.${b}@*`]).join(","));
+  if (error) throw error;
+  S.settings = { ...(S.settings || {}), ...Object.fromEntries((data || []).map((r) => [r.key, r.value])) }; bigAt = Date.now();
 }
 const tzClock = (iso) => new Date(iso).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 const slotLabel = (hm) => { const [hh, mm] = hm.split(":").map(Number); return new Date(2000, 0, 1, hh, mm).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); };
@@ -1617,7 +1706,7 @@ async function viewAccount() {
   let sig = "";
   const paint = async (force) => {
     if (!body.isConnected) return;
-    await Promise.all([loadSettings().catch(() => {}), loadBrands().catch(() => {}), loadOwner()]);
+    await Promise.all([loadSettings().catch(() => {}), loadBigSettings().catch(() => {}), loadBrands().catch(() => {}), loadOwner()]);
     const since = new Date(Date.now() - 7 * 86400e3).toISOString();
     const dmLog = (await sb.from("dm_log").select("username,state,reason,created_at").eq("brand", S.brand).gte("created_at", since).order("created_at", { ascending: false }).limit(200).then((r) => r.data, () => [])) || [];
     const kwRes = await keywordResults(S.brand);
@@ -1656,7 +1745,7 @@ async function viewAccount() {
         h("div", { cls: "svc-grid" }, dmCard(b, dmLog, () => paint(true), kwRes))));
   };
   await paint(true).catch((e) => body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(e)))));
-  S.timers.push(setInterval(() => paint(false).catch(() => {}), 8000));
+  pageEvery(30000, () => paint(false).catch(() => {}));
 }
 
 // ---------------------------------------------------------------- Studio settings: keys and connections shared by every account
@@ -1810,7 +1899,7 @@ async function viewSettings() {
   const paint = async (force) => {
     if (!body.isConnected) return;
     await Promise.all([loadSettings().catch(() => {}), loadWorker().catch(() => {}), loadOwner()]);
-    const nowSig = JSON.stringify([S.settings?.studio_keys, S.settings?.thumbapi_use, S.settings?.meta_app, S.settings?.r2, S.settings?.linkedin_app, S.settings?.youtube_app, S.settings?.post_schedule, S.settings?.worker_settings, S.worker?.info?.keys, macAlive(), S.worker?.claude_ok, S.editSlots]);
+    const nowSig = JSON.stringify([S.settings?.studio_keys, S.settings?.thumbapi_use, S.settings?.meta_app, S.settings?.r2, S.settings?.linkedin_app, S.settings?.youtube_app, S.settings?.post_schedule, S.settings?.worker_settings, S.worker?.info?.keys, macAlive(), S.worker?.claude_ok, S.editSlots, S.guard?.at, S.guard?.level]);
     if (!force && nowSig === sig) return; sig = nowSig;
     if (body.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     const rr = () => paint(true); const w = S.worker; const i = w?.info || {};
@@ -1849,6 +1938,7 @@ async function viewSettings() {
         infoCard({ img: SVC_IMG.supabase, name: "Supabase", state: S.net.ok ? "ok" : "warn", word: S.net.ok ? "Connected" : "Connection dropped",
           lines: [`Project ${SB_REF}: database, sign-in, storage, cloud posting (Edge Functions) and the schedules.`, "Keys: the Mac's service key lives in its .env; the site uses only the public key."],
           links: [["API keys", `https://supabase.com/dashboard/project/${SB_REF}/settings/api-keys`], ["Function secrets", `https://supabase.com/dashboard/project/${SB_REF}/functions/secrets`]] }),
+        dataCard(rr),
         infoCard({ img: SVC_IMG.vercel, name: "Vercel", mono: true, state: "ok", word: `Live at ${location.hostname}`,
           lines: ["Hosts this site at studio.weoneaviation.in (the old vercel.app addresses redirect there). It holds no secrets: the site only needs the public Supabase address and key."],
           links: [["Environment variables", `${VERCEL_PROJECT}/settings/environment-variables`], ["Deployments", `${VERCEL_PROJECT}/deployments`]] }),
@@ -1856,7 +1946,7 @@ async function viewSettings() {
           lines: ["The studio's code and account profiles. No keys are stored in it."], links: [["Repository", "https://github.com/nikkk07/reel-studio"]] })));
   };
   await paint(true).catch((e) => body.replaceChildren(h("div", { cls: "panel empty" }, h("p", {}, errText(e)))));
-  S.timers.push(setInterval(() => paint(false).catch(() => {}), 6000));
+  pageEvery(30000, () => paint(false).catch(() => {}));
 }
 function slotEditor(sch, refresh) {
   const ed = S.editSlots;
@@ -1874,10 +1964,15 @@ function slotEditor(sch, refresh) {
 async function viewLibrary() {
   const panel = h("div"); const grid = h("div", { cls: "lib" }, [1, 2, 3, 4].map(() => h("div", { cls: "skeleton", style: "aspect-ratio:9/16;height:auto" })));
   shell(h("div", {}, h("div", { cls: "page-head" }, h("div", {}, h("h1", {}, "Library"), h("p", {}, "Approved reels and their Instagram, Facebook and LinkedIn posts. Cloud copies are kept for 30 days; the full-quality masters stay on the Mac."))), panel, grid));
-  const thumbs = {}; let sig = "";
+  const thumbs = {}; let sig = ""; const libCache = new Map();
   const refresh = async (force = true) => {
     if (!grid.isConnected) return;
-    const [{ data }] = await Promise.all([sb.from("jobs").select("id,input,output,updated_at").eq("kind", "reel").eq("status", "done").eq("brand", S.brand).order("updated_at", { ascending: false }).limit(60), loadSettings().catch(() => {})]);
+    const [{ data: lite, error }] = await Promise.all([sb.from("jobs").select("id,updated_at").eq("kind", "reel").eq("status", "done").eq("brand", S.brand).order("updated_at", { ascending: false }).limit(60),
+      Date.now() - settingsAt > 60e3 ? loadSettings().catch(() => {}) : null, loadBigSettings().catch(() => {})]);
+    if (error) throw error;
+    const need = (lite || []).filter((r) => libCache.get(r.id)?.updated_at !== r.updated_at).map((r) => r.id);
+    if (need.length) { const { data: rows, error: e2 } = await sb.from("jobs").select("id,input,output,updated_at").in("id", need); if (e2) throw e2; for (const r of rows || []) libCache.set(r.id, r); }
+    const data = (lite || []).map((r) => libCache.get(r.id)).filter(Boolean);
     const now = JSON.stringify([(data || []).map((j) => [j.id, j.output?.ig, j.output?.li, j.output?.fb, j.output?.yt]), S.settings, S.editSlots]);
     if (!force && now === sig) return; sig = now;
     if (panel.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;    // never wipe a half-edited time
@@ -1895,7 +1990,7 @@ async function viewLibrary() {
     grid.replaceChildren(...cards);
   };
   await refresh(true);
-  S.timers.push(setInterval(() => refresh(false).catch(() => {}), 15000));
+  pageEvery(30000, () => refresh(false).catch(() => {}));
 }
 async function openPlayer(j) {
   const o = j.output || {}; const name = `${titleOf(j).replace(/[^\w\- ]+/g, "").trim().slice(0, 50) || "reel"}.mp4`;
@@ -1912,7 +2007,7 @@ function poll() { return polling ||= pollOnce().finally(() => { polling = null; 
 async function pollOnce() {
   if (!S.session) return;
   try {
-    await Promise.all([loadReels(), loadWorker(), loadSettings().catch(() => {})]);
+    await Promise.all([loadReels(), loadWorker(), Date.now() - settingsAt > 60e3 * slowBy() ? loadSettings().catch(() => {}) : null]);
     if (!S.net.ok) S.net = { ok: true, since: 0 };
     const review = S.reels.filter((j) => j.status === "review").map((j) => j.id);
     if (S.seenReview === null) S.seenReview = new Set(review);
@@ -1929,6 +2024,7 @@ async function pollOnce() {
       if (n) document.querySelectorAll("nav button").forEach((b) => { if (b.textContent.trim().startsWith("Production")) b.append(h("span", { cls: "badge" }, n)); });
     }
     updateTitle();
+    if (S.route === "production") refreshProduction();          // new data shows at once (refreshProduction is local only)
   } catch (e) {
     if (isAuthErr(e)) {        // expired sign-in: refresh it once, otherwise send the user to the sign-in page (nothing is lost on the Mac)
       S.authFails = (S.authFails || 0) + 1;
@@ -1952,7 +2048,7 @@ sb.auth.onAuthStateChange(async (evt, session) => {
   if (!booted) return;
   if (!session) { S.checkedAt = 0; try { sessionStorage.removeItem("rs_checked"); localStorage.removeItem("rs_checked"); } catch { /* */ } render(); return; }
   if (evt === "TOKEN_REFRESHED") S.authFails = 0;
-  if (!was) { await Promise.all([loadEstimates(), poll(), findPending().catch(() => {}), loadSettings().catch(() => {}), loadBrands().catch(() => {})]); if (location.hash !== "#/home") { history.replaceState(null, "", "#/home"); } render(); }     // a fresh sign-in always lands on the Dashboard
+  if (!was) { await Promise.all([loadEstimates(), poll(), findPending().catch(() => {}), loadSettings().catch(() => {}), loadBrands().catch(() => {}), flushMeter().catch(() => {})]); if (location.hash !== "#/home") { history.replaceState(null, "", "#/home"); } render(); }     // a fresh sign-in always lands on the Dashboard
 });
 const { data: { session } } = await sb.auth.getSession();
 S.session = session;
@@ -1965,11 +2061,26 @@ async function findPending() {     // a reload or a second device re-attaches to
   }
   savePending();
 }
-if (session) { await loadEstimates(); await Promise.all([poll(), findPending().catch(() => {}), loadSettings().catch(() => {}), loadBrands().catch(() => {})]); }
+if (session) { await loadEstimates(); await Promise.all([poll(), findPending().catch(() => {}), loadSettings().catch(() => {}), loadBrands().catch(() => {}), flushMeter().catch(() => {})]); }
 booted = true; render();
 if (session) finishOAuth().catch((e) => toast(errText(e), { err: true }));
-setInterval(poll, 6000);
-const wake = async () => { if (document.hidden || !S.session) return; await poll(); if (S.route === "production") refreshProduction(); };
+// every 6 s on Production, 20 s elsewhere, 2 min in a background tab; slower when idle or when the data guard is on
+setInterval(() => {
+  if (!S.session) return;
+  const ms = (document.hidden ? 120e3 : S.route === "production" ? 6e3 : 20e3) * slowBy();
+  if (Date.now() - lastPoll < ms - 400) return; lastPoll = Date.now(); poll();
+}, 2000);
+// the data meter: added to the shared count every 5 minutes (and when the tab is hidden); the answer sets the guard level
+async function flushMeter() {
+  if (!S.session || Date.now() < METER.off || (!METER.reqs && S.guard.at)) return;
+  const b = METER.bytes, n = METER.reqs; METER.bytes = 0; METER.reqs = 0;
+  const { data, error } = await sb.rpc("add_egress", { p_part: "web", p_bytes: b, p_reqs: n });
+  if (error) { METER.bytes += b; METER.reqs += n; if (/does not exist|not find|PGRST202|404/i.test(`${error.code} ${error.message}`)) METER.off = Date.now() + 3600e3; return; }
+  if (data && typeof data.level === "number") { const was = S.guard.level; S.guard = { ...data, at: Date.now() }; if (was !== data.level) paintGuard(); }
+}
+setInterval(() => flushMeter().catch(() => {}), 5 * 60e3);
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushMeter().catch(() => {}); });
+const wake = async () => { if (document.hidden || !S.session) return; lastPoll = Date.now(); await poll(); if (S.route === "production") refreshProduction(); };
 document.addEventListener("visibilitychange", wake);       // phones freeze background tabs: catch up the moment the page is visible again
 window.addEventListener("online", wake);
 window.addEventListener("offline", () => { S.net = { ok: false, since: Date.now() }; });

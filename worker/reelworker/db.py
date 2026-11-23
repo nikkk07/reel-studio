@@ -1,5 +1,5 @@
 """Tiny Supabase client (PostgREST + RPC + Storage) using the service-role key. No secrets are ever logged."""
-import json, time
+import json, threading, time
 from datetime import datetime, timezone
 import httpx
 from . import config
@@ -7,6 +7,9 @@ from . import config
 
 class DBError(RuntimeError):
     pass
+
+
+HEADERS_B = 400          # allowance per response for headers (Supabase counts the whole response leaving the project)
 
 
 class Supabase:
@@ -17,11 +20,49 @@ class Supabase:
             raise DBError("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing in .env")
         self.h = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         self.c = httpx.Client(timeout=httpx.Timeout(30, write=600, read=120))   # big reel uploads on slow uplinks
+        # data meter (Supabase Free plan: 5 GB a month leaves the project): bytes received, added to egress_log every few
+        # minutes; the answer is the guard level the Mac slows its background checks by (0 normal, 1 saver, 2 strict)
+        self.meter = {"bytes": 0, "reqs": 0}
+        self.guard = {"level": 0}
+        self._mlock = threading.Lock()
+        self._meter_off = 0.0
+
+    def _count(self, r):
+        try:
+            n = int(r.num_bytes_downloaded) or len(r.content or b"")     # on the wire (compressed), as Supabase counts it
+        except Exception:  # noqa: BLE001
+            n = len(r.content or b"")
+        with self._mlock:
+            self.meter["bytes"] += HEADERS_B + n
+            self.meter["reqs"] += 1
+
+    def flush_meter(self) -> dict:
+        """Adds this Mac's count to the shared total; returns the guard level. Never raises."""
+        if time.time() < self._meter_off:
+            return self.guard
+        with self._mlock:
+            b, n = self.meter["bytes"], self.meter["reqs"]; self.meter["bytes"] = 0; self.meter["reqs"] = 0
+        try:
+            r = self.rpc("add_egress", p_part="mac", p_bytes=b, p_reqs=n)
+            if isinstance(r, dict) and isinstance(r.get("level"), int):
+                self.guard = {**r, "at": time.time()}
+        except Exception as e:  # noqa: BLE001
+            with self._mlock:
+                self.meter["bytes"] += b; self.meter["reqs"] += n
+            if "404" in str(e) or "PGRST202" in str(e):
+                self._meter_off = time.time() + 3600        # not installed yet: normal level
+        return self.guard
+
+    @property
+    def slow(self) -> int:
+        """How much slower background checks run: 1 normal, 2 saver, 4 strict."""
+        return (1, 2, 4)[max(0, min(2, int(self.guard.get("level") or 0)))]
 
     def _req(self, method, path, retries=3, **kw):
         for i in range(retries):
             try:
                 r = self.c.request(method, self.url + path, headers={**self.h, **kw.pop("headers", {})}, **kw)
+                self._count(r)
                 if r.status_code >= 500 or r.status_code == 429:
                     raise DBError(f"{method} {path.split('?')[0]} -> {r.status_code}")
                 if r.status_code >= 400:
@@ -40,9 +81,10 @@ class Supabase:
     def select(self, table, query=""):
         return self._req("GET", f"/rest/v1/{table}?{query}").json()
 
-    def insert(self, table, row, upsert=False):
-        h = {"Prefer": "return=representation" + (",resolution=merge-duplicates" if upsert else "")}
-        return self._req("POST", f"/rest/v1/{table}", json=row, headers=h).json()
+    def insert(self, table, row, upsert=False, minimal=False):
+        h = {"Prefer": ("return=minimal" if minimal else "return=representation") + (",resolution=merge-duplicates" if upsert else "")}
+        r = self._req("POST", f"/rest/v1/{table}", json=row, headers=h)
+        return None if minimal else r.json()
 
     def update(self, table, match: str, values: dict):
         r = self._req("PATCH", f"/rest/v1/{table}?{match}", json=values, headers={"Prefer": "return=representation"})
