@@ -11,6 +11,14 @@ from ..media import footage, lexicon, mix, presenter, render, timeline
 
 CTA_SAY = "follow करें We One Aviation।"
 CTA_CAPTION = "follow karein *We One Aviation*"
+AD_SAY = "फ़ॉर्म भरिए, free career counselling पाइए।"           # a Meta lead ad ends on its form, never "follow" or "comment"
+AD_CAPTION = "Form bhariye: *free career counselling*"
+
+
+def _is_form_cta(p):
+    """An ad's own lead-form line ("form bhariye ..."): the standard one is added once at the end, so a written one is dropped."""
+    t = (p.get("say", "") + " " + p.get("caption", "")).lower().replace("*", "")
+    return any(x in t for x in ("form bhar", "फ़ॉर्म भर", "फॉर्म भर", "form fill"))
 
 
 def _is_cta(p, name="We One Aviation"):
@@ -260,6 +268,8 @@ def validate_spec(spec: dict, prof: dict = None) -> dict:
     dmc = prof.get("_dm")            # Comment-to-DM switched on and working: "Comment PILOT ..." replaces the follow line
     if dmc:
         cta_say, cta_cap = dmc["say"], dmc["caption"]
+    if prof.get("_ad"):
+        cta_say, cta_cap = prof.get("_ad_say") or AD_SAY, prof.get("_ad_caption") or AD_CAPTION
     bad = leaks(spec)
     if bad:
         raise TransientError(f"the script contained {bad[0]!r} (web address, phone, e-mail or another account); writing it again")
@@ -271,7 +281,8 @@ def validate_spec(spec: dict, prof: dict = None) -> dict:
         g["phrases"] = [p for p in g["phrases"] if p.get("say", "").strip()] or g["phrases"][:1]
     # exactly one call to action, always the standard one, always last
     for g in spec["groups"]:
-        g["phrases"] = [p for p in g["phrases"] if not _is_cta(p, name) and not _other_account(p, name) and not (dmc and dmlib.is_dm_cta(p, dmc["keyword"]))]
+        g["phrases"] = [p for p in g["phrases"] if not _is_cta(p, name) and not _other_account(p, name) and not (dmc and dmlib.is_dm_cta(p, dmc["keyword"]))
+                        and not (prof.get("_ad") and _is_form_cta(p))]
     spec["groups"] = [g for g in spec["groups"] if g["phrases"]] or spec["groups"][:1]
     spec["groups"][-1]["phrases"].append({"say": cta_say, "caption": cta_cap})
     # no line said twice in a row
@@ -467,7 +478,7 @@ def stage_script(ctx, prog):
         fs = ctx.data["factsheet"]
         ctx.path("factsheet.json").write_text(json.dumps(fs, ensure_ascii=False, indent=1), encoding="utf-8")
     ctx.trace("script", "research", "Fact-Checker", "done", f"{len((fs or {}).get('facts', []))} verified facts" if fs else "kept from the approved version")
-    if plan_dm(ctx, prof, concept, fs, parent):                 # this reel's own keyword replaces the account's in the CTA
+    if not inp.get("ad") and plan_dm(ctx, prof, concept, fs, parent):                 # this reel's own keyword replaces the account's in the CTA
         prof = _brand(ctx)
     ctx.trace("script", "write", "Scriptwriter", "run", flush=True)
     verify = ("The Fact-Checker has already verified the facts below. Write ONLY from them; do not search again unless a fact you need is missing, and never "
@@ -477,6 +488,18 @@ def stage_script(ctx, prog):
         block += brain.prompt("presenter", style=_style(ctx))
     if fs:                                   # new reels: hooks, open loops, re-hooks and intent notes (retention architecture)
         block += "\n\n" + brain.prompt("retention")
+    if inp.get("ad"):                        # a Meta lead ad from the CRM: the owner approved its script before it was ordered
+        cta = (concept.get("ad_cta") if isinstance(concept, dict) else None) or {}
+        prof = {**prof, "_dm": None, "_ad": True, "_ad_say": cta.get("say") or None, "_ad_caption": cta.get("caption") or None}
+        ok_script = (concept.get("approved_script") if isinstance(concept, dict) else None)
+        block += ("\n\n## This is a Meta lead ad (Instagram/Facebook), not a normal reel\n"
+                  f"* Length {int(concept.get('est_seconds') or 30)} s (25–35 s). Hook in the first 2 seconds; captions carry the message with the sound off.\n"
+                  "* The last line (the lead-form invitation) is added automatically. Do not write a follow, comment or form line yourself.\n"
+                  "* Never state fees, salaries, job guarantees or a phone number.")
+        if ok_script:
+            block += ("\n* The owner approved this timed script word for word. Keep every spoken line and every on-screen text exactly; "
+                      "you only split it into groups/phrases, add the voice spelling and choose shots and graphics:\n"
+                      + json.dumps(ok_script, ensure_ascii=False)[:6000])
     dp = ctx.data.get("dm_plan") if (prof.get("_dm") or {}).get("plan") else None
     if dp:                                   # the ending offer is part of the story: the reel earns it, the DM completes it
         block += (f"\n\n## The reel's call to action (added automatically as the last line; do not write it yourself)\n"

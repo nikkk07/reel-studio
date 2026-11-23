@@ -171,4 +171,34 @@ ok(crm.dm_leads(ldb) == 1 and got[0] == ("dm_lead", {"username": "kabir", "phone
 got.clear()
 ok(crm.dm_leads(ldb) == 0 and not got, "AD19 nothing is sent twice")
 
+# ad videos from the CRM: AI presenter by default, the approved script and length kept, the ad's own call to action
+k_, ai = crm.job_for({"id": 9, "kind": "ad_video", "title": "Parent trust", "brief": {"headline": "Office dekhiye", "hook": "Pilot ka sapna?",
+                      "est_seconds": 30, "script": [{"t": "0-3", "say": "Pilot ka sapna? Fees baad mein."}]}})
+k2, ai2 = crm.job_for({"id": 10, "kind": "ad_video", "title": "x", "brief": {"format": "classic"}})
+ok(k_ == "reel" and ai.get("ad") and ai.get("video") == "presenter_studio" and "video" not in ai2
+   and ai["concept"]["est_seconds"] == 30 and ai["concept"]["approved_script"][0]["say"].startswith("Pilot ka sapna"),
+   "AD20 a CRM ad video uses the AI presenter (unless the brief says classic), keeps its length and its approved script")
+from reelworker.jobs import reel  # noqa: E402
+spec = {"title": "t", "groups": [{"phrases": [{"say": "Pilot banna hai?", "caption": "Pilot banna hai?"},
+        {"say": "follow करें We One Aviation।", "caption": "follow karein *We One Aviation*"}]}], "shots": [{"at_group": "G1"}], "graphics": []}
+s = reel.validate_spec(json.loads(json.dumps(spec)), {**reel.brandmod.LEGACY, "_ad": True, "_dm": None})
+last = s["groups"][-1]["phrases"]
+ok(last[-1]["say"] == reel.AD_SAY and not any("follow" in p["say"] for p in last),
+   "AD21 an ad ends on the form offer (free career counselling), never on follow")
+k3, ai3 = crm.job_for({"id": 11, "kind": "ad_video", "title": "NIOS", "brief": {"format": "video", "video_style": "presenter_studio",
+                       "script": {"target_seconds": 25, "scenes": [{"scene": 1, "spoken": "Arts ke baad bhi raasta hai."}]}}})
+k4, ai4 = crm.job_for({"id": 12, "kind": "ad_video", "title": "x", "brief": {"format": "video"}})
+ok(ai3.get("video") == "presenter_studio" and ai4.get("video") == "presenter_studio" and ai3["concept"]["est_seconds"] == 25
+   and ai3["concept"]["approved_script"][0]["spoken"].startswith("Arts"),
+   "AD22 the plan's format 'video' still gets the presenter; a script object (target_seconds + scenes) arrives as scenes and sets the length")
+spec2 = {"title": "t", "groups": [{"phrases": [{"say": "Sirf do subjects.", "caption": "Sirf 2 subjects"},
+         {"say": "Neeche form bhariye.", "caption": "Form bhariye: 2 min"}]}], "shots": [{"at_group": "G1"}], "graphics": []}
+s2 = reel.validate_spec(json.loads(json.dumps(spec2)), {**reel.brandmod.LEGACY, "_ad": True, "_dm": None})
+said = [p["say"] for g in s2["groups"] for p in g["phrases"]]
+ok(said == ["Sirf do subjects.", reel.AD_SAY], "AD23 an ad never says its form line twice (a written one is replaced by the standard one)")
+k5, ai5 = crm.job_for({"id": 13, "kind": "ad_video", "title": "Owner", "brief": {"video_style": "presenter_studio", "script": {"target_seconds": 45,
+                       "scenes": [{"scene": 1, "spoken": "12th ke baad..."}], "cta": {"say": "नीचे form भरिए।", "caption": "Neeche form bhariye"}}}})
+s3 = reel.validate_spec(json.loads(json.dumps(spec2)), {**reel.brandmod.LEGACY, "_ad": True, "_dm": None,
+                        "_ad_say": ai5["concept"]["ad_cta"]["say"], "_ad_caption": ai5["concept"]["ad_cta"]["caption"]})
+ok(s3["groups"][-1]["phrases"][-1]["say"] == "नीचे form भरिए।", "AD24 the owner's own closing line from the script is the ad's last line")
 print(f"\n{sum(c for c, _ in R)}/{len(R)} passed"); sys.exit(0 if all(c for c, _ in R) else 1)
