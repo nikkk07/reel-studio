@@ -108,7 +108,7 @@ function pageEvery(ms, fn) {
 function clearTimers() { S.timers.forEach(clearInterval); S.timers = []; }
 
 // ---------------------------------------------------------------- data
-async function rpc(fn, args) { const { data, error } = await sb.rpc(fn, args); if (error) throw error; return data; }
+async function rpc(fn, args) { MAC.skipUntil = Date.now() + 10e3; const { data, error } = await sb.rpc(fn, args); if (error) throw error; return data; }     // right after a change: read it from Supabase
 const createJob = (kind, input, parent = null) => rpc("create_job", { p_kind: kind, p_input: { ...input, brand: S.brand }, p_parent: parent });
 // ---------------------------------------------------------------- accounts (brands): same studio, each account keeps its own reels
 const BRANDS_FALLBACK = [{ id: "weone", name: "We One Aviation", tagline: "DGCA ground classes, Dwarka · Delhi", website: "https://weoneaviation.in", logo: "brands/weone.png", status: "live", instagram: "we_one_aviation" }];
@@ -173,10 +173,32 @@ async function loadReels() {
   }
   for (const id of [...reelCache.keys()]) if (!lite.some((r) => r.id === id)) reelCache.delete(id);
   const full = (r) => { const c = reelCache.get(r.id); return c ? { ...c.row, ...r } : null; };
-  const liveRows = live.data.map(full).filter(Boolean), stoppedRows = stopped.data.map(full).filter(Boolean);
+  return showReels(live.data.map(full).filter(Boolean), stopped.data.map(full).filter(Boolean));
+}
+function showReels(liveRows, stoppedRows) {
   const busyTitles = new Set(liveRows.map(normTitle).filter(Boolean));
   S.reels = [...liveRows, ...stoppedRows.filter((j) => !["reject", "auto_revise"].includes(j.output?.decision) && !busyTitles.has(normTitle(j)))];
   return S.reels;
+}
+// Mac first, cloud as backup: while the studio Mac is online it serves this live view itself (through its Cloudflare tunnel,
+// address in settings 'mac_api'), so watching Production costs no Supabase data. Any problem: Supabase, as before, and
+// the Mac is not asked again for 2 minutes. Right after a change made here, the next read comes from Supabase.
+const MAC = { failAt: 0, skipUntil: 0, used: false };
+const macUrlOk = (u) => /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(u) || (location.hostname === "127.0.0.1" && /^http:\/\/127\.0\.0\.1:\d+$/.test(u));
+async function liveFromMac() {
+  const url = String(S.settings?.mac_api?.url || ""); const tok = S.session?.access_token;
+  if (!tok || !macUrlOk(url) || Date.now() - MAC.failAt < 120e3 || Date.now() < MAC.skipUntil) return false;
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+  try {
+    const r = await fetch(`${url}/v1/poll`, { headers: { Authorization: `Bearer ${tok}` }, signal: ctl.signal, cache: "no-store" });
+    if (!r.ok) throw new Error(`mac ${r.status}`);
+    const d = await r.json();
+    if (!Array.isArray(d.live) || !Array.isArray(d.stopped) || !d.worker) throw new Error("mac: unexpected reply");
+    for (const row of [...d.live, ...d.stopped]) reelCache.set(row.id, { row, at: Date.now() });     // a later Supabase read starts from these
+    showReels(d.live, d.stopped); S.worker = d.worker; MAC.used = true;
+    return true;
+  } catch { MAC.failAt = Date.now(); MAC.used = false; return false; }
+  finally { clearTimeout(t); }
 }
 const stopping = (j) => j.status === "cancelled" && j.lease_owner && new Date(j.lease_expires_at) > Date.now();
 function patchLocal(row) { if (!row || !row.id) return; reelCache.delete(row.id); const i = S.reels.findIndex((x) => x.id === row.id); if (i >= 0) S.reels[i] = { ...S.reels[i], ...row }; else if (row.kind === "reel") S.reels.push(row); }
@@ -2007,7 +2029,8 @@ function poll() { return polling ||= pollOnce().finally(() => { polling = null; 
 async function pollOnce() {
   if (!S.session) return;
   try {
-    await Promise.all([loadReels(), loadWorker(), Date.now() - settingsAt > 60e3 * slowBy() ? loadSettings().catch(() => {}) : null]);
+    await Promise.all([(async () => { if (!(await liveFromMac())) await Promise.all([loadReels(), loadWorker()]); })(),
+      Date.now() - settingsAt > 60e3 * slowBy() ? loadSettings().catch(() => {}) : null]);
     if (!S.net.ok) S.net = { ok: true, since: 0 };
     const review = S.reels.filter((j) => j.status === "review").map((j) => j.id);
     if (S.seenReview === null) S.seenReview = new Set(review);

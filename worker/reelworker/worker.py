@@ -7,13 +7,24 @@ from datetime import datetime, timedelta, timezone
 from . import config, brain
 from .db import Supabase, now_iso
 from .runner import JobContext, QuotaError, TransientError, Cancelled
-from . import procs, instagram, studio, crm
+from . import procs, instagram, studio, crm, realtime, macapi
 from urllib.parse import quote
 
 log = logging.getLogger("reelworker")
 STOP = threading.Event()
 CURRENT = {"A": None, "B": None}
 STATUS = {"claude_ok": None, "claude_note": None, "claude_checked": 0.0}
+WAKER = None             # realtime.Waker: the database tells the Mac about new work (None: plain polling)
+TUNNEL = None            # macapi.Tunnel: the website's live view served from this Mac
+
+
+def idle_wait(kind: str, polling_s: float, db) -> None:
+    """Wait for new work: told by the database when the push connection is up (a long safety timeout), otherwise
+    the usual polling interval."""
+    if WAKER is not None and WAKER.connected:
+        WAKER.wait(kind, 120 * db.slow)
+    else:
+        STOP.wait(polling_s)
 
 
 def setup_logging():
@@ -62,23 +73,29 @@ def refresh_claude(db):
 
 
 # ------------------------------------------------------------------ heartbeat + claude check + housekeeping
+def worker_row() -> dict:
+    """This Mac's status row (the heartbeat; also served directly to the website by the Mac API)."""
+    disk = shutil.disk_usage(config.JOBS_DIR)
+    busy = any(CURRENT.values())
+    return {
+        "id": config.WORKER_ID, "last_seen": now_iso(), "status": "busy" if busy else "idle", "version": config.VERSION,
+        "claude_ok": STATUS["claude_ok"], "claude_note": STATUS["claude_note"],
+        "claude_checked_at": now_iso(datetime.fromtimestamp(STATUS["claude_checked"], timezone.utc)) if STATUS["claude_checked"] else None,
+        "info": {"disk_free_gb": round(disk.free / 1e9, 1), "current": CURRENT, "reels_today": reels_today(),
+                 "daily_cap": studio.daily_cap(), "blocked": STATUS.get("blocked"), "selftest": STATUS.get("selftest"),
+                 "cap_hit": reels_today() >= studio.daily_cap(), "keys": studio.sources(), "crm": crm.STATUS, "library_3d": library_count(),
+                 "voices": {"hi": studio.voice_model("hi"), "en": studio.voice_model("en"), "ready": STATUS.get("voices")},
+                 "realtime": bool(WAKER and WAKER.connected), "mac_api": TUNNEL.status if TUNNEL else "off"},
+    }
+
+
 def heartbeat_loop(db: Supabase):
     last_prune, last_meter = 0.0, 0.0
     while not STOP.is_set():
         try:
             if time.time() - STATUS["claude_checked"] > 1800 and not CHECKING.is_set():
                 refresh_claude(None)
-            disk = shutil.disk_usage(config.JOBS_DIR)
-            busy = any(CURRENT.values())
-            db.insert("workers", {
-                "id": config.WORKER_ID, "last_seen": now_iso(), "status": "busy" if busy else "idle", "version": config.VERSION,
-                "claude_ok": STATUS["claude_ok"], "claude_note": STATUS["claude_note"],
-                "claude_checked_at": now_iso(datetime.fromtimestamp(STATUS["claude_checked"], timezone.utc)) if STATUS["claude_checked"] else None,
-                "info": {"disk_free_gb": round(disk.free / 1e9, 1), "current": CURRENT, "reels_today": reels_today(),
-                         "daily_cap": studio.daily_cap(), "blocked": STATUS.get("blocked"), "selftest": STATUS.get("selftest"),
-                         "cap_hit": reels_today() >= studio.daily_cap(), "keys": studio.sources(), "crm": crm.STATUS, "library_3d": library_count(),
-                         "voices": {"hi": studio.voice_model("hi"), "en": studio.voice_model("en"), "ready": STATUS.get("voices")}},
-            }, upsert=True, minimal=True)                 # nothing comes back: the website reads it
+            db.insert("workers", worker_row(), upsert=True, minimal=True)                 # nothing comes back: the website reads it
             if time.time() - last_meter > 300:              # every 5 min: add this Mac's data count, learn the guard level
                 db.flush_meter(); last_meter = time.time()
             if time.time() - last_prune > 3600:          # hourly: the Mac keeps only what is still needed
@@ -157,7 +174,7 @@ def ping_loop(db: Supabase):
                               "reels_today": reels_today(), "daily_cap": studio.daily_cap(), "version": config.VERSION}})
         except Exception as e:  # noqa: BLE001
             log.warning("ping loop: %s", e)
-        STOP.wait(5 * db.slow)                         # "Connect" on the site is answered within ~5 s
+        idle_wait("ping", 5 * db.slow, db)             # "Connect" on the site: told at once, or looked for every ~5 s
 
 
 # ------------------------------------------------------------------ lanes
@@ -282,7 +299,7 @@ def lane_loop(db: Supabase, lane: str, kinds: list):
             job = db.rpc("claim_next", p_worker=config.WORKER_ID, p_kinds=kinds, p_lease_seconds=90, p_revisions_only=cap_hit)
             if not job or not job.get("id"):
                 idle += 1
-                STOP.wait((15 if cap_hit else min(4 + 2 * (idle - 1), 10 if lane == "A" else 15)) * db.slow); continue
+                idle_wait("job", (15 if cap_hit else min(4 + 2 * (idle - 1), 10 if lane == "A" else 15)) * db.slow, db); continue
             idle = 0
             CURRENT[lane] = {"id": job["id"], "kind": job["kind"]}
             log.info("lane %s claimed %s %s (attempt %s)", lane, job["kind"], job["id"], job.get("attempts"))
@@ -308,6 +325,16 @@ def main():
                threading.Thread(target=lane_loop, args=(db, "B", ["reel"]), name="laneB", daemon=True),
                threading.Thread(target=instagram.loop, args=(db, STOP), name="instagram", daemon=True),
                threading.Thread(target=crm.loop, args=(db, STOP), name="crm", daemon=True)]
+    global WAKER, TUNNEL
+    if config.get("REELSTUDIO_REALTIME", "1") != "0" and config.SUPABASE_URL:
+        WAKER = realtime.Waker(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY)
+        threads.append(threading.Thread(target=WAKER.loop, args=(STOP,), name="realtime", daemon=True))
+    if config.get("REELSTUDIO_MAC_API", "1") != "0":
+        port = int(config.get("REELSTUDIO_MAC_API_PORT", "8789"))
+        mirror = macapi.Mirror(db, WAKER); db.on_job_write = mirror.on_write
+        TUNNEL = macapi.Tunnel(db, port, config.APP / "state")
+        threads += [threading.Thread(target=macapi.serve, args=(mirror, macapi.Auth(db), worker_row, port, STOP), name="macapi", daemon=True),
+                    threading.Thread(target=TUNNEL.loop, args=(STOP,), name="tunnel", daemon=True)]
     for t in threads:
         t.start()
     threading.Thread(target=startup_check, name="selfcheck", daemon=True).start()
@@ -320,9 +347,13 @@ def main():
                 if code_signature() != sig0 and not any(CURRENT.values()):
                     # new code was installed: exit while idle; launchd starts the new version within ~20 s
                     log.info("new worker code detected; restarting to load it")
+                    if TUNNEL:
+                        TUNNEL.stop_proc()
                     logging.shutdown(); os._exit(0)
     except KeyboardInterrupt:
         STOP.set()
+    if TUNNEL:
+        TUNNEL.stop_proc()
     log.info("reelworker stopping")
 
 

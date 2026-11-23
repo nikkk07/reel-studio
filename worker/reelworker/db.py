@@ -26,6 +26,7 @@ class Supabase:
         self.guard = {"level": 0}
         self._mlock = threading.Lock()
         self._meter_off = 0.0
+        self.on_job_write = None        # macapi.Mirror.on_write: the Mac's own reel saves update its live view directly
 
     def _count(self, r):
         try:
@@ -93,8 +94,16 @@ class Supabase:
     def update(self, table, match: str, values: dict, columns: str = "id"):
         """Changes the matching rows; the reply lists only `columns` of them (id by default): enough to tell whether a
         guarded change happened, never the whole reel back after every progress or trace save."""
+        hook = self.on_job_write if table == "jobs" else None
+        if hook and columns == "id":
+            columns = "id,updated_at"
         sel = "" if "select=" in match else f"&select={columns}"
         r = self._req("PATCH", f"/rest/v1/{table}?{match}{sel}", json=values, headers={"Prefer": "return=representation"})
+        if hook:
+            try:
+                hook(table, match, values, r.json() if r.content else [])
+            except Exception:  # noqa: BLE001
+                pass
         try:
             return r.json() if r.content else []
         except ValueError:
