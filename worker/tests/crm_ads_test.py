@@ -184,4 +184,15 @@ s = reel.validate_spec(json.loads(json.dumps(spec)), {**reel.brandmod.LEGACY, "_
 last = s["groups"][-1]["phrases"]
 ok(last[-1]["say"] == reel.AD_SAY and not any("follow" in p["say"] for p in last),
    "AD21 an ad ends on the form offer (free career counselling), never on follow")
+k3, ai3 = crm.job_for({"id": 11, "kind": "ad_video", "title": "NIOS", "brief": {"format": "video", "video_style": "presenter_studio",
+                       "script": {"target_seconds": 25, "scenes": [{"scene": 1, "spoken": "Arts ke baad bhi raasta hai."}]}}})
+k4, ai4 = crm.job_for({"id": 12, "kind": "ad_video", "title": "x", "brief": {"format": "video"}})
+ok(ai3.get("video") == "presenter_studio" and ai4.get("video") == "presenter_studio" and ai3["concept"]["est_seconds"] == 25
+   and ai3["concept"]["approved_script"][0]["spoken"].startswith("Arts"),
+   "AD22 the plan's format 'video' still gets the presenter; a script object (target_seconds + scenes) arrives as scenes and sets the length")
+spec2 = {"title": "t", "groups": [{"phrases": [{"say": "Sirf do subjects.", "caption": "Sirf 2 subjects"},
+         {"say": "Neeche form bhariye.", "caption": "Form bhariye: 2 min"}]}], "shots": [{"at_group": "G1"}], "graphics": []}
+s2 = reel.validate_spec(json.loads(json.dumps(spec2)), {**reel.brandmod.LEGACY, "_ad": True, "_dm": None})
+said = [p["say"] for g in s2["groups"] for p in g["phrases"]]
+ok(said == ["Sirf do subjects.", reel.AD_SAY], "AD23 an ad never says its form line twice (a written one is replaced by the standard one)")
 print(f"\n{sum(c for c, _ in R)}/{len(R)} passed"); sys.exit(0 if all(c for c, _ in R) else 1)

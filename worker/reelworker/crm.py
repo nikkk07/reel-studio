@@ -74,7 +74,10 @@ def concept_of(item: dict) -> dict:
     if ad:
         c["ad_brief"] = {k: b.get(k) for k in ("headline", "primary_text", "visual_brief", "cta") if b.get(k)}
         if b.get("script"):          # the owner-approved timed script from the CRM: the Scriptwriter keeps its words
-            c["approved_script"] = b["script"]
+            sc = b["script"]
+            c["approved_script"] = sc.get("scenes") or sc if isinstance(sc, dict) else sc
+            if isinstance(sc, dict) and sc.get("target_seconds") and not b.get("est_seconds"):
+                c["est_seconds"] = int(sc["target_seconds"])
         c["angle"] = c["angle"] or (b.get("visual_brief") or "")
     return c
 
@@ -99,9 +102,10 @@ def job_for(item: dict):
         inp.update(format="carousel", post_at=item.get("slot"))
     elif k == "ad_video":
         inp["ad"] = True
-        fmt = str((item.get("brief") or {}).get("format") or "presenter_studio")
-        if fmt in ("presenter_studio", "presenter_fast"):        # ads use the AI presenter unless the brief says "classic"
-            inp["video"] = fmt
+        b = item.get("brief") or {}
+        fmt = str(b.get("video_style") or b.get("format") or "")
+        if fmt != "classic":                                      # ads use the AI presenter unless the brief says "classic"
+            inp["video"] = fmt if fmt in ("presenter_studio", "presenter_fast") else "presenter_studio"
     else:
         raise ValueError(f"unknown CRM item kind {k}")
     return "reel", inp

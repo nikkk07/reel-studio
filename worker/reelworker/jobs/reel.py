@@ -15,6 +15,12 @@ AD_SAY = "फ़ॉर्म भरिए, free career counselling पाइए�
 AD_CAPTION = "Form bhariye: *free career counselling*"
 
 
+def _is_form_cta(p):
+    """An ad's own lead-form line ("form bhariye ..."): the standard one is added once at the end, so a written one is dropped."""
+    t = (p.get("say", "") + " " + p.get("caption", "")).lower().replace("*", "")
+    return any(x in t for x in ("form bhar", "फ़ॉर्म भर", "फॉर्म भर", "form fill"))
+
+
 def _is_cta(p, name="We One Aviation"):
     """Any spelling of the account's call-to-action line: English, Devanagari respelling (We One), or in the caption."""
     say, cap = p.get("say", ""), p.get("caption", "").replace("*", "")
@@ -275,7 +281,8 @@ def validate_spec(spec: dict, prof: dict = None) -> dict:
         g["phrases"] = [p for p in g["phrases"] if p.get("say", "").strip()] or g["phrases"][:1]
     # exactly one call to action, always the standard one, always last
     for g in spec["groups"]:
-        g["phrases"] = [p for p in g["phrases"] if not _is_cta(p, name) and not _other_account(p, name) and not (dmc and dmlib.is_dm_cta(p, dmc["keyword"]))]
+        g["phrases"] = [p for p in g["phrases"] if not _is_cta(p, name) and not _other_account(p, name) and not (dmc and dmlib.is_dm_cta(p, dmc["keyword"]))
+                        and not (prof.get("_ad") and _is_form_cta(p))]
     spec["groups"] = [g for g in spec["groups"] if g["phrases"]] or spec["groups"][:1]
     spec["groups"][-1]["phrases"].append({"say": cta_say, "caption": cta_cap})
     # no line said twice in a row
