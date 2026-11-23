@@ -251,6 +251,7 @@ class Tunnel:
         self.health = health or self._health
         self.url_re = url_re or self.URL_RE
         self.url, self.proc, self.status = None, None, "starting"
+        self.out = []                     # cloudflared's last lines (no secrets in a quick tunnel's output), for the log
 
     @staticmethod
     def find():
@@ -293,18 +294,23 @@ class Tunnel:
             self._pidfile().write_text(str(self.proc.pid))
         except Exception:  # noqa: BLE001
             pass
-        found = {"url": None}
+        found = {"url": None, "ready": False}
+
+        self.out = []
 
         def read():
             for line in self.proc.stdout:
+                self.out = (self.out + [line.strip()[:200]])[-15:]
                 m = self.url_re.search(line)
                 if m and not found["url"]:
                     found["url"] = m.group(0)
+                if "Registered tunnel connection" in line:
+                    found["ready"] = True
         threading.Thread(target=read, name="cloudflared-out", daemon=True).start()
         t0 = time.time()
-        while time.time() - t0 < 60 and not found["url"] and self.proc.poll() is None:
+        while time.time() - t0 < 60 and not (found["url"] and found["ready"]) and self.proc.poll() is None:
             time.sleep(0.5)
-        return found["url"]
+        return found["url"] if found["ready"] else None
 
     def stop_proc(self):
         if self.proc and self.proc.poll() is None:
@@ -323,27 +329,29 @@ class Tunnel:
         while not stop.is_set():
             url = None
             try:
-                url = self.start()
+                url = self.start()                         # ready = cloudflared registered its connection to Cloudflare
                 ok = bool(url)
-                for _ in range(12):                        # a new quick tunnel takes a few seconds to answer
-                    if not ok or self.health(url):
-                        break
-                    stop.wait(5)
-                else:
-                    ok = False
                 if ok:
-                    self.url, self.status = url, "online"; self.publish(url); delay = 30
+                    self.url, delay = url, 30
+                    while not stop.is_set() and self.proc.poll() is None:      # Supabase unreachable: keep the tunnel, retry the notice
+                        try:
+                            self.publish(url); break
+                        except Exception as e:  # noqa: BLE001
+                            self.status = f"tunnel up; waiting to tell the website ({str(e)[:60]})"
+                            stop.wait(60)
+                    self.status = "online"
                     log.info("mac api online at %s", url)
-                    fails = 0
+                    fails = 0                              # the address itself is checked now and then; only a long outage restarts it
                     while not stop.is_set() and self.proc.poll() is None:
                         stop.wait(300)
                         if stop.is_set():
                             break
                         fails = 0 if self.health(url) else fails + 1
-                        if fails >= 3:
+                        if fails >= 6:
                             break
                 else:
                     self.status = "the tunnel did not start; the website reads Supabase"
+                    log.info("mac api: cloudflared said: %s", " | ".join(self.out[-8:]))
             except Exception as e:  # noqa: BLE001
                 self.status = f"tunnel error: {str(e)[:120]}"
             self.stop_proc()

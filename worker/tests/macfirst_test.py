@@ -176,7 +176,7 @@ srv_stop.set()
 # ---------------------------------------------------------------- the tunnel
 tmp = Path(tempfile.mkdtemp())
 fake = tmp / "cloudflared"
-fake.write_text("#!/bin/sh\necho 'INF Requesting new quick Tunnel on trycloudflare.com...'\necho '|  https://brave-otter-mac.trycloudflare.com  |'\nexec sleep 300\n")
+fake.write_text("#!/bin/sh\necho 'INF Requesting new quick Tunnel on trycloudflare.com...'\necho '|  https://brave-otter-mac.trycloudflare.com  |'\necho 'INF Registered tunnel connection connIndex=0 location=del06 protocol=quic'\nexec sleep 300\n")
 fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
 class SDB:
     def __init__(self): self.saved = []
@@ -190,6 +190,19 @@ ok(tun.url == "https://brave-otter-mac.trycloudflare.com" and sdb.saved and sdb.
 ok((tmp / "cloudflared_home").exists() and (tmp / "cloudflared.pid").exists(), "it runs apart from any tunnel of your own, and its process is remembered")
 pid = tun.proc.pid; ts.set(); th.join(15)
 ok(tun.proc.poll() is not None and sdb.saved[-1][1]["value"]["url"] is None, "stopping the Mac stops the tunnel and tells the website to use Supabase")
+class FlakyDB(SDB):
+    def __init__(self): super().__init__(); self.fail = 1
+    def insert(self, t, row, upsert=False, minimal=False):
+        if self.fail: self.fail -= 1; raise RuntimeError("POST /rest/v1/settings -> 402")
+        super().insert(t, row, upsert, minimal)
+fdb = FlakyDB(); tun3 = macapi.Tunnel(fdb, 18791, tmp, binary=str(fake), health=lambda u: True)
+orig = threading.Event.wait
+ts3 = threading.Event(); th3 = threading.Thread(target=tun3.loop, args=(ts3,), daemon=True)
+macapi_wait = ts3.wait; ts3.wait = lambda t=None: orig(ts3, min(t or 0.2, 0.2))
+th3.start(); t0 = time.time()
+while tun3.status != "online" and time.time() - t0 < 15: time.sleep(0.1)
+ok(tun3.status == "online" and fdb.saved and tun3.proc.poll() is None, "Supabase down for a moment: the tunnel stays up and the website is told once it is back")
+ts3.set(); th3.join(15)
 t2 = macapi.Tunnel(sdb, 1, tmp, binary=None); t2.binary = None; t2.loop(threading.Event())
 ok("not installed" in t2.status, "no cloudflared on the Mac: the website simply keeps reading Supabase")
 
