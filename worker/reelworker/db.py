@@ -81,13 +81,20 @@ class Supabase:
     def select(self, table, query=""):
         return self._req("GET", f"/rest/v1/{table}?{query}").json()
 
+    # rows nobody reads back (log lines, agent runs, digests) are written without a reply
+    QUIET = ("job_events", "agent_runs")
+
     def insert(self, table, row, upsert=False, minimal=False):
+        minimal = minimal or table in self.QUIET or (table == "settings" and upsert)
         h = {"Prefer": ("return=minimal" if minimal else "return=representation") + (",resolution=merge-duplicates" if upsert else "")}
         r = self._req("POST", f"/rest/v1/{table}", json=row, headers=h)
         return None if minimal else r.json()
 
-    def update(self, table, match: str, values: dict):
-        r = self._req("PATCH", f"/rest/v1/{table}?{match}", json=values, headers={"Prefer": "return=representation"})
+    def update(self, table, match: str, values: dict, columns: str = "id"):
+        """Changes the matching rows; the reply lists only `columns` of them (id by default): enough to tell whether a
+        guarded change happened, never the whole reel back after every progress or trace save."""
+        sel = "" if "select=" in match else f"&select={columns}"
+        r = self._req("PATCH", f"/rest/v1/{table}?{match}{sel}", json=values, headers={"Prefer": "return=representation"})
         try:
             return r.json() if r.content else []
         except ValueError:
