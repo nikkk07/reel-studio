@@ -67,7 +67,7 @@ ok(k == "reel" and inp["crm_item"] == 11 and inp["post_at"] == ITEM["slot"] and 
 k2, inp2 = crm.job_for({**ITEM, "kind": "carousel"}); k3, inp3 = crm.job_for({**ITEM, "kind": "ad_video", "brief": {"headline": "Fly in 18 months", "visual_brief": "cockpit"}})
 k4, inp4 = crm.job_for({**ITEM, "kind": "ad_image", "brief": {"headline": "H", "sizes": ["1080x1350", "1080x1920"]}})
 ok(k2 == "reel" and inp2["format"] == "carousel" and inp2["post_at"] and k3 == "reel" and inp3["ad"] and "post_at" not in inp3
-   and inp3["concept"]["est_seconds"] == 20 and k4 == "content" and inp4["make"] == "ad_image" and inp4["sizes"] == ["1080x1350", "1080x1920"],
+   and inp3["concept"]["est_seconds"] == 30 and k4 == "content" and inp4["make"] == "ad_image" and inp4["sizes"] == ["1080x1350", "1080x1920"],
    "CR02 carousel -> slides job, ad video -> unposted reel, ad picture -> content job with both sizes")
 
 db = DB(); fake = CRM([ITEM, {**ITEM, "id": 12, "kind": "carousel"}]); crm.call = fake
