@@ -478,5 +478,26 @@ img = np.zeros((H, W, 3), np.uint8); cv2.circle(img, (int(cx), int(cy)), 20, (25
 zi = anchor_render.zoom_frame(img, 1.22, c=(cx, cy))
 ok(zi[int(cy), int(cx)].max() == 255 and anchor_render.zoom_frame(img, 1.22).shape == img.shape, "AN67 renderer zooms about the given point (her face stays put)")
 
+# ---------------------------------------------------------------- 11. she fills the frame (a selfie-style photo avatar)
+BIG = [0.13, 0.03, 0.92, 0.55]
+SW = {**SM, "graphics": [{"type": "kinetic_words", "at_group": "g1", "at_phrase": 1, "until_group": "g2", "params": {"words": ["Doctor?", "Engineer?", "Graduation?"]}}],
+      "anchor": {"clip": "c.mp4", "map": [{"vo_t0": 0.0, "vo_t1": 1.55, "clip_t0": 0.0}, {"vo_t0": 5.25, "vo_t1": 50.0, "clip_t0": 1.6}]}}
+SW.pop("scenes", None)
+TLw = timeline.build(SW, VOm, FONTS, "")
+anchor.set_faces(TLw, {s["id"]: BIG for s in TLw["shots"] if s["kind"] == "anchor"})
+kw = TLw["graphics"][0]; cut = [s for s in TLw["shots"] if s["kind"] == "cut"]
+ok(not kw.get("hide") and cut[0]["t0"] <= kw["t0"] < cut[0]["t0"] + 0.1 and cut[-1]["t1"] - 0.1 < kw["t1"] <= cut[-1]["t1"]
+   and kw["box"] == list(anchor.DEFAULT_BOX["kinetic_words"]) and kw["reveal"][0] > kw["t0"],
+   "AN68 a pop-up that starts/ends a hair over her face is kept on the cutaway (it was hidden when she fills the frame)")
+anchor.set_faces(TLw, {s["id"]: BIG for s in TLw["shots"] if s["kind"] == "anchor"})
+t0_before = kw["t0"]; anchor.set_faces(TLw, {s["id"]: BIG for s in TLw["shots"] if s["kind"] == "anchor"})
+ok(kw["t0"] == t0_before and not kw.get("hide"), "AN69 layout runs again without drifting the pop-up")
+E = TLw["anchor"]["end"]
+surf = skia.Surface(W, H); c = surf.getCanvas(); c.clear(skia.ColorTRANSPARENT)
+kinetic.draw_end_panel(c, TLw["end"] - 0.1, {**TLw, "end_title": "FREE CAREER COUNSELLING", "end_sub": "Eligibility + DGCA roadmap", "end_cta": "Form bhariye"}, None)
+px = surf.toarray(colorType=skia.kRGBA_8888_ColorType)
+ok(E["panel"] == "bottom" and E["dx"] == 0.0 and anchor.end_shift(TLw, TLw["end"]) == 0.0 and px[: int(E["y0"]) - 270, :, 3].max() == 0
+   and px[int(E["y0"]) + 60:, :, 3].mean() > 150, "AN70 end card: she stays full-frame, the offer fades up from the bottom below her chin")
+
 print(f"\n{sum(R)}/{len(R)} passed")
 sys.exit(0 if all(R) else 1)

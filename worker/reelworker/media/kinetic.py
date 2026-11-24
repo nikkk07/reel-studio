@@ -92,7 +92,7 @@ def draw_kcaps(c, t, TL):
                 rrect(c, skia.Rect.MakeXYWH(cx - ww / 2 - 18, y - 66, ww + 36, 88), 18, YELLOW, 0.97 * a, shadow=0.35)
                 word(c, w["w"], cx, y, f, NAVY, a, shadow=0)
             else:
-                word(c, w["w"], cx, y, f, YELLOW if cur else WHITE, a, stroke=7)
+                word(c, w["w"], cx, y, f, YELLOW if cur else WHITE, a, stroke=10, shadow=0.8)
             c.restore()
             x += widths[i] + sp
         c.restore()
@@ -331,11 +331,40 @@ def wrap(s_, f, maxw):
     return lines + ([cur] if cur else [])
 
 
+def draw_end_bottom(c, t, TL, e, ta):
+    """She fills the frame: she stays where she is; a dark fade rises from the bottom and the offer sits below her chin."""
+    k = ease_out_expo(prog(t, ta, 0.6)); y0 = e["y0"]
+    pts = [skia.Point(0, y0 - 260), skia.Point(0, y0 + 60)]
+    sh = skia.GradientShader.MakeLinear(pts, [skia.ColorSetARGB(0, *INK), skia.ColorSetARGB(int(255 * 0.9 * k), *INK)])
+    c.drawRect(skia.Rect(0, y0 - 260, W, H), skia.Paint(Shader=sh))
+    pw = W - 180; cx = W / 2; y = y0 + 40 + (1 - k) * 120
+    c.drawRoundRect(skia.Rect.MakeXYWH(cx - 45, y, 90, 7), 3.5, 3.5, skia.Paint(Color4f=col(YELLOW, k), AntiAlias=True)); y += 30
+    title = str(TL.get("end_title") or "FOLLOW FOR MORE").upper()
+    size = fit(_fk(), [title], 84, pw, 40); f = font(_fk(), size)
+    a1 = ease_out_expo(prog(t, ta + 0.15, 0.5))
+    for i, ln in enumerate(wrap(title, f, pw)[:2]):
+        y += size * 1.05
+        word(c, ln, cx, y, f, YELLOW if i == 0 else WHITE, a1, shadow=0.5)
+    sub = str(TL.get("end_sub") or "")
+    if sub:
+        fs = font("pm", 36); y += 18
+        for ln in wrap(sub, fs, pw)[:2]:
+            y += 48; word(c, ln, cx, y, fs, (226, 232, 242), ease_out_expo(prog(t, ta + 0.3, 0.5)), shadow=0.5)
+    if TL.get("end_cta"):
+        a3 = ease_out_expo(prog(t, ta + 0.45, 0.4)); s_ = str(TL["end_cta"])[:28]
+        fc = font(_fk(), fit(_fk(), [s_], 46, pw * 0.8, 24)); cw = tw(fc, s_) + 70; ch = 80; y += 44
+        bounce = abs(math.sin(2 * math.pi * 1.6 * t)) * 8
+        rrect(c, skia.Rect.MakeXYWH(cx - cw / 2, y - bounce, cw, ch), ch / 2, YELLOW, 0.98 * a3, shadow=0.45)
+        word(c, s_, cx, y - bounce + ch / 2 + fc.getSize() * 0.36, fc, NAVY, a3, shadow=0)
+
+
 def draw_end_panel(c, t, TL, logo):
     """She has moved aside (anchor_render shifts the picture); the logo + offer panel slides in on the free side."""
     e = TL["anchor"]["end"]; ta = TL["vo_end"] - 0.1
     if t < ta - 0.02:
         return
+    if e["panel"] == "bottom":
+        return draw_end_bottom(c, t, TL, e, ta)
     k = ease_out_expo(prog(t, ta, 0.6)); right = e["panel"] == "right"
     x0 = e["x0"]; g0 = x0 - 0.04 * W if right else x0 + 0.04 * W
     fx = e.get("fx", g0 - e["dx"]) + e["dx"] * k                  # her face edge right now: the shade never reaches it

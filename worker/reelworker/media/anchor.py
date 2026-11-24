@@ -672,7 +672,15 @@ def layout(TL):
             continue
         if ty == "strike":
             continue
-        F = fa(g["t0"] - 0.05, g["t1"] - 0.01)                 # every graphic has faded out by its t1
+        if anchor and ty in NEW_GFX:                           # a pop-up mostly over a cutaway lives on the cutaway only
+            g["t0"], g["t1"] = g.get("t0_full", g["t0"]), g.get("t1_full", g["t1"])
+            cuts = [(max(g["t0"], s["t0"]), min(g["t1"], s["t1"])) for s in TL["shots"]
+                    if s["kind"] == "cut" and s["t1"] > g["t0"] and s["t0"] < g["t1"]]
+            on_cut = sum(b - a for a, b in cuts)
+            if cuts and on_cut >= 0.6 and on_cut >= 0.6 * (g["t1"] - g["t0"]):
+                g["t0_full"], g["t1_full"] = g["t0"], g["t1"]
+                g["t0"], g["t1"] = _r(min(a for a, _ in cuts) + 0.04), _r(max(b for _, b in cuts) - 0.04)
+        F = None if g.get("t0_full") is not None else fa(g["t0"] - 0.05, g["t1"] - 0.01)   # faded out by its t1
         if F is None:
             if ty in NEW_GFX:
                 g["box"] = list(DEFAULT_BOX[ty])
@@ -723,7 +731,12 @@ def layout(TL):
         F = face_raw(TL, seg_at(TL, ta + 0.05), ta + 0.05, shift=False) if anchor.get("end_presenter") else None
         if F is not None:
             cx = (F[0] + F[2]) / 2
-            if cx <= W / 2:
+            fw = F[2] - F[0]
+            off = max(0.0, (F[2] - 0.52 * W) - F[0]) if cx <= W / 2 else max(0.0, F[2] + (0.48 * W - F[0]) - W)
+            if off > 0.2 * fw:                                   # sliding aside would push her face out of the frame: she
+                #                                                  stays put and the card sits below her chin instead
+                anchor["end"] = {"panel": "bottom", "dx": 0.0, "y0": _r(max(H * 0.5, min(H * 0.6, F[3] - 10)))}
+            elif cx <= W / 2:
                 anchor["end"] = {"panel": "right", "dx": _r(min(0.0, 0.52 * W - F[2])), "x0": _r(0.56 * W), "fx": _r(F[2])}
             else:
                 anchor["end"] = {"panel": "left", "dx": _r(max(0.0, 0.48 * W - F[0])), "x0": _r(0.44 * W), "fx": _r(F[0])}
