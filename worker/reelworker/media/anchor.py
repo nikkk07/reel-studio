@@ -17,6 +17,8 @@ PLATE_TARGET = 2.5
 WINDOW_WARN = 4.0        # one cutaway window should stay within ~4 s (the presenter is the main character)
 MERGE_GAP = 0.3          # a gap shorter than this between presenter windows is no cutaway: she simply continues
 TRANS = 0.25             # whip / zoom-blur transition length
+CLOSE = 1.22             # punch-in close-up on a key word (a hard cut, like a second camera), zoomed about her face
+PUNCH_MIN = 0.8          # a punch never leaves a framing shorter than this
 FACE_DEFAULT = (0.22, 0.17, 0.78, 0.48)       # x0, y0, x1, y1 as fractions of the presenter frame (upper middle, hair included)
 POS_DX = {"center": 0.0, "left": -0.25, "right": 0.25}
 SAFE = (70, 250, 1010, 1560)                  # clear of Instagram's top bar, side buttons and bottom description
@@ -375,6 +377,14 @@ def build(TL, spec):
                 segs.append({"kind": "cut", "src": s["id"], "var": v, "t0": x0, "t1": x1})
     for w in wins:
         segs.append({"kind": "anchor", "t0": w["t0"], "t1": w["t1"], "vo_t0": w["vo_t0"], "clip_t0": w["clip_t0"], **({"fill": True} if w.get("fill") else {})})
+    for p in A.get("punch") or []:                        # camera work: cut wide <-> close on a key word inside her window
+        if not isinstance(p, dict) or p.get("at_group") is None:
+            continue
+        tp = start_of(p)
+        for k, s in enumerate(segs):
+            if s["kind"] == "anchor" and s["t0"] + PUNCH_MIN <= tp <= s["t1"] - PUNCH_MIN:
+                b = {**s, "t0": tp, "close": not s.get("close")}
+                s["t1"] = tp; segs.insert(k + 1, b); break
     segs.sort(key=lambda s: s["t0"])
     na = nc = 0
     for i, s in enumerate(segs):
@@ -382,7 +392,12 @@ def build(TL, spec):
         if s["kind"] == "anchor":
             na += 1; s["id"] = f"A{na}"; s["presenter"] = True
             punch = prev is not None and prev["kind"] == "anchor"           # jump cut: punch in instead of a transition
-            s["z0"], s["z1"] = ((1.10, 1.13) if punch and not prev.get("punch") else (1.0, 1.04))
+            if s.get("close"):
+                s["z0"], s["z1"] = CLOSE, CLOSE + 0.025
+            elif "close" in s:                                              # back to the wide framing after a close-up
+                s["z0"], s["z1"] = 1.0, 1.03
+            else:
+                s["z0"], s["z1"] = ((1.10, 1.13) if punch and not prev.get("punch") else (1.0, 1.04))
             s["punch"] = s["z0"] > 1.05
         else:
             nc += 1; s["id"] = f"C{nc}"
@@ -524,6 +539,14 @@ def zoom_at(s, t):
     return s["z0"] + (s["z1"] - s["z0"]) * k
 
 
+def zoom_center(TL, s):
+    """Point the frame zooms about: her face for a close-up (so the punch-in frames her face), else the frame centre."""
+    if not s or not s.get("close"):
+        return W / 2, H / 2
+    f = TL["anchor"].get("faces", {}).get(s["id"]) or TL["anchor"].get("face") or FACE_DEFAULT
+    return (f[0] + f[2]) / 2 * W, (f[1] + f[3]) / 2 * H
+
+
 def end_shift(TL, t):
     e = TL["anchor"].get("end") or {}
     ta = TL["vo_end"] - 0.1
@@ -541,8 +564,8 @@ def face_raw(TL, s, t, shift=True):
     sc, dx = presenter_geom(TL, s, t)
     x0, y0, x1, y1 = f[0] * W, f[1] * H, f[2] * W, f[3] * H
     pts = [((x - W / 2) * sc + W / 2 + dx, (y - H) * sc + H) for x, y in ((x0, y0), (x1, y1))]
-    z = zoom_at(s, t)
-    (a, b), (c, d) = [((x - W / 2) * z + W / 2, (y - H / 2) * z + H / 2) for x, y in pts]
+    z = zoom_at(s, t); cx, cy = zoom_center(TL, s)
+    (a, b), (c, d) = [((x - cx) * z + cx, (y - cy) * z + cy) for x, y in pts]
     sh = end_shift(TL, t) if shift else 0.0
     m = 0.03 * W
     return (a - m + sh, b - m, c + m + sh, d + m)

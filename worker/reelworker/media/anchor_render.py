@@ -104,10 +104,11 @@ def composite(person, mask, pl, P=None, strength=0.3, wrap=0.65):
     return np.clip(out + 0.5, 0, 255).astype(np.uint8), a
 
 
-def zoom_frame(img, z, border=cv2.BORDER_REFLECT):
+def zoom_frame(img, z, border=cv2.BORDER_REFLECT, c=None):
     if abs(z - 1.0) < 1e-4:
         return img
-    M = np.float32([[z, 0, (1 - z) * W / 2], [0, z, (1 - z) * H / 2]])
+    cx, cy = c or (W / 2, H / 2)
+    M = np.float32([[z, 0, (1 - z) * cx], [0, z, (1 - z) * cy]])
     return cv2.warpAffine(img, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=border, borderValue=0)
 
 
@@ -203,10 +204,10 @@ class Frames:
                 mask = m
         else:
             img = cover(self.media(s["file"]).at(max(0.0, t - s["t0"]) + s.get("off", 0.0)))
-        z = anchor.zoom_at(s, t)
-        img = zoom_frame(img, z)
+        z = anchor.zoom_at(s, t); zc = anchor.zoom_center(TL, s)
+        img = zoom_frame(img, z, c=zc)
         if mask is not None:
-            mask = zoom_frame(mask, z, cv2.BORDER_CONSTANT)
+            mask = zoom_frame(mask, z, cv2.BORDER_CONSTANT, c=zc)
         dx, dy = shake(t, TL, fi); dx += anchor.end_shift(TL, t) if s["kind"] == "anchor" else 0.0
         if dx or dy:
             M = np.float32([[1, 0, dx], [0, 1, dy]])

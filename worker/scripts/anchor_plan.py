@@ -106,7 +106,7 @@ def make(job: Path, cuts, spec_path=None, clip=None, out=None, pad=PAD, apply=Fa
     for s in spec.get("shots", []):
         if (s.get("at_group"), int(s.get("at_phrase") or 0)) in cutset:
             s["cutaway"] = True; marked.append(s["id"])
-    spec["anchor"] = {"clip": str(clip or adir / "heygen.mp4"), "map": amap}
+    spec["anchor"] = {**(spec.get("anchor") or {}), "clip": str(clip or adir / "heygen.mp4"), "map": amap}   # keeps "punch"
     dst = Path(out or adir / "spec_anchor.json"); dst.write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
     if apply:                                  # the resumed job (make_local --job <id>) then renders in anchor mode
         sp = job / "spec.json"

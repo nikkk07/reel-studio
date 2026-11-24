@@ -460,5 +460,23 @@ sc = TLm["anchor"]["scenes"]; g2s = TLm["groups"][1]["spans"][0][0]
 ok(len(sc) == 2 and sc[0]["t0"] == 0.0 and abs(sc[1]["t0"] - (g2s - 0.08)) < 1e-3 and abs(sc[0]["t1"] - sc[1]["t0"]) < 1e-3 and sc[1]["t1"] == TLm["end"],
    "AN64 scenes keyed to a phrase follow the recorded voice (no hand-typed seconds); each ends where the next begins")
 
+# ---------------------------------------------------------------- 10. camera work: punch-in close-ups on key words, zoomed about her face
+SP = {"groups": Gm, "graphics": [], "captions": "kinetic", "shots": [],
+      "anchor": {"clip": "c.mp4", "map": [{"vo_t0": 0.0, "vo_t1": 50.0, "clip_t0": 0.0}],
+                 "punch": [{"at_group": "g1", "at_phrase": 1, "at_word": "Doctor"}, {"at_group": "g2", "at_phrase": 0}]}}
+TLp = timeline.build(SP, VOm, FONTS, "")
+an = [s for s in TLp["shots"] if s["kind"] == "anchor"]
+wtp = {w["w"].strip(",?*").lower(): w["t0"] for w in TLp["words"]}
+ok(len(an) == 3 and [round(s["z0"], 2) for s in an] == [1.0, anchor.CLOSE, 1.0] and abs(an[1]["t0"] - (wtp["doctor"] - 0.06)) < 1e-3
+   and all(abs(a["clip_t0"] + (b["t0"] - a["vo_t0"]) - (b["clip_t0"] + (b["t0"] - b["vo_t0"]))) < 1e-6 for a, b in zip(an, an[1:]))
+   and covered(TLp) and not TLp["transitions"], "AN65 punch: wide -> close on the key word -> wide, hard cuts (no transition), lip-sync clock continuous")
+cx, cy = anchor.zoom_center(TLp, an[1]); f = anchor.FACE_DEFAULT
+F1 = anchor.face_raw(TLp, an[1], an[1]["t0"] + 0.01, shift=False); F0 = anchor.face_raw(TLp, an[0], 0.5, shift=False)
+ok(abs(cx - (f[0] + f[2]) / 2 * W) < 1 and abs(cy - (f[1] + f[3]) / 2 * H) < 1 and F1[1] >= anchor.SAFE[1] - 80 and (F1[3] - F1[1]) > (F0[3] - F0[1]) * 1.15
+   and anchor.zoom_center(TLp, an[0]) == (W / 2, H / 2), "AN66 a close-up zooms about her face: bigger face, still below the top bar; wide shots zoom about the centre")
+img = np.zeros((H, W, 3), np.uint8); cv2.circle(img, (int(cx), int(cy)), 20, (255, 255, 255), -1)
+zi = anchor_render.zoom_frame(img, 1.22, c=(cx, cy))
+ok(zi[int(cy), int(cx)].max() == 255 and anchor_render.zoom_frame(img, 1.22).shape == img.shape, "AN67 renderer zooms about the given point (her face stays put)")
+
 print(f"\n{sum(R)}/{len(R)} passed")
 sys.exit(0 if all(R) else 1)
