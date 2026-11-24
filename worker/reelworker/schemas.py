@@ -38,7 +38,7 @@ SPEC = {"type": "object",
                     "type": "object", "required": ["say", "caption"], "properties": {"say": S, "caption": S}}}}}},
             "shots": {"type": "array", "minItems": 4, "maxItems": 14, "items": {
                 "type": "object", "required": ["id", "query", "at_group", "at_phrase"],
-                "properties": {"id": S, "query": S, "at_group": S, "at_phrase": I, "note": S, "cutaway": B}}},
+                "properties": {"id": S, "query": S, "at_group": S, "at_phrase": I, "at_word": S, "note": S, "cutaway": B}}},
             "graphics": {"type": "array", "items": {
                 "type": "object", "required": ["type", "at_group", "at_phrase", "params"],
                 "properties": {"type": {"type": "string", "enum": GRAPHIC_TYPES}, "at_group": S, "at_phrase": I,
@@ -67,8 +67,8 @@ SPEC = {"type": "object",
             "anchor": {"type": "object", "required": ["clip", "map"], "properties": {"clip": S, "map": {"type": "array", "items": {
                 "type": "object", "required": ["vo_t0", "vo_t1", "clip_t0"], "properties": {"vo_t0": N, "vo_t1": N, "clip_t0": N}}}}},
             "scenes": {"type": "array", "items": {
-                "type": "object", "required": ["from_t", "to_t", "bg"],
-                "properties": {"from_t": N, "to_t": N, "bg": {"type": "object", "properties": {"query": S, "image": S}},
+                "type": "object", "required": ["bg"],
+                "properties": {"from_t": N, "to_t": N, "at_group": S, "at_phrase": {"type": "integer"}, "bg": {"type": "object", "properties": {"query": S, "image": S}},
                                "pos": {"type": "string", "enum": ["center", "left", "right"]}, "scale": N, "label": S}}},
             "captions": {"type": "string", "enum": ["classic", "kinetic"]},
             "ai_label": {"type": ["string", "boolean"]},
