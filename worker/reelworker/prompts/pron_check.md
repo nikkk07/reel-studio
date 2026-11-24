@@ -10,6 +10,6 @@ Parts (id, the intended text, then each take with its id and transcript):
 For every part return:
 - `best_take`: the take id that is pronounced most correctly (ties: the clearest).
 - `ok`: true only if the best take has no pronunciation problem at all.
-- `problems`: for the best take, each wrong word: the intended word, what was heard, and `fix_say` = a better spoken spelling for the voice model (in the same script as the intended text; e.g. spell an English word in Devanagari as Indians say it, split an abbreviation into its letters, write a number as words), or a simpler synonym if the word keeps failing.
+- `problems`: for the best take, each wrong word: the intended word, what was heard, and `fix_say` = a better spoken spelling for the voice model (in the same script as the intended text; e.g. spell an English word in Devanagari as Indians say it, split an abbreviation into its letters, write a number as words), or a simpler synonym if the word keeps failing. `intended` is replaced by `fix_say` word for word inside the line, so a synonym must leave the line grammatical with exactly the same meaning: when it changes the words around it, put that whole run in `intended` (e.g. intended "चूज़ करते", fix_say "चुनते" — never intended "चूज़", fix_say "चुनते", which leaves "चुनते करते").
 - `retry_text`: if not ok, the full intended text for that part with the fixes applied (same meaning, same words), else empty.
 Do not use any tools.

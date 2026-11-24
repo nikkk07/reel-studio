@@ -266,13 +266,21 @@ def _phrase_at(TL):
     return at
 
 
-def scenes_of(spec, end):
+def scenes_of(spec, end, TL=None):
+    """Scenes on the reel clock. A scene starts at from_t, or at a phrase ("at_group"/"at_phrase", so it follows the
+    recorded voice); it ends at to_t, or where the next scene starts."""
     out = []
+    at = _phrase_at(TL) if TL and TL.get("groups") else None
     for i, s in enumerate(spec.get("scenes") or []):
         if not isinstance(s, dict):
             continue
         try:
-            a, b = max(0.0, float(s["from_t"])), min(end, float(s["to_t"]))
+            if at and s.get("at_group") is not None and "from_t" not in s:
+                a = max(0.0, at(s["at_group"], s.get("at_phrase", 0)) - float(s.get("lead", 0.08)))
+                a = 0.0 if a < 0.3 else a
+            else:
+                a = max(0.0, float(s["from_t"]))
+            b = min(end, float(s["to_t"])) if s.get("to_t") is not None else end
         except Exception:  # noqa: BLE001
             continue
         if b - a < 0.3:
@@ -327,7 +335,16 @@ def build(TL, spec):
     at = _phrase_at(TL)
     shots = [s for s in spec.get("shots", []) if not s.get("presenter")]
     cuts = [s for s in shots if s.get("cutaway")]
-    when = {s["id"]: at(s.get("at_group"), s.get("at_phrase", 0)) for s in shots}
+    words = TL.get("words") or []
+
+    def start_of(s):                                      # at its phrase, or on a spoken word ("at_word") inside the phrase
+        t = at(s.get("at_group"), s.get("at_phrase", 0))
+        if s.get("at_word"):
+            m = _match_times(words, [s["at_word"]], t, t + 8.0)[0]
+            if m is not None:
+                return max(t, m - 0.06)
+        return t
+    when = {s["id"]: start_of(s) for s in shots}
     in_gap = lambda s, g: g[0] - 0.2 <= when[s["id"]] < g[1] - 0.3  # noqa: E731
     used = {s["id"] for s in cuts if any(in_gap(s, g) for g in gaps)}
     spare = [s for s in cuts if s["id"] not in used]
@@ -373,7 +390,7 @@ def build(TL, spec):
             s["ramp"] = nc % 2 == 0                        # speed-ramped zoom on every other piece
         s["t0"], s["t1"] = _r(s["t0"]), _r(s["t1"])
         s["need"] = _r(s["t1"] - s["t0"] + 0.3)
-    scenes = scenes_of(spec, end)
+    scenes = scenes_of(spec, end, TL)
     TL["shots"] = segs
     need = {}
     for s in segs:

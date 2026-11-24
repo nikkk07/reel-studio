@@ -438,5 +438,27 @@ else:
        and schemas.SPEC["properties"]["shots"]["items"]["required"] == ns["SPEC"]["properties"]["shots"]["items"]["required"],
        "AN62 schema: nothing required changed, the old fields are untouched, the new ones are added")
 
+# ---------------------------------------------------------------- 9. montage shots on a spoken word + scenes keyed to phrases
+Gm, VOm = span_vo([("g1", [1.5, 3.6]), ("g2", [2.0])], caption="x")
+Gm[0]["phrases"][1]["caption"] = "kya aapke dimaag mein bas *Doctor*, *Engineer* ya *graduation* hi aata hai?"
+Wm = [{"vo_t0": 0.0, "vo_t1": 1.55, "clip_t0": 0.0}, {"vo_t0": 5.25, "vo_t1": 7.3, "clip_t0": 1.6}]
+SM = {"groups": Gm, "graphics": [], "captions": "kinetic", "anchor": {"clip": "c.mp4", "map": Wm},
+      "shots": [{"id": "d", "query": "doctor", "at_group": "g1", "at_phrase": 1, "cutaway": True},
+                {"id": "e", "query": "engineer", "at_group": "g1", "at_phrase": 1, "at_word": "Engineer", "cutaway": True},
+                {"id": "u", "query": "graduation", "at_group": "g1", "at_phrase": 1, "at_word": "graduation", "cutaway": True}],
+      "scenes": [{"at_group": "g1", "at_phrase": 0, "bg": {"query": "studio"}}, {"at_group": "g2", "at_phrase": 0, "bg": {"query": "runway"}}]}
+TLm = timeline.build(SM, VOm, FONTS, "")
+wt = {w["w"].strip(",?").lower(): w["t0"] for w in TLm["words"]}
+cuts = [s for s in TLm["shots"] if s["kind"] == "cut"]
+first = {}
+for c in cuts:
+    first.setdefault(c["src"], c["t0"])
+ok([c["src"] for c in cuts][0] == "d" and set(first) == {"d", "e", "u"} and abs(first["e"] - (wt["engineer"] - 0.06)) < 0.12
+   and abs(first["u"] - (wt["graduation"] - 0.06)) < 0.12 and first["d"] < first["e"] < first["u"] and covered(TLm),
+   "AN63 shots with at_word cut on their spoken word: one cutaway window becomes a doctor -> engineer -> graduation montage")
+sc = TLm["anchor"]["scenes"]; g2s = TLm["groups"][1]["spans"][0][0]
+ok(len(sc) == 2 and sc[0]["t0"] == 0.0 and abs(sc[1]["t0"] - (g2s - 0.08)) < 1e-3 and abs(sc[0]["t1"] - sc[1]["t0"]) < 1e-3 and sc[1]["t1"] == TLm["end"],
+   "AN64 scenes keyed to a phrase follow the recorded voice (no hand-typed seconds); each ends where the next begins")
+
 print(f"\n{sum(R)}/{len(R)} passed")
 sys.exit(0 if all(R) else 1)
