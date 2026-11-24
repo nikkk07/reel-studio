@@ -8,7 +8,7 @@ import json, math, re, subprocess, sys
 import numpy as np, cv2, skia
 from .gfx_base import (TF, load_fonts, FPS, W, H, RED, AMBER, CYAN, WHITE, GREEN, clamp, ease_out_expo, ease_out_back,
                        ease_io, prog, col, font, tw, text, glass, chip)
-from . import proedit
+from . import proedit, kinetic
 
 COLORS = {"red": RED, "amber": AMBER, "cyan": CYAN, "green": GREEN, "white": WHITE, "violet": (170, 150, 255)}
 def C(name, default=None): return COLORS.get(str(name or "").lower(), AMBER if default is None else default)
@@ -283,7 +283,7 @@ def g_scene_label(c, t, g):
 
 DRAW = {"behind_text": g_behind_text, "ui_card": g_ui_card, "chip": g_chip, "big_text": g_big_text, "counter": g_counter, "list_card": g_list_card, "quote_card": g_quote_card,
         "compare": g_compare, "timer": g_timer, "flash": g_flash, "plane_path": g_plane_path,
-        "light_leak": g_light_leak, "scene_label": g_scene_label}
+        "light_leak": g_light_leak, "scene_label": g_scene_label, **kinetic.DRAW}
 
 
 # ------------------------------------------------------------------ captions, branding
@@ -296,7 +296,7 @@ def draw_captions(c, t, TL):
     for cap in caps:
         a, b, s_ = cap["t0"], cap["t1"], cap["text"]
         nxt = min([st for st in starts if st > a + 1e-6] or [1e9]); b2 = min(b + 0.15, nxt - 0.01)
-        if not (a - 0.04 <= t < b2): continue
+        if not (a - 0.04 <= t < b2) or cap.get("hide"): continue
         f = font("pxb", 62); parts = []
         for m_ in re.finditer(r"\*([^*]+)\*([.,?!]*)|(\S+)", s_):
             parts.append((m_.group(1) + m_.group(2), True) if m_.group(1) else (m_.group(3), False))
@@ -313,6 +313,7 @@ def draw_captions(c, t, TL):
             lines = [(0, len(parts), 1400)]
         seg = max(0.05, (b - a) * 0.6 / max(1, len(parts)))
         for i0, i1, y in lines:
+            y += cap.get("dy", 0)                               # anchor mode: moved clear of the presenter's face
             lw = sum(widths[i0:i1]) + sp * (i1 - i0 - 1); sc = min(1.0, SAFE_W / max(lw, 1))     # side margins clear of Instagram's buttons
             c.save(); c.translate(W / 2, y); c.scale(sc, sc); c.translate(-W / 2, -y); x = W / 2 - lw / 2
             for i in range(i0, i1):
@@ -375,6 +376,8 @@ def shake(t, TL, fi):
     for g in TL["graphics"]:
         if g["type"] in ("shake", "flash") and 0 <= t - g["t0"] < 0.3:
             k = (1 - (t - g["t0"]) / 0.3) * 14; dx += k * math.sin(fi * 2.1); dy += k * math.cos(fi * 1.7)
+        elif g["type"] == "stamp" and 0 <= t - kinetic.stamp_land(g) < 0.3:          # the stamp shakes the frame as it lands
+            k = (1 - (t - kinetic.stamp_land(g)) / 0.3) * 14; dx += k * math.sin(fi * 2.1); dy += k * math.cos(fi * 1.7)
     return dx, dy
 
 def encoder_args(final=False):
@@ -413,6 +416,9 @@ def pace_zoom(t, s, pace):
 
 
 def render(TL, f0, f1, out):
+    if TL.get("anchor"):                                   # anchor mode (opt-in): the presenter is the base layer
+        from . import anchor_render
+        return anchor_render.render(TL, f0, f1, out)
     load_fonts(TL["fonts_dir"]); _serif()
     apply_palette(TL.get("palette") or {})
     shots = {s["id"]: Shot(s["file"]) for s in TL["shots"]}
@@ -467,7 +473,7 @@ def render(TL, f0, f1, out):
         if t < TL["vo_end"] - 0.25:
             lw = 104; lh = lw * logo.height() / logo.width()
             c.drawImageRect(logo, skia.Rect.MakeXYWH(70, 220, lw, lh), skia.SamplingOptions(skia.FilterMode.kLinear), skia.Paint(Alphaf=0.92 * prog(t, 0.3, 0.4)))
-        draw_captions(c, t, TL); draw_end(c, t, TL, logo)
+        (kinetic.draw_kcaps if TL.get("kcaps") else draw_captions)(c, t, TL); draw_end(c, t, TL, logo)
         c.drawRect(skia.Rect(0, 0, W * t / TL["end"], 8), skia.Paint(Color4f=col(AMBER, 0.9)))
         enc.stdin.write(surf.toarray(colorType=skia.kRGBA_8888_ColorType).tobytes())
     enc.stdin.close(); enc.wait()

@@ -100,4 +100,8 @@ def build(spec: dict, vo: dict, fonts_dir: str, logo: str) -> dict:
         sfx.append(item)
     if sfx:
         out["sfx"] = sfx
+    # anchor mode, kinetic captions and the kinetic graphics (all opt-in): media/anchor.py
+    from . import anchor
+    if anchor.needed(spec):
+        anchor.enrich(out, spec, vo)
     return out

@@ -67,8 +67,9 @@ def build(TL: dict, roomtone_path: str, out_path: str):
     vo = vo * np.where(env > thr, (thr + (env - thr) / 2.2) / (env + 1e-9), 1.0)
 
     # SFX keyed to edits and graphics
-    for s in TL["shots"][1:]:
-        put(fx, sfx.whoosh(0.45, level=0.26), s["t0"] - 0.22)
+    cuts = [s["t0"] for s in TL["shots"][1:]] if "transitions" not in TL else [x["t"] for x in TL["transitions"]]
+    for t_cut in cuts:                                  # anchor mode: a whoosh on each whip / zoom transition only
+        put(fx, sfx.whoosh(0.45, level=0.26), t_cut - 0.22)
     seed = 1
     for g in TL["graphics"]:
         t0, ty = g["t0"], g["type"]
@@ -91,6 +92,14 @@ def build(TL: dict, roomtone_path: str, out_path: str):
             put(fx, sfx.drone(1.4, 60, 0.35), t0)
         elif ty == "plane_path":
             put(fx, sfx.riser(1.6, 0.22), t0 + 0.3)
+        elif ty in ("kinetic_words", "pill_row") and not g.get("hide"):          # a pop on every word / pill as it lands
+            for r in g.get("reveal", [t0]): put(fx, sfx.ui_pop(), r)
+        elif ty == "stamp" and not g.get("hide"):
+            put(fx, sfx.impact(1.2, 0.75), t0 + 0.18, 0.8); put(fx, sfx.whoosh(0.25, level=0.2), t0 - 0.12)
+        elif ty == "strike" and not g.get("hide"):
+            put(fx, sfx.whoosh(0.22, level=0.2), t0 - 0.04)
+        elif ty == "arrow_cta" and not g.get("hide"):
+            put(fx, sfx.ui_pop(), t0 + 0.05)
     last = TL["groups"][-1]["t0"]
     put(fx, sfx.riser(1.0, 0.2), last - 1.0); put(fx, sfx.impact(1.6, 0.6), vo_end - 0.1, 0.7)
     amb = None                                          # pro edit layer (opt-in): place sounds keyed to the script

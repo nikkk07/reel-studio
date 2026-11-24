@@ -20,7 +20,7 @@ OPTIMIZE = {"type": "object", "required": ["title", "hook", "concept", "outline"
                            "notes_for_user": S}}
 
 GRAPHIC_TYPES = ["behind_text", "ui_card", "chip", "big_text", "counter", "list_card", "quote_card", "compare", "timer", "flash", "dim", "shake", "plane_path",
-                 "light_leak", "scene_label"]
+                 "light_leak", "scene_label", "kinetic_words", "strike", "pill_row", "arrow_cta", "stamp"]
 GRADES = ["warm_cinematic", "clean"]                                                    # media/proedit.py
 SFX_TYPES = ["ambience_airport", "engine_riser", "whoosh", "impact", "ding"]            # media/mix.py pro_events
 
@@ -38,7 +38,7 @@ SPEC = {"type": "object",
                     "type": "object", "required": ["say", "caption"], "properties": {"say": S, "caption": S}}}}}},
             "shots": {"type": "array", "minItems": 4, "maxItems": 14, "items": {
                 "type": "object", "required": ["id", "query", "at_group", "at_phrase"],
-                "properties": {"id": S, "query": S, "at_group": S, "at_phrase": I, "note": S}}},
+                "properties": {"id": S, "query": S, "at_group": S, "at_phrase": I, "note": S, "cutaway": B}}},
             "graphics": {"type": "array", "items": {
                 "type": "object", "required": ["type", "at_group", "at_phrase", "params"],
                 "properties": {"type": {"type": "string", "enum": GRAPHIC_TYPES}, "at_group": S, "at_phrase": I,
@@ -63,6 +63,15 @@ SPEC = {"type": "object",
             "sfx": {"type": "array", "items": {
                 "type": "object", "required": ["type", "at_group"],
                 "properties": {"type": {"type": "string", "enum": SFX_TYPES}, "at_group": S, "at_phrase": I, "until_group": S, "level": N}}},
+            # anchor mode (media/anchor.py, all optional): one presenter clip upfront, scenes behind her, kinetic captions
+            "anchor": {"type": "object", "required": ["clip", "map"], "properties": {"clip": S, "map": {"type": "array", "items": {
+                "type": "object", "required": ["vo_t0", "vo_t1", "clip_t0"], "properties": {"vo_t0": N, "vo_t1": N, "clip_t0": N}}}}},
+            "scenes": {"type": "array", "items": {
+                "type": "object", "required": ["from_t", "to_t", "bg"],
+                "properties": {"from_t": N, "to_t": N, "bg": {"type": "object", "properties": {"query": S, "image": S}},
+                               "pos": {"type": "string", "enum": ["center", "left", "right"]}, "scale": N, "label": S}}},
+            "captions": {"type": "string", "enum": ["classic", "kinetic"]},
+            "ai_label": {"type": ["string", "boolean"]},
         }}
 
 FOOTAGE = {"type": "object", "required": ["picks"],

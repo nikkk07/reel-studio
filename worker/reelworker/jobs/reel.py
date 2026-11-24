@@ -839,7 +839,8 @@ def stage_voice(ctx, prog):
 
 
 def _vo_map(ctx):
-    return {gid: {"file": v["file"], "trim": v["trim"], "spans": v["spans"]}
+    return {gid: {"file": v["file"], "trim": v["trim"], "spans": v["spans"],
+                  **({"words": v["chosen"]["words"]} if (v.get("chosen") or {}).get("words") else {})}      # word times: kinetic captions
             for gid, v in json.loads(ctx.path("voice_out.json").read_text(encoding="utf-8")).items()}
 
 
@@ -873,34 +874,9 @@ def bg_swap_shots(spec: dict, made) -> list:
     return out
 
 
-def stage_footage(ctx, prog):
-    spec = _spec(ctx); pres_files = {}
-    if _style(ctx):                                     # AI presenter first (hours on Kaggle); falls back to classic on any problem
-        pres_files, spec = _presenter_shots(ctx, spec, _vo_map(ctx), _style(ctx))
-    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx), ctx.db)))
-    need = {s["id"]: s["need"] for s in TL["shots"]}
-    bgs = bg_swap_shots(spec, pres_files) if pres_files else []
-    if spec.get("bg_swap") and not bgs:
-        ctx.log("background swap asked for, but no AI presenter shot is in those groups; nothing to swap", "warn")
-    for b in bgs:
-        need[b["id"]] = need.get(b["bg_for"], 3.0)
-    shots = [s for s in spec["shots"] if s["id"] in need and not s.get("presenter")] + bgs
-    cands = {}; reuse = {}
-    parent = _parent_dir(ctx)
-    if parent and (parent / "footage.json").exists():
-        pfj = json.loads((parent / "footage.json").read_text(encoding="utf-8"))
-        pq = {s["query"]: s["id"] for s in json.loads((parent / "spec.json").read_text(encoding="utf-8"))["shots"]}
-        for s in spec["shots"]:
-            c = pfj.get("chosen", {}).get(pq.get(s["query"], ""))
-            raw = parent / "footage" / "raw" / f"{c['src']}_{c['id']}.mp4" if c else None
-            if c and raw.exists():
-                reuse[s["id"]] = (c, raw)
-        if reuse:
-            ctx.log(f"reusing {len(reuse)} clips from the previous version")
-    shots_all = shots
-    shots = [s for s in shots_all if s["id"] not in reuse]
-    for s in shots_all:
-        ctx.trace("footage", s["id"], s.get("note") or s["query"], "done" if s["id"] in reuse else "wait", "reused" if s["id"] in reuse else "")
+def _search_pick(ctx, prog, shots, need, cands):
+    """Stock search for every shot, contact sheets, the Footage Picker (one retry with its better query). Fills cands;
+    returns (picks, footage folder)."""
     for k, s in enumerate(shots):
         ctx.trace("footage", s["id"], s.get("note") or s["query"], "run", "searching")
         cands[s["id"]] = footage.search(s["query"], per_source=6)[:12]
@@ -932,6 +908,115 @@ def stage_footage(ctx, prog):
             picks = [p for p in picks if p["shot_id"] not in retry] + more
         ctx.trace("footage", "pick", "Claude chooses clips", "done")
     prog(0.35)
+    return picks, work
+
+
+def _duration(path) -> float:
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)], capture_output=True, text=True)
+    try:
+        return float(r.stdout.strip() or 0)
+    except ValueError:
+        return 0.0
+
+
+BG_NOTE = ("background plate behind the presenter: a wide, steady view of the place, no person close to the camera; "
+           "several different clips are used, 2-3 s each")
+
+
+def anchor_footage(ctx, prog, spec):
+    """Anchor mode: the presenter is ONE ready clip (HeyGen), so no Kaggle at all. Stock footage is searched, picked and
+    prepped exactly as for any reel, but only for the short cutaways and the moving scene backgrounds, and each source gets
+    as many DIFFERENT clips (the pick, its alternates, then the other candidates) as it has pieces: no piece is longer than
+    ~2 s (plates ~3 s) and no clip is ever looped or held on its last frame."""
+    from ..media import matte
+    clip = Path(str((spec.get("anchor") or {}).get("clip") or "")).expanduser()
+    if not clip.is_file():
+        raise RuntimeError(f"anchor mode: the presenter clip {clip} was not found (spec anchor.clip)")
+    prof = _brand(ctx)
+    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(prof, ctx.db)))
+    A = TL["anchor"]
+    for w in A["warnings"]:
+        ctx.log(f"anchor mode: {w}", "warn")
+    masked = matte.available()
+    if A["scenes"] and not masked:
+        ctx.log("anchor mode: no person mask on this machine (Apple Vision); the scenes keep her own background", "warn")
+    by_id = {x["id"]: x for x in spec["shots"]}
+    need = {sid: v for sid, v in A["need"].items() if sid in by_id or (masked and sid.startswith("BG"))}
+    shots = [by_id[sid] for sid in need if sid in by_id]
+    for sc in A["scenes"]:
+        if masked and sc["bg"].get("query"):
+            shots.append({"id": f"BG{sc['i'] + 1}", "query": sc["bg"]["query"], "note": BG_NOTE})
+    for x in shots:
+        ctx.trace("footage", x["id"], x.get("note") or x["query"], "wait", f"{len(need[x['id']])} clip(s)")
+    cands = {}
+    picks, work = _search_pick(ctx, prog, shots, {k: max(v.values()) for k, v in need.items()}, cands) if shots else ([], ctx.dir / "footage")
+    work.mkdir(parents=True, exist_ok=True)
+    pm = {p["shot_id"]: p for p in picks}; files, durs, chosen = {}, {}, {}
+    for k, x in enumerate(shots):
+        sid = x["id"]; lst = cands.get(sid) or []; p = pm.get(sid, {})
+        if str(p.get("candidate")).lower() == "none":
+            ctx.log(f"no fitting clip for {sid}; its pieces use the reel's other cutaways", "warn"); continue
+        order = list(dict.fromkeys([p.get("candidate")] + list(p.get("alternates") or []) + [f"{sid}-{i}" for i in range(len(lst))]))
+        want = len(need[sid])
+        for label in order:
+            if len(files.get(sid, [])) >= want:
+                break
+            try:
+                c = lst[int(str(label).split("-")[-1])]
+            except Exception:  # noqa: BLE001
+                continue
+            v = len(files.get(sid, []))
+            try:
+                src = footage.download(c, work / "raw" / f"{c['src']}_{c['id']}.mp4")
+                out = footage.prep_shot(src, work / f"{sid}_v{v}.mp4", float(p.get("in_point") or 0) if label == p.get("candidate") else 0.0,
+                                        need[sid][str(v)], float(p.get("focus_x") or 0.5), loop=False)
+                d = _duration(out)
+                if d < 0.3:
+                    raise RuntimeError("clip too short")
+                files.setdefault(sid, []).append(str(out)); durs[str(out)] = d
+                chosen[sid if v == 0 else f"{sid}_v{v}"] = {**c, "label": label}
+            except Exception as e:  # noqa: BLE001
+                ctx.log(f"clip {label} unusable: {e}", "warn")
+        ctx.trace("footage", sid, x.get("note") or x["query"], "done" if files.get(sid) else "fail", f"{len(files.get(sid, []))}/{want} clips")
+        prog(0.35 + 0.65 * (k + 1) / max(1, len(shots)))
+    chosen["anchor"] = {"src": "ai", "id": "anchor", "author": "AI presenter (HeyGen)", "page": "", "licence": "AI-generated character"}
+    fjd = {"files": {sid: f[0] for sid, f in files.items()}, "variants": files, "durations": durs, "chosen": chosen, "picks": picks,
+           "cands": cands, "anchor": {"clip": str(clip)}}
+    ctx.path("footage.json").write_text(json.dumps(fjd, ensure_ascii=False, indent=1), encoding="utf-8")
+    ctx.merge_output({"credits": footage.credits(chosen)})
+
+
+def stage_footage(ctx, prog):
+    spec = _spec(ctx); pres_files = {}
+    if spec.get("anchor"):                              # anchor mode: one ready presenter clip, never Kaggle
+        return anchor_footage(ctx, prog, spec)
+    if _style(ctx):                                     # AI presenter first (hours on Kaggle); falls back to classic on any problem
+        pres_files, spec = _presenter_shots(ctx, spec, _vo_map(ctx), _style(ctx))
+    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(_brand(ctx), ctx.db)))
+    need = {s["id"]: s["need"] for s in TL["shots"]}
+    bgs = bg_swap_shots(spec, pres_files) if pres_files else []
+    if spec.get("bg_swap") and not bgs:
+        ctx.log("background swap asked for, but no AI presenter shot is in those groups; nothing to swap", "warn")
+    for b in bgs:
+        need[b["id"]] = need.get(b["bg_for"], 3.0)
+    shots = [s for s in spec["shots"] if s["id"] in need and not s.get("presenter")] + bgs
+    cands = {}; reuse = {}
+    parent = _parent_dir(ctx)
+    if parent and (parent / "footage.json").exists():
+        pfj = json.loads((parent / "footage.json").read_text(encoding="utf-8"))
+        pq = {s["query"]: s["id"] for s in json.loads((parent / "spec.json").read_text(encoding="utf-8"))["shots"]}
+        for s in spec["shots"]:
+            c = pfj.get("chosen", {}).get(pq.get(s["query"], ""))
+            raw = parent / "footage" / "raw" / f"{c['src']}_{c['id']}.mp4" if c else None
+            if c and raw.exists():
+                reuse[s["id"]] = (c, raw)
+        if reuse:
+            ctx.log(f"reusing {len(reuse)} clips from the previous version")
+    shots_all = shots
+    shots = [s for s in shots_all if s["id"] not in reuse]
+    for s in shots_all:
+        ctx.trace("footage", s["id"], s.get("note") or s["query"], "done" if s["id"] in reuse else "wait", "reused" if s["id"] in reuse else "")
+    picks, work = _search_pick(ctx, prog, shots, need, cands)
     chosen, shot_files = {}, {}
     for sid, (c, raw) in reuse.items():
         try:
@@ -1007,8 +1092,70 @@ def swap_background(s: dict, plate, log) -> bool:
         return False
 
 
+def anchor_timeline(ctx, spec, fj):
+    """Anchor mode timeline: clips bound to their pieces (none runs past its end), her person mask and face boxes (Apple
+    Vision on the Mac; Linux: her own background and a conservative face box), the layout around her face, no AI tag on
+    screen unless the spec asks for one (the platform's AI label is used instead)."""
+    from ..media import anchor, matte
+    prof = _brand(ctx)
+    TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(prof, ctx.db)))
+    A = TL["anchor"]; A["clip"] = (fj.get("anchor") or {}).get("clip") or A["clip"]
+    anchor.bind(TL, fj.get("variants") or {}, fj.get("durations") or {}, ctx.log)
+    m = None
+    try:
+        m = matte.make(Path(A["clip"]), ctx.path("render", "anchor_matte.mp4"))
+    except Exception as e:  # noqa: BLE001
+        ctx.log(f"person mask skipped ({str(e)[:100]})", "warn")
+    A["matte"] = str(m) if m else None
+    try:                                                   # past her clip's end (end card) she plays back, never frozen
+        from ..media.anchor_render import make_tail
+        tl_ = make_tail(Path(A["clip"]), ctx.path("render", "anchor_tail.mp4"))
+        A["tail"] = str(tl_) if tl_ else None
+        mt = make_tail(Path(m), ctx.path("render", "anchor_matte_tail.mp4")) if m else None
+        A["matte_tail"] = str(mt) if mt else None
+    except Exception as e:  # noqa: BLE001
+        ctx.log(f"presenter tail skipped ({str(e)[:100]})", "warn")
+    if not m:
+        ctx.log("anchor mode: no person mask on this machine (Apple Vision); she keeps her own background and words behind her are left out", "warn")
+    for s in TL["shots"]:
+        if s["kind"] == "anchor":
+            s["matte"] = A["matte"]
+    for sc in A["scenes"]:
+        img = sc["bg"].get("image")
+        if img and not Path(img).expanduser().is_file():
+            ctx.log(f"scene {sc['i'] + 1}: background picture {img} not found; she keeps her own background there", "warn"); sc["bg"] = {}
+        elif img:
+            sc["bg"]["file"] = str(Path(img).expanduser())
+    faces = None
+    try:
+        faces = matte.faces(Path(A["clip"]), [(s["id"], max(0.0, s["clip_t0"] + s["t0"] - s["vo_t0"]), max(0.0, s["clip_t0"] + s["t1"] - s["vo_t0"]))
+                                              for s in TL["shots"] if s["kind"] == "anchor"])
+    except Exception as e:  # noqa: BLE001
+        ctx.log(f"face detection skipped ({str(e)[:100]}); using the default face box", "warn")
+    anchor.set_faces(TL, faces)
+    drop = drop_unmasked_behind(TL)
+    if drop:
+        ctx.log(f"no person mask: left out {len(drop)} behind-the-presenter word(s)", "warn")
+    lab = spec.get("ai_label")
+    if isinstance(lab, str) and lab.strip():
+        TL["ai_label"] = lab.strip()[:40]
+    else:
+        ctx.merge_output({"ai_disclosure": "no AI tag on the video: switch on the platform's AI label when posting"})
+    if not brandmod.legacy(prof):
+        TL["palette"] = prof.get("palette") or {}
+        TL["end_title"] = prof.get("end_title", "FOLLOW FOR MORE"); TL["end_sub"] = prof.get("end_sub", "")
+    if (ctx.job.get("input") or {}).get("ad") or spec.get("end_title"):
+        TL["end_title"] = str(spec.get("end_title", "FREE CAREER COUNSELLING"))[:40]
+        TL["end_sub"] = str(spec.get("end_sub", "Eligibility + roadmap, no commitment"))[:60]
+        TL["end_cta"] = str(spec.get("end_cta", "Form bhariye"))[:28]
+    p = ctx.path("render", "timeline.json"); p.write_text(json.dumps(TL, ensure_ascii=False, indent=1), encoding="utf-8")
+    return TL, p
+
+
 def build_timeline(ctx):
     spec = _vspec(ctx); fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8"))
+    if spec.get("anchor"):
+        return anchor_timeline(ctx, spec, fj)
     spec["shots"] = [s for s in spec["shots"] if s["id"] in fj["files"]]
     prof = _brand(ctx)
     TL = timeline.build(spec, _vo_map(ctx), str(config.FONTS_DIR), str(brandmod.logo(prof, ctx.db)))
@@ -1084,7 +1231,7 @@ def stage_qc(ctx, prog):
                      grade=lambda o: 10 * float(o.get("score") or 0))
     ctx.trace("qc", "watch", "Claude watches the reel", "done", f"score {qc['score']}/10", flush=True)
     repick = [i for i in qc["issues"] if i.get("fix") == "repick_shot" and i.get("shot_id")]
-    if repick and not ctx.data.get("qc_repaired"):
+    if repick and not ctx.data.get("qc_repaired") and not spec.get("anchor"):     # anchor mode: pieces are re-cut, not re-picked
         fj = json.loads(ctx.path("footage.json").read_text(encoding="utf-8")); changed = False
         spec = _vspec(ctx); q = {x["id"]: x for x in spec["shots"]}; first = spec["shots"][0]["id"]
         todo = [i for i in repick if i["shot_id"] in fj.get("files", {}) and fj.get("cands", {}).get(i["shot_id"])]

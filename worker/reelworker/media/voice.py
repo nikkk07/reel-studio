@@ -174,7 +174,8 @@ def score_and_align(job: Path, cfg: dict, takes: dict, log):
             spans = phrase_spans([(w[0], w[1], w[2]) for w in words], g["phrases_say"])
             rec = {"file": f, "score": round(sc, 3), "word_prob": round(wprob, 3), "coverage": round(cover, 2), "utmos": round(u, 2), "match": round(match, 3),
                    "transcript": " ".join(w[2] for w in words), "weak_words": [w[2] for w in words if w[3] < 0.4],
-                   "text": g["text"], "trim": [round(s0, 3), round(e0, 3)], "spans": [[round(x, 3), round(y, 3)] for x, y in spans]}
+                   "text": g["text"], "trim": [round(s0, 3), round(e0, 3)], "spans": [[round(x, 3), round(y, 3)] for x, y in spans],
+                   "words": [[round(w[0], 3), round(w[1], 3), w[2]] for w in words]}         # word times (kinetic captions)
             report.append(rec)
             if best is None or sc < best["score"]:
                 best = rec

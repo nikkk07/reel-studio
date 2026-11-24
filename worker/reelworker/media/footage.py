@@ -130,7 +130,7 @@ def download(c: dict, dest: Path) -> Path:
     return dest
 
 
-def prep_shot(src: Path, out: Path, in_point: float, dur: float, focus_x: float = 0.5):
+def prep_shot(src: Path, out: Path, in_point: float, dur: float, focus_x: float = 0.5, loop: bool = True):
     probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(src)],
                            capture_output=True, text=True).stdout.strip()
     total = float(probe or 0)
@@ -139,7 +139,9 @@ def prep_shot(src: Path, out: Path, in_point: float, dur: float, focus_x: float 
     fx = max(0.0, min(1.0, focus_x))
     vf = ("fps=60,scale=w='if(gt(iw/ih,1296/2304),-2,1296)':h='if(gt(iw/ih,1296/2304),2304,-2)':flags=lanczos,"
           f"crop=1296:2304:x='(iw-ow)*{fx}':y='(ih-oh)/2',eq=contrast=1.06:saturation=1.0,format=yuv420p")
-    loop = ["-stream_loop", "-1"] if total and total < dur else []
+    if not loop and total:                          # anchor mode: never loop or pad a clip; it is cut shorter instead
+        dur = min(dur, max(0.1, total - in_point))
+    loop = ["-stream_loop", "-1"] if loop and total and total < dur else []
     r = subprocess.run(["ffmpeg", "-v", "error", "-y", *loop, "-ss", f"{in_point:.2f}", "-t", f"{dur:.2f}", "-i", str(src), "-vf", vf, "-an",
                         "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", str(out)], capture_output=True, text=True)
     if r.returncode != 0:
