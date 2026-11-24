@@ -94,7 +94,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S", stream=sys.stdout, force=True)
     a = argparse.ArgumentParser()
     a.add_argument("spec"); a.add_argument("--video", default="", choices=["", "presenter_studio", "presenter_fast"])
-    a.add_argument("--brand", default="weone"); a.add_argument("--ad", action="store_true"); a.add_argument("--job")
+    a.add_argument("--brand", default="weone"); a.add_argument("--ad", action="store_true"); a.add_argument("--job"); a.add_argument("--until", default="", help="stop after this stage (e.g. voice)")
     o = a.parse_args()
     spec = json.loads(Path(o.spec).read_text(encoding="utf-8")); check(spec)
     jid = o.job or str(uuid.uuid4())
@@ -112,6 +112,13 @@ def main():
         ctx.merge_output({"title": spec["title"], "claims": spec["claims"]})
         ctx.mark_done("script")
     print(f"job {jid}  (resume with --job {jid})", flush=True)
+    if o.until:                        # e.g. --until voice: record and check the voice only, then stop
+        names = [n for n, _, _ in reel.STAGES]
+        if o.until not in names:
+            raise SystemExit(f"--until must be one of {names}")
+        from reelworker.runner import run_stages
+        run_stages(ctx, reel.STAGES[:names.index(o.until) + 1])
+        print(f"stopped after {o.until} (job {jid})", flush=True); return
     try:
         reel.run(ctx)
     except Exception as e:  # noqa: BLE001
