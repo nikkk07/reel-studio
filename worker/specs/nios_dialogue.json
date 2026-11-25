@@ -1,0 +1,347 @@
+{
+ "title": "Commerce liya tha? Pilot ban sakte ho (NIOS) | father-son dialogue ad",
+ "slug": "nios_dialogue",
+ "images": "/Volumes/AI-Models/nios-ad/images",
+ "work": "/Volumes/AI-Models/nios-ad/work",
+ "mood": "uplifting",
+ "ai_label": "Video created using AI",
+ "end_title": "FREE CAREER COUNSELLING",
+ "end_sub": "Call / WhatsApp 93555 66991",
+ "end_hold": 3.2,
+ "characters": {
+  "aryan": {
+   "name": "Son",
+   "voice": "Puck",
+   "style": "a young Delhi man of 18, natural Hinglish, slightly nervous",
+   "look": "An 18-year-old Indian boy speaks hesitantly to his father, small natural head movements."
+  },
+  "father": {
+   "name": "Father",
+   "voice": "Algenib",
+   "style": "a strict but caring Delhi father in his late forties, natural Hinglish",
+   "look": "A 48-year-old Indian father speaks calmly with restrained emotion, minimal head movement."
+  },
+  "captain": {
+   "name": "Captain",
+   "voice": "Charon",
+   "style": "a calm, confident senior airline captain, warm and clear, natural Hinglish",
+   "look": "A confident Indian airline captain explains calmly with a reassuring expression, steady posture."
+  }
+ },
+ "stock": {
+  "takeoff": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/p1_v0.mp4",
+  "study": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/m1_v0.mp4",
+  "medical": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/e2_v0.mp4",
+  "trainee": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/e3_v0.mp4",
+  "taxi": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/r2_v0.mp4",
+  "clouds": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/o1_v0.mp4"
+ },
+ "lines": [
+  {
+   "id": "l01",
+   "who": "aryan",
+   "shot": "H1_aryan_talk",
+   "lip": true,
+   "prio": 10,
+   "pause": 0.3,
+   "say": "पापा… मैं पायलट बनना चाहता हूँ।",
+   "cap": "Papa… main *pilot* banna chahta hoon.",
+   "style": "hesitant and soft, gathering courage to tell his strict father"
+  },
+  {
+   "id": "l02",
+   "who": "father",
+   "shot": "H2_father_stern",
+   "lip": true,
+   "prio": 10,
+   "pause": 0.2,
+   "say": "कॉमर्स लिया था तुमने। भूल जाओ।",
+   "cap": "Commerce liya tha tumne. *Bhool jao.*",
+   "style": "flat and dismissive, tired, not even looking up from his plate",
+   "beat": {
+    "img": "H4_wide",
+    "dur": 1.4,
+    "gray": true,
+    "z": [
+     1.0,
+     1.04
+    ]
+   }
+  },
+  {
+   "id": "l03",
+   "who": "captain",
+   "pause": 1.5,
+   "say": "ग़लत।",
+   "cap": "*Galat.*",
+   "style": "calm, firm and certain, one decisive word",
+   "pics": [
+    {
+     "img": "O1_captain_front",
+     "z": [
+      1.16,
+      1.2
+     ]
+    },
+    {
+     "img": "O7_wide",
+     "at": 0.55,
+     "z": [
+      1.0,
+      1.06
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l04",
+   "who": "father",
+   "shot": "O4_father_office",
+   "lip": true,
+   "prio": 7,
+   "say": "सर, सच बताइए। AI सब जॉब्स ले रहा है। पायलट का फ़्यूचर है?",
+   "cap": "Sir, sach bataiye. *AI* sab jobs le raha hai. Pilot ka future hai?",
+   "style": "worried and sincere, respectful"
+  },
+  {
+   "id": "l05",
+   "who": "captain",
+   "say": "एयरलाइनर आज भी दो पायलट्स के साथ उड़ता है। एयरलाइन्स को ट्रेन्ड पायलट्स चाहिए ही।",
+   "cap": "Airliner aaj bhi *do pilots* ke saath udta hai. Airlines ko trained pilots chahiye hi.",
+   "style": "warm, reassuring, quietly confident",
+   "pics": [
+    {
+     "img": "O2_captain_left"
+    },
+    {
+     "stock": "takeoff",
+     "at": 2.0
+    }
+   ]
+  },
+  {
+   "id": "l06",
+   "who": "aryan",
+   "shot": "O5_aryan_office",
+   "say": "पर सर, मैं कॉमर्स का हूँ।",
+   "cap": "Par sir, main *Commerce* ka hoon.",
+   "style": "unsure, a little embarrassed"
+  },
+  {
+   "id": "l07",
+   "who": "captain",
+   "shot": "O3_captain_close",
+   "lip": true,
+   "prio": 9,
+   "pause": 0.15,
+   "say": "फ़िज़िक्स-मैथ्स नहीं? NIOS से दे दो। PCM है? तो सीधा मेडिकल से शुरू।",
+   "cap": "Physics-Maths nahi? *NIOS* se de do. PCM hai? Seedha *medical* se shuru.",
+   "style": "clear and confident, simple, like solving the problem on the spot",
+   "beat": {
+    "img": "O8_insert",
+    "dur": 2.3,
+    "z": [
+     1.0,
+     1.06
+    ]
+   }
+  },
+  {
+   "id": "l08",
+   "who": "father",
+   "pause": 0.2,
+   "say": "और उम्र?",
+   "cap": "Aur *umar*?",
+   "style": "quick and curious",
+   "pics": [
+    {
+     "img": "O4_father_office",
+     "z": [
+      1.12,
+      1.15
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l09",
+   "who": "captain",
+   "shot": "O6_ots_captain",
+   "say": "CPL के लिए अठारह साल। ऊपर कोई लिमिट नहीं, बस मेडिकल फ़िट होना चाहिए।",
+   "cap": "CPL ke liye *18 saal*. Upar koi limit nahi, bas medical fit hona chahiye.",
+   "style": "matter-of-fact, reassuring"
+  },
+  {
+   "id": "l10",
+   "who": "father",
+   "say": "लाखों लगेंगे, सर। बीच में रुक गया तो?",
+   "cap": "Lakhon lagenge, sir. Beech mein *ruk gaya* toh?",
+   "style": "anxious and protective, lower voice",
+   "pics": [
+    {
+     "img": "O4_father_office",
+     "z": [
+      1.0,
+      1.05
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l11",
+   "who": "captain",
+   "say": "इसीलिए पहले फ़ीस नहीं। पहले एलिजिबिलिटी और DGCA मेडिकल। फिर प्लान।",
+   "cap": "Isliye pehle fees nahi. Pehle *eligibility* aur DGCA medical. Phir plan.",
+   "style": "firm, honest, reassuring the father",
+   "pics": [
+    {
+     "img": "O2_captain_left",
+     "z": [
+      1.08,
+      1.13
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l12",
+   "who": "captain",
+   "say": "सीधा रास्ता है: सब्जेक्ट्स, मेडिकल, DGCA एग्ज़ाम्स, फ़्लाइंग स्कूल, दो सौ घंटे की फ़्लाइंग, और CPL।",
+   "cap": "Seedha raasta: subjects, medical, DGCA exams, flying school, 200 ghante flying, *CPL*.",
+   "style": "steady and clear, listing the steps with a slight build",
+   "pics": [
+    {
+     "stock": "study"
+    },
+    {
+     "stock": "medical",
+     "at": 1.6
+    },
+    {
+     "stock": "trainee",
+     "at": 3.4
+    },
+    {
+     "stock": "taxi",
+     "at": 5.0
+    }
+   ]
+  },
+  {
+   "id": "l13",
+   "who": "father",
+   "shot": "H3_father_smile",
+   "lip": true,
+   "prio": 8,
+   "say": "चलो… काउंसलिंग से शुरू करते हैं।",
+   "cap": "Chalo… *counselling* se shuru karte hain.",
+   "style": "softened and warm, a small proud smile in the voice",
+   "beat": {
+    "img": "H5_ots_aryan",
+    "dur": 0.9,
+    "z": [
+     1.0,
+     1.05
+    ]
+   }
+  },
+  {
+   "id": "l14",
+   "who": "captain",
+   "shot": "O1_captain_front",
+   "lip": true,
+   "prio": 9,
+   "say": "फ़्री करियर काउंसलिंग। कॉल या व्हाट्सऐप करें: नौ तीन पाँच पाँच पाँच, छह छह नौ नौ एक।",
+   "cap": "*Free career counselling.* Call / WhatsApp: 93555 66991",
+   "style": "warm and inviting, slower and very clear on the phone number"
+  }
+ ],
+ "graphics": [
+  {
+   "type": "stamp",
+   "line": "l02",
+   "at": "end",
+   "dur": 1.3,
+   "params": {
+    "text": "PILOT BANNA HAI 2027 MEIN?",
+    "rot": -4
+   }
+  },
+  {
+   "type": "scene_label",
+   "line": "l03",
+   "at": 0.55,
+   "dur": 1.8,
+   "params": {
+    "text": "Next day",
+    "sub": "We One Aviation",
+    "y": 0.2,
+    "size": 40
+   }
+  },
+  {
+   "type": "compare",
+   "line": "l07",
+   "at": "end",
+   "dur": 2.3,
+   "params": {
+    "left": {
+     "title": "PCM: YES",
+     "sub": "Start with the DGCA medical",
+     "color": "green"
+    },
+    "right": {
+     "title": "NO PCM",
+     "sub": "NIOS Physics + Maths first",
+     "color": "amber"
+    }
+   }
+  },
+  {
+   "type": "list_card",
+   "line": "l12",
+   "at": 0.0,
+   "dur": 3.3,
+   "reveal_every": 0.9,
+   "params": {
+    "items": [
+     {
+      "text": "12th: Physics + Maths (NIOS)",
+      "ok": true
+     },
+     {
+      "text": "DGCA medical",
+      "ok": true
+     },
+     {
+      "text": "DGCA exams",
+      "ok": true
+     }
+    ]
+   }
+  },
+  {
+   "type": "list_card",
+   "line": "l12",
+   "at": 3.4,
+   "dur": 3.6,
+   "reveal_every": 0.9,
+   "params": {
+    "items": [
+     {
+      "text": "Flying school",
+      "ok": true
+     },
+     {
+      "text": "200 hours flying",
+      "ok": true
+     },
+     {
+      "text": "CPL",
+      "ok": true
+     }
+    ]
+   }
+  }
+ ]
+}
