@@ -61,12 +61,21 @@ def main():
         for ln in todo:
             c = ch[ln["who"]]
             dl.tts(ln["say"], c["voice"], ln.get("style") or c.get("style", ""), ks, vdir / f"{ln['id']}.wav", log)
-    durs = {ln["id"]: round(dl.seconds(vdir / f"{ln['id']}.wav"), 3) for ln in spec["lines"]}
+    vfile = {}
+    for ln in spec["lines"]:                     # "tempo": a faster read of a line that is not lip-synced (pitch kept)
+        f = vdir / f"{ln['id']}.wav"; tp = float(ln.get("tempo") or 1.0)
+        if tp != 1.0 and not ln.get("lip"):
+            g = vdir / f"{ln['id']}.t{tp:.2f}.wav"
+            if not g.exists():
+                subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(f), "-af", f"atempo={tp:.3f}", str(g)], check=True)
+            f = g
+        vfile[ln["id"]] = f
+    durs = {ln["id"]: round(dl.seconds(vfile[ln["id"]]), 3) for ln in spec["lines"]}
     P = dl.plan(spec, durs); (work / "plan.json").write_text(json.dumps(P, ensure_ascii=False, indent=1), encoding="utf-8")
     log(f"voices: {len(durs)} lines, reel {P['end']:.1f} s")
     if o.voices_only:
         listen = work / "voices_preview.wav"
-        TLv = {"groups": [{"file": str(vdir / f"{x['id']}.wav"), "trim": [0, durs[x['id']]], "t0": x["t0"]} for x in P["lines"]]}
+        TLv = {"groups": [{"file": str(vfile[x["id"]]), "trim": [0, durs[x['id']]], "t0": x["t0"]} for x in P["lines"]]}
         presenter.voice_track(TLv["groups"], P["vo_end"], listen)
         log(f"listen: {listen}"); return
 
@@ -122,7 +131,7 @@ def main():
 
     # 5) timeline -> frames -> mix -> master
     TL = {"shots": shots, "graphics": dl.graphics(spec, P), "captions": dl.captions(P["lines"]),
-          "groups": [{"file": str(vdir / f"{x['id']}.wav"), "trim": [0, durs[x["id"]]], "t0": x["t0"]} for x in P["lines"]],
+          "groups": [{"file": str(vfile[x["id"]]), "trim": [0, durs[x["id"]]], "t0": x["t0"]} for x in P["lines"]],
           "vo_end": P["vo_end"], "end": P["end"], "fonts_dir": str(config.FONTS_DIR), "logo": str(config.LOGO),
           "mood": spec.get("mood", "uplifting"), "sfx": spec.get("sfx", []),
           "end_title": spec.get("end_title", "FREE CAREER COUNSELLING")[:40], "end_sub": spec.get("end_sub", "")[:60]}

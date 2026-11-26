@@ -117,7 +117,8 @@
      "stock": "takeoff",
      "at": 2.0
     }
-   ]
+   ],
+   "tempo": 1.12
   },
   {
    "id": "l06",
@@ -125,7 +126,8 @@
    "shot": "O5_aryan_office",
    "say": "पर सर, मैं कॉमर्स का हूँ।",
    "cap": "Par sir, main *Commerce* ka hoon.",
-   "style": "unsure, a little embarrassed"
+   "style": "unsure, a little embarrassed",
+   "tempo": 1.1
   },
   {
    "id": "l07",
@@ -169,7 +171,8 @@
    "shot": "O6_ots_captain",
    "say": "CPL के लिए अठारह साल। ऊपर कोई लिमिट नहीं, बस मेडिकल फ़िट होना चाहिए।",
    "cap": "CPL ke liye *18 saal*. Upar koi limit nahi, bas medical fit hona chahiye.",
-   "style": "matter-of-fact, reassuring"
+   "style": "matter-of-fact, reassuring",
+   "tempo": 1.12
   },
   {
    "id": "l10",
@@ -185,7 +188,8 @@
       1.05
      ]
     }
-   ]
+   ],
+   "tempo": 1.08
   },
   {
    "id": "l11",
@@ -201,7 +205,8 @@
       1.13
      ]
     }
-   ]
+   ],
+   "tempo": 1.12
   },
   {
    "id": "l12",
@@ -225,7 +230,8 @@
      "stock": "taxi",
      "at": 5.0
     }
-   ]
+   ],
+   "tempo": 1.15
   },
   {
    "id": "l13",
@@ -248,12 +254,25 @@
   {
    "id": "l14",
    "who": "captain",
-   "shot": "O1_captain_front",
    "lip": true,
    "prio": 9,
    "say": "फ़्री करियर काउंसलिंग। कॉल या व्हाट्सऐप करें: नौ तीन पाँच पाँच पाँच, छह छह नौ नौ एक।",
    "cap": "*Free career counselling.* Call / WhatsApp: 93555 66991",
-   "style": "warm and inviting, slower and very clear on the phone number"
+   "style": "warm and inviting, slower and very clear on the phone number",
+   "pics": [
+    {
+     "img": "O1_captain_front",
+     "lip": true
+    },
+    {
+     "img": "O7_wide",
+     "at": 7.0,
+     "z": [
+      1.0,
+      1.06
+     ]
+    }
+   ]
   }
  ],
  "graphics": [
@@ -341,6 +360,16 @@
       "ok": true
      }
     ]
+   }
+  },
+  {
+   "type": "stamp",
+   "line": "l14",
+   "at": 7.1,
+   "dur": 5.4,
+   "params": {
+    "text": "CALL 93555 66991",
+    "rot": -3
    }
   }
  ]
