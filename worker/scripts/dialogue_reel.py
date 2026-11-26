@@ -135,6 +135,9 @@ def main():
           "vo_end": P["vo_end"], "end": P["end"], "fonts_dir": str(config.FONTS_DIR), "logo": str(config.LOGO),
           "mood": spec.get("mood", "uplifting"), "sfx": spec.get("sfx", []),
           "end_title": spec.get("end_title", "FREE CAREER COUNSELLING")[:40], "end_sub": spec.get("end_sub", "")[:60]}
+    TL["transitions"] = [{"t": p["t0"]} for p in P["pics"] if p.get("whip") and p["t0"] > 0]   # hard cuts inside a scene
+    if spec.get("grade"):
+        TL["grade"] = spec["grade"]
     if spec.get("ai_label"):
         TL["ai_label"] = str(spec["ai_label"])[:40]
     out = work / "render"; out.mkdir(exist_ok=True)

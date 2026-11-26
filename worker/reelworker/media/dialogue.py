@@ -142,10 +142,15 @@ def plan(spec: dict, durs: dict) -> dict:
     for ln in spec["lines"]:
         d = durs[ln["id"]]; t0 = t; t1 = t0 + d
         lines.append({**ln, "t0": round(t0, 3), "t1": round(t1, 3)})
-        segs = ln.get("pics") or [{"img": ln["shot"], "lip": ln.get("lip", False)}]
+        segs = ln.get("pics") or [{"img": ln["shot"], "lip": ln.get("lip", False), "whip": ln.get("whip", False)}]
         # pictures inside the line: {"img"|"stock", "at": seconds from the line start (first one 0)}
         for k, s in enumerate(segs):
-            p0 = t0 + float(s.get("at", 0.0)) - (LEAD if k == 0 else 0.0)
+            if s.get("at") == "end":                 # from the line's last word (an end card's background)
+                p0 = t1
+            else:
+                p0 = t0 + float(s.get("at", 0.0)) - (LEAD if k == 0 else 0.0)
+                if k and p0 >= t1 - 0.2:             # the line is shorter than planned: this picture would not show
+                    continue
             pics.append({**s, "line": ln["id"], "t0": round(max(0.0, p0), 3)})
         t = t1 + float(ln.get("pause", 0.28))
         if ln.get("beat"):
@@ -186,6 +191,8 @@ def graphics(spec: dict, P: dict) -> list:
         ln = at[g["line"]]
         t0 = ln["t1"] + 0.15 if g.get("at") == "end" else ln["t0"] + float(g.get("at", 0.0))      # "end": on the silent beat after it
         g2 = {"type": g["type"], "t0": round(t0, 3), "t1": round(t0 + float(g.get("dur", 2.5)), 3), "params": g.get("params", {})}
+        if g.get("box"):                         # where it may draw (kept off the characters' faces)
+            g2["box"] = [float(x) for x in g["box"]]
         if g.get("reveal_every"):
             n = len(g2["params"].get("items") or []); g2["reveal"] = [round(t0 + i * float(g["reveal_every"]), 3) for i in range(n)]
         out.append(g2)

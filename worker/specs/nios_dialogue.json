@@ -29,12 +29,12 @@
   }
  },
  "stock": {
-  "takeoff": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/p1_v0.mp4",
-  "study": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/m1_v0.mp4",
-  "medical": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/e2_v0.mp4",
-  "trainee": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/e3_v0.mp4",
-  "taxi": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/r2_v0.mp4",
-  "clouds": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/o1_v0.mp4"
+  "cockpit": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/raw/pexels_5139201.mp4",
+  "form": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/raw/pexels_8478747.mp4",
+  "medical": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/raw/pexels_5453380.mp4",
+  "taxi": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/raw/pexels_6739596.mp4",
+  "cessna": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/raw/pexels_40368770.mp4",
+  "clouds": "/Users/nikhlbisht/ReelStudio/jobs/cf778aad-dcc8-4e49-b387-5a3163c88548/footage/raw/pexels_16865644.mp4"
  },
  "lines": [
   {
@@ -81,7 +81,8 @@
      "z": [
       1.16,
       1.2
-     ]
+     ],
+     "whip": true
     },
     {
      "img": "O7_wide",
@@ -114,8 +115,13 @@
      "img": "O2_captain_left"
     },
     {
-     "stock": "takeoff",
-     "at": 2.0
+     "stock": "cockpit",
+     "at": 2.0,
+     "off": 3.0,
+     "z": [
+      1.0,
+      1.08
+     ]
     }
    ],
    "tempo": 1.12
@@ -216,19 +222,24 @@
    "style": "steady and clear, listing the steps with a slight build",
    "pics": [
     {
-     "stock": "study"
+     "stock": "form",
+     "whip": true,
+     "off": 2.0
     },
     {
      "stock": "medical",
-     "at": 1.6
-    },
-    {
-     "stock": "trainee",
-     "at": 3.4
+     "at": 1.6,
+     "off": 1.0
     },
     {
      "stock": "taxi",
-     "at": 5.0
+     "at": 3.4,
+     "off": 2.0
+    },
+    {
+     "stock": "cessna",
+     "at": 5.6,
+     "off": 0.5
     }
    ],
    "tempo": 1.15
@@ -249,7 +260,8 @@
      1.0,
      1.05
     ]
-   }
+   },
+   "whip": true
   },
   {
    "id": "l14",
@@ -262,7 +274,8 @@
    "pics": [
     {
      "img": "O1_captain_front",
-     "lip": true
+     "lip": true,
+     "whip": true
     },
     {
      "img": "O7_wide",
@@ -270,6 +283,15 @@
      "z": [
       1.0,
       1.06
+     ]
+    },
+    {
+     "stock": "clouds",
+     "at": "end",
+     "off": 4.0,
+     "z": [
+      1.0,
+      1.05
      ]
     }
    ]
@@ -284,7 +306,13 @@
    "params": {
     "text": "PILOT BANNA HAI 2027 MEIN?",
     "rot": -4
-   }
+   },
+   "box": [
+    80,
+    1570,
+    1000,
+    1860
+   ]
   },
   {
    "type": "scene_label",
@@ -370,7 +398,13 @@
    "params": {
     "text": "CALL 93555 66991",
     "rot": -3
-   }
+   },
+   "box": [
+    80,
+    220,
+    1000,
+    620
+   ]
   }
  ]
 }

@@ -431,7 +431,9 @@ def render(TL, f0, f1, out):
     enc = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
                             *encoder_args(), "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", out],
                            stdin=subprocess.PIPE)
-    surf = skia.Surface(W, H); cuts = [s["t0"] for s in TL["shots"][1:]]
+    surf = skia.Surface(W, H)
+    # whip on every cut, unless the timeline lists its own transition points (dialogue reels: whips only between scenes)
+    cuts = [x["t"] for x in TL["transitions"]] if "transitions" in TL else [s["t0"] for s in TL["shots"][1:]]
     for fi in range(f0, f1):
         t = fi / FPS
         s = next((s for s in TL["shots"][::-1] if t >= s["t0"]), TL["shots"][0])
