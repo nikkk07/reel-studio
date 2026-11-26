@@ -192,40 +192,70 @@ def graphics(spec: dict, P: dict) -> list:
     return out
 
 
-# ------------------------------------------------------------------ lip-sync on Kaggle (two kernels at once, resumable)
-def lipsync(jobs: list, work: Path, log) -> dict:
-    """jobs = [{"id", "audio" (wav), "image" (png), "prompt"}] -> {id: raw mp4}. State in work/kaggle.json."""
+# ------------------------------------------------------------------ lip-sync on Kaggle: one batch per kernel, resumable
+BATCH_TIMEOUT_S = 11.5 * 3600            # Kaggle stops a GPU session at 12 h; a batch of 3 shots takes about 7 h
+
+
+def _submit_batch(lane, jobs, log):
+    """All of this lane's shots in one kernel run (the weights load once): wavs + pictures + job.json with items."""
+    d, _, _ = presenter.LANES[lane]; ds = presenter.KDIR / d / "ds"
+    for f in list(ds.glob("*.wav")) + list(ds.glob("shot_*.png")) + list(ds.glob("shot_*.jpg")):
+        f.unlink()
+    items = []
+    for j in jobs:
+        img = f"shot_{j['id']}.png"
+        presenter.shutil.copy(j["audio"], ds / f"{j['id']}.wav"); presenter.shutil.copy(j["image"], ds / img)
+        items.append({"name": j["id"], "image": img, "audio": f"{j['id']}.wav", "prompt": j["prompt"]})
+    job = {"prompt": jobs[0]["prompt"], "items": items, "steps": int(presenter.config.get("REELSTUDIO_PRESENTER_STEPS", "8")),
+           "teacache": False, "quant_file": "infinitetalk_single_int8_lora", "size": "infinitetalk-480"}
+    (ds / "job.json").write_text(json.dumps(job, indent=1), encoding="utf-8")
+    presenter._kg("datasets", "version", "-p", str(ds), "-m", f"dialogue {lane} {int(time.time())}", "--dir-mode", "skip")
+    time.sleep(presenter.SETTLE_S)
+    presenter._kg("kernels", "push", "-p", str(presenter.KDIR / d / "k"))
+    log(f"lip-sync: {len(jobs)} shot(s) sent to Kaggle kernel {lane}: {', '.join(j['id'] for j in jobs)}")
+    return time.time()
+
+
+def lipsync(jobs: list, work: Path, log, wait=True) -> dict:
+    """jobs = [{"id", "audio", "image", "prompt"}] -> {id: raw mp4}. The shots are split across the two kernels and each
+    kernel renders its share in one run, so nothing on this Mac has to stay on while Kaggle works: run the command again
+    later (it waits, or with wait=False just checks) and the finished clips are collected. State in work/kaggle.json."""
     state_p = work / "kaggle.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}
     save = lambda: state_p.write_text(json.dumps(st, indent=1))  # noqa: E731
-    todo = lambda: [j for j in jobs if st.get(j["id"], {}).get("state") not in ("done", "failed")]  # noqa: E731
-    while todo():
-        busy = {v["lane"] for v in st.values() if v.get("state") == "running"}
-        for j in todo():
-            if st.get(j["id"], {}).get("state") == "running":
-                continue
-            free = [l for l in presenter.LANES if l not in busy]
-            if not free:
-                break
-            lane = free[0]
-            t0 = presenter.submit(lane, {"name": j["id"], "prompt": j["prompt"]}, Path(j["audio"]), Path(j["image"]), log)
-            st[j["id"]] = {"lane": lane, "state": "running", "t0": t0}; busy.add(lane); save()
-        for sid, v in list(st.items()):
-            if v.get("state") != "running":
+    batches = st.setdefault("_batches", {})
+    sent = {i for b in batches.values() for i in b["ids"]}
+    new = [j for j in jobs if j["id"] not in sent and st.get(j["id"], {}).get("state") not in ("done", "failed")]
+    if new:
+        free = [l for l in presenter.LANES if batches.get(l, {}).get("state") != "running"]
+        for k, lane in enumerate(free):
+            share = new[k::len(free)]
+            if share:
+                t0 = _submit_batch(lane, share, log)
+                batches[lane] = {"ids": [j["id"] for j in share], "state": "running", "t0": t0}; save()
+    while True:
+        for lane, b in batches.items():
+            if b["state"] != "running":
                 continue
             try:
-                k = presenter.status(v["lane"])
+                k = presenter.status(lane)
             except presenter.Unavailable as e:
-                log(f"lip-sync {sid}: status check failed ({str(e)[:120]}), trying again"); continue
-            if k == "COMPLETE":
-                h = (time.time() - v["t0"]) / 3600; presenter.spend(h)
-                raw = presenter.collect(v["lane"], sid, work / f"out_{sid}")
-                st[sid] = {**v, "state": "done", "raw": str(raw), "gpu_h": round(h, 2)}; save()
-                log(f"lip-sync {sid}: ready after {h:.1f} h on Kaggle {v['lane']}")
-            elif k in ("ERROR", "CANCEL") or time.time() - v["t0"] > presenter.TIMEOUT_S:
-                presenter.spend(min(time.time() - v["t0"], presenter.TIMEOUT_S) / 3600)
-                st[sid] = {**v, "state": "failed", "why": k}; save()
-                log(f"lip-sync {sid}: Kaggle {v['lane']} stopped ({k}); this line plays over the still picture instead")
-        if todo():
-            time.sleep(presenter.POLL_S)
-    return {sid: Path(v["raw"]) for sid, v in st.items() if v.get("state") == "done"}
+                log(f"Kaggle {lane}: status check failed ({str(e)[:120]})"); continue
+            if k == "COMPLETE" or k in ("ERROR", "CANCEL") or time.time() - b["t0"] > BATCH_TIMEOUT_S:
+                h = min(time.time() - b["t0"], BATCH_TIMEOUT_S) / 3600; presenter.spend(h)
+                out = work / f"out_{lane}"; presenter.shutil.rmtree(out, ignore_errors=True); out.mkdir(parents=True)
+                try:
+                    presenter._kg("kernels", "output", f"{presenter.OWNER}/{presenter.LANES[lane][2]}", "-p", str(out), timeout=1800)
+                except Exception as e:  # noqa: BLE001
+                    log(f"Kaggle {lane}: download failed ({str(e)[:120]})")
+                for sid in b["ids"]:
+                    f = out / f"{sid}.mp4"
+                    st[sid] = {"lane": lane, "state": "done", "raw": str(f)} if f.exists() else {"lane": lane, "state": "failed", "why": k}
+                    log(f"lip-sync {sid}: {'ready' if f.exists() else 'not made (' + k + '); this line plays over its still'}")
+                b["state"] = "done"; b["gpu_h"] = round(h, 2); save()
+            else:
+                log(f"Kaggle {lane}: {k.lower()}, {(time.time() - b['t0']) / 3600:.1f} h so far ({', '.join(b['ids'])})")
+        if not any(b["state"] == "running" for b in batches.values()) or not wait:
+            break
+        time.sleep(presenter.POLL_S)
+    return {sid: Path(v["raw"]) for sid, v in st.items() if sid != "_batches" and v.get("state") == "done"}

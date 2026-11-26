@@ -31,6 +31,7 @@ def main():
     a = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     a.add_argument("spec"); a.add_argument("--crm", action="store_true")
     a.add_argument("--voices-only", action="store_true"); a.add_argument("--no-lips", action="store_true")
+    a.add_argument("--send-only", action="store_true", help="send the lip-sync shots to Kaggle and stop (collect later)")
     o = a.parse_args()
     spec = json.loads(Path(o.spec).read_text(encoding="utf-8"))
     imgs, work = Path(spec["images"]), Path(spec["work"]); work.mkdir(parents=True, exist_ok=True)
@@ -91,14 +92,18 @@ def main():
                      "prompt": f"{look} Lips move exactly with the speech; natural blinking and small head movements; "
                                f"silent and still when there is no speech. Camera locked, no zoom."})
     st = json.loads((work / "kaggle.json").read_text()) if (work / "kaggle.json").exists() else {}
-    new = [j for j in jobs if j["id"] not in st]
-    left = presenter.budget()["left_h"]; can = int(left // presenter.CLIP_H)
+    sent = {i for bb in st.get("_batches", {}).values() for i in bb["ids"]}
+    new = [j for j in jobs if j["id"] not in st and j["id"] not in sent]
+    left = presenter.budget()["left_h"]; can = int(left // (presenter.CLIP_H * 0.85))       # batches load the weights once
     if len(new) > can:
         keep = sorted(new, key=lambda j: -j["prio"])[:max(0, can)]; skip = [j["id"] for j in new if j not in keep]
         log(f"Kaggle time left this week {left:.1f} h: {len(skip)} lip-sync shot(s) become stills: {', '.join(skip)}")
-        jobs = [j for j in jobs if j["id"] in st or j in keep]
-    done = dl.lipsync(jobs, work, log) if jobs else {}
+        jobs = [j for j in jobs if j["id"] in st or j["id"] in sent or j in keep]
+    done = dl.lipsync(jobs, work, log, wait=not o.send_only) if jobs else {}
     log(f"lip-sync: {len(done)} of {len(jobs)} shot(s)")
+    kst = json.loads((work / "kaggle.json").read_text()) if (work / "kaggle.json").exists() else {}
+    if any(bb.get("state") == "running" for bb in kst.get("_batches", {}).values()):
+        log("Kaggle is still rendering; run the same command again later to collect the clips and finish the reel"); return
 
     # 4) shots on the reel's clock
     sdir = work / "shots"; sdir.mkdir(exist_ok=True); shots = []
