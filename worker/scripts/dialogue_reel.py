@@ -123,7 +123,11 @@ def main():
         if p.get("stock"):
             dl.video_clip(stock[p["stock"]], out, dur, float(p.get("off", 0.0))); z = p.get("z", [1.0, 1.06])
         elif p.get("lip") and jid in done:
-            dl.video_clip(done[jid], out, dur, 0.0); z = p.get("z", [1.0, 1.035])     # its audio started with this picture
+            lag, sfps, corr = dl.av_lag(done[jid], work / "lip" / f"{jid}.wav")
+            delay = -lag / sfps if (lag <= -2 and corr >= 0.3) else 0.0    # the mouth runs ahead of the voice: hold it back
+            log(f"lip-sync {jid}: mouth {'ahead of' if lag < 0 else 'behind' if lag > 0 else 'on'} the voice by "
+                f"{abs(lag) / sfps * 1000:.0f} ms (match {corr:.2f}){f', shifted {delay * 1000:.0f} ms' if delay else ''}")
+            dl.video_clip(done[jid], out, dur, 0.0, delay); z = p.get("z", [1.0, 1.035])     # its audio started with this picture
         else:
             dl.still_clip(framed[p["img"]], out, dur, gray=p.get("gray", False)); z = p.get("z", [1.0, 1.09])
         shots.append({"id": sid, "file": str(out), "t0": p["t0"], "t1": p["t1"], "z0": z[0], "z1": z[1],

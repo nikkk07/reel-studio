@@ -77,16 +77,17 @@
    "style": "calm, firm and certain, one decisive word",
    "pics": [
     {
-     "img": "O1_captain_front",
+     "img": "H4_wide",
+     "gray": true,
      "z": [
-      1.16,
-      1.2
-     ],
-     "whip": true
+      1.04,
+      1.06
+     ]
     },
     {
      "img": "O7_wide",
      "at": 0.55,
+     "whip": true,
      "z": [
       1.0,
       1.06
@@ -112,7 +113,11 @@
    "style": "warm, reassuring, quietly confident",
    "pics": [
     {
-     "img": "O2_captain_left"
+     "img": "O5_aryan_office",
+     "z": [
+      1.0,
+      1.05
+     ]
     },
     {
      "stock": "cockpit",
@@ -129,11 +134,19 @@
   {
    "id": "l06",
    "who": "aryan",
-   "shot": "O5_aryan_office",
    "say": "पर सर, मैं कॉमर्स का हूँ।",
    "cap": "Par sir, main *Commerce* ka hoon.",
    "style": "unsure, a little embarrassed",
-   "tempo": 1.1
+   "tempo": 1.1,
+   "pics": [
+    {
+     "img": "O2_captain_left",
+     "z": [
+      1.04,
+      1.08
+     ]
+    }
+   ]
   },
   {
    "id": "l07",
@@ -163,10 +176,10 @@
    "style": "quick and curious",
    "pics": [
     {
-     "img": "O4_father_office",
+     "img": "O6_ots_captain",
      "z": [
-      1.12,
-      1.15
+      1.06,
+      1.1
      ]
     }
    ]
@@ -174,11 +187,19 @@
   {
    "id": "l09",
    "who": "captain",
-   "shot": "O6_ots_captain",
    "say": "CPL के लिए अठारह साल। ऊपर कोई लिमिट नहीं, बस मेडिकल फ़िट होना चाहिए।",
    "cap": "CPL ke liye *18 saal*. Upar koi limit nahi, bas medical fit hona chahiye.",
    "style": "matter-of-fact, reassuring",
-   "tempo": 1.12
+   "tempo": 1.12,
+   "pics": [
+    {
+     "img": "O4_father_office",
+     "z": [
+      1.0,
+      1.05
+     ]
+    }
+   ]
   },
   {
    "id": "l10",
@@ -188,10 +209,10 @@
    "style": "anxious and protective, lower voice",
    "pics": [
     {
-     "img": "O4_father_office",
+     "img": "O7_wide",
      "z": [
-      1.0,
-      1.05
+      1.02,
+      1.08
      ]
     }
    ],
@@ -205,10 +226,10 @@
    "style": "firm, honest, reassuring the father",
    "pics": [
     {
-     "img": "O2_captain_left",
+     "img": "O4_father_office",
      "z": [
       1.08,
-      1.13
+      1.14
      ]
     }
    ],
@@ -268,22 +289,14 @@
    "who": "captain",
    "lip": true,
    "prio": 9,
-   "say": "फ़्री करियर काउंसलिंग। कॉल या व्हाट्सऐप करें: नौ तीन पाँच पाँच पाँच, छह छह नौ नौ एक।",
-   "cap": "*Free career counselling.* Call / WhatsApp: 93555 66991",
-   "style": "warm and inviting, slower and very clear on the phone number",
+   "say": "फ़्री करियर काउंसलिंग के लिए, आज ही हमसे बात कीजिए।",
+   "cap": "*Free career counselling* ke liye, aaj hi humse baat kijiye.",
+   "style": "warm, confident and inviting, clear and unhurried",
    "pics": [
     {
      "img": "O1_captain_front",
      "lip": true,
      "whip": true
-    },
-    {
-     "img": "O7_wide",
-     "at": 7.0,
-     "z": [
-      1.0,
-      1.06
-     ]
     },
     {
      "stock": "clouds",
@@ -389,22 +402,7 @@
      }
     ]
    }
-  },
-  {
-   "type": "stamp",
-   "line": "l14",
-   "at": 7.1,
-   "dur": 5.4,
-   "params": {
-    "text": "CALL 93555 66991",
-    "rot": -3
-   },
-   "box": [
-    80,
-    220,
-    1000,
-    620
-   ]
   }
- ]
+ ],
+ "note": "Rule: a speaking character's face is on screen only in a lip-synced shot; other lines show the listener, a wide, an insert or stock."
 }

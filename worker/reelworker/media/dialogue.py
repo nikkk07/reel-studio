@@ -70,13 +70,42 @@ def still_clip(img: Path, out: Path, dur: float, gray=False) -> Path:
     return out
 
 
-def video_clip(src: Path, out: Path, dur: float, off=0.0) -> Path:
-    """Stock or lip-sync video -> 1080x1920 60 fps, covering the frame; holds the last frame when the clip is short."""
-    vf = (f"fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H},"
+def video_clip(src: Path, out: Path, dur: float, off=0.0, delay=0.0) -> Path:
+    """Stock or lip-sync video -> 1080x1920 60 fps, covering the frame; holds the last frame when the clip is short.
+    delay: hold the first frame this long first (moves a lip-sync clip later, onto its voice)."""
+    pre = f"tpad=start_mode=clone:start_duration={delay:.3f}," if delay > 0 else ""
+    vf = (f"{pre}fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H},"
           f"tpad=stop_mode=clone:stop_duration={dur + 1:.2f},format=yuv420p")
     _run(["ffmpeg", "-v", "error", "-y", "-ss", f"{off:.2f}", "-i", str(src), "-vf", vf, "-t", f"{dur + 0.5:.2f}", "-an",
           "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", str(out)])
     return out
+
+
+def av_lag(video: Path, wav: Path, max_lag=6):
+    """How far a talking clip's mouth runs ahead of (negative) or behind its voice, in the clip's own frames.
+    The mouth is the face area that moves most; its motion is matched against the voice's loudness frame by frame.
+    Returns (lag_frames, fps, correlation)."""
+    import cv2
+    cap = cv2.VideoCapture(str(video)); fps = cap.get(cv2.CAP_PROP_FPS) or 25.0; fr = []
+    while True:
+        ok, f = cap.read()
+        if not ok:
+            break
+        fr.append(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY).astype(np.float32))
+    if len(fr) < 20:
+        return 0, fps, 0.0
+    F = np.stack(fr); h, w = F.shape[1:]
+    d = cv2.GaussianBlur(np.abs(np.diff(F, axis=0)).mean(0), (0, 0), 6)
+    d[:int(h * .15)] = 0; d[int(h * .65):] = 0; d[:, :int(w * .15)] = 0; d[:, int(w * .85):] = 0
+    cy, cx = np.unravel_index(d.argmax(), d.shape); ry, rx = max(8, h // 46), max(12, w // 16)
+    roi = F[:, max(0, cy - ry):cy + ry, max(0, cx - rx):cx + rx]
+    mo = np.r_[0, np.abs(np.diff(roi, axis=0)).mean((1, 2))]
+    a, sr = sf.read(str(wav)); a = a if a.ndim == 1 else a.mean(1); hop = sr / fps
+    rms = np.array([np.sqrt(np.mean(a[int(i * hop):int((i + 1) * hop)] ** 2)) if int(i * hop) < len(a) else 0.0 for i in range(len(fr))])
+    s_ = (mo - mo.mean()) / (mo.std() + 1e-9); r_ = (rms - rms.mean()) / (rms.std() + 1e-9)
+    best = max((float(np.mean(s_[max(0, l):len(s_) + min(0, l)] * r_[max(0, -l):len(r_) - max(0, l)])), l)
+               for l in range(-max_lag, max_lag + 1))
+    return best[1], fps, best[0]
 
 
 # ------------------------------------------------------------------ voice
