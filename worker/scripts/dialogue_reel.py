@@ -92,7 +92,8 @@ def main():
             log(f"{jid}: line is {ln['t1'] - ln['t0']:.1f} s, longer than one talking clip ({presenter.MAX_S} s); the end holds still")
         aud = work / "lip" / f"{jid}.wav"; aud.parent.mkdir(parents=True, exist_ok=True)
         if not aud.exists():
-            dur = min(presenter.MAX_S, lead + (ln["t1"] - ln["t0"]) + 0.3)
+            # InfiniteTalk needs at least one 81-frame window (3.24 s at 25 fps): short lines are padded with silence
+            dur = min(presenter.MAX_S, max(3.6, lead + (ln["t1"] - ln["t0"]) + 0.3))
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(vdir / f"{ln['id']}.wav"), "-af",
                             f"adelay={int(lead * 1000)}:all=1,apad=whole_dur={dur:.3f}", "-t", f"{dur:.3f}", "-ar", "16000", "-ac", "1",
                             "-c:a", "pcm_s16le", str(aud)], check=True)
