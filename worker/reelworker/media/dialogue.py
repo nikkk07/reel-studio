@@ -250,7 +250,8 @@ def lipsync(jobs: list, work: Path, log, wait=True) -> dict:
                 log(f"Kaggle {lane}: status check failed ({str(e)[:120]})"); continue
             if k == "COMPLETE" or k in ("ERROR", "CANCEL") or time.time() - b["t0"] > BATCH_TIMEOUT_S:
                 h = min(time.time() - b["t0"], BATCH_TIMEOUT_S) / 3600; presenter.spend(h)
-                out = work / f"out_{lane}"; presenter.shutil.rmtree(out, ignore_errors=True); out.mkdir(parents=True)
+                out = work / f"out_{lane}_{int(b['t0'])}"     # one folder per batch: an earlier batch's clips stay where they are
+                presenter.shutil.rmtree(out, ignore_errors=True); out.mkdir(parents=True)
                 try:
                     presenter._kg("kernels", "output", f"{presenter.OWNER}/{presenter.LANES[lane][2]}", "-p", str(out), timeout=1800)
                 except Exception as e:  # noqa: BLE001
