@@ -4,7 +4,7 @@ timeline.json (built by timeline.py) drives everything; render a frame range wit
     python -m reelworker.media.compose <timeline.json> <f0> <f1> <out.mp4>
 """
 from pathlib import Path
-import json, math, re, subprocess, sys
+import json, math, os, re, subprocess, sys
 import numpy as np, cv2, skia
 from .gfx_base import (TF, load_fonts, FPS, W, H, RED, AMBER, CYAN, WHITE, GREEN, clamp, ease_out_expo, ease_out_back,
                        ease_io, prog, col, font, tw, text, glass, chip)
@@ -382,7 +382,7 @@ def shake(t, TL, fi):
 
 def encoder_args(final=False):
     enc = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
-    if "h264_videotoolbox" in enc:
+    if "h264_videotoolbox" in enc and not os.environ.get("REELSTUDIO_NO_VT"):
         return ["-c:v", "h264_videotoolbox", "-b:v", "40M", "-allow_sw", "1"]
     return ["-c:v", "libx264", "-preset", "veryfast" if not final else "medium", "-crf", "15"]
 
@@ -478,7 +478,9 @@ def render(TL, f0, f1, out):
         (kinetic.draw_kcaps if TL.get("kcaps") else draw_captions)(c, t, TL); draw_end(c, t, TL, logo)
         c.drawRect(skia.Rect(0, 0, W * t / TL["end"], 8), skia.Paint(Color4f=col(AMBER, 0.9)))
         enc.stdin.write(surf.toarray(colorType=skia.kRGBA_8888_ColorType).tobytes())
-    enc.stdin.close(); enc.wait()
+    enc.stdin.close()
+    if enc.wait() != 0:
+        raise SystemExit(f"encoder failed on frames {f0}-{f1}")
     if enc.returncode != 0:
         raise RuntimeError(f"ffmpeg encode failed for frames {f0}-{f1}")
 

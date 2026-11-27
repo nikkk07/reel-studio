@@ -20,6 +20,16 @@ def _procs(n_cfg: int) -> int:
 
 
 def render_video(tl_path: Path, out_dir: Path, end: float, procs_cfg: int, progress=lambda f: None) -> Path:
+    try:
+        return _render_video(tl_path, out_dir, end, procs_cfg, progress)
+    except RuntimeError as e:
+        if "joined video" not in str(e):
+            raise
+        # a part came out short (seen once with the Mac's hardware encoder under load): draw it again with the software encoder
+        return _render_video(tl_path, out_dir, end, procs_cfg, progress, env={**os.environ, "REELSTUDIO_NO_VT": "1"})
+
+
+def _render_video(tl_path: Path, out_dir: Path, end: float, procs_cfg: int, progress=lambda f: None, env=None) -> Path:
     nf = int(round(end * FPS)); n = _procs(procs_cfg); step = (nf + n - 1) // n
     parts, jobs = [], []
     for i in range(n):
@@ -29,7 +39,7 @@ def render_video(tl_path: Path, out_dir: Path, end: float, procs_cfg: int, progr
         logf = out_dir / f"part_{i:02d}.log"
         with open(logf, "wb") as fh:
             jobs.append((subprocess.Popen([sys.executable, "-m", "reelworker.media.compose", str(tl_path), str(f0), str(f1), str(out)],
-                                          cwd=Path(__file__).resolve().parents[2], stdout=fh, stderr=fh), logf))
+                                          cwd=Path(__file__).resolve().parents[2], stdout=fh, stderr=fh, env=env), logf))
     for k, (p, logf) in enumerate(jobs):
         try:
             p.wait(timeout=3600)
@@ -42,8 +52,20 @@ def render_video(tl_path: Path, out_dir: Path, end: float, procs_cfg: int, progr
     lst = out_dir / "parts.txt"; lst.write_text("".join(f"file '{p.name}'\n" for p in parts))
     full = out_dir / "video_full.mp4"
     _run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(full)])
+    want = nf / FPS; got = _dur(full)
+    if got < want - 0.5:                         # a short part would ship a cut-off video: stop, keep the parts to look at
+        lens = ", ".join(f"{p.name} {_dur(p):.2f}s" for p in parts)
+        raise RuntimeError(f"the joined video is {got:.2f} s, expected {want:.2f} s ({lens})")
     for p in parts: p.unlink(missing_ok=True)
     return full
+
+
+def _dur(p: Path) -> float:
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(p)], capture_output=True, text=True)
+    try:
+        return float(r.stdout.strip())
+    except ValueError:
+        return 0.0
 
 
 def loudness(path) -> dict:
